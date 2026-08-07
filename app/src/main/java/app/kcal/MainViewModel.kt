@@ -2,78 +2,81 @@ package app.kcal
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.kcal.core.common.TimeProvider
+import app.kcal.domain.model.StoredProfile
 import app.kcal.domain.repository.ProfileRepository
-import app.kcal.domain.usecase.ReconcileTodayTarget
+import app.kcal.domain.usecase.ApplyTodayTarget
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * Owns the app shell state. Reading preferences, finishing an interrupted save and
+ * rewriting today's target all happen in one pipeline, so the gate reports a complete
+ * profile only once its target is stored, and any storage failure becomes a retryable
+ * error state instead of an open screen without a goal.
+ */
 @HiltViewModel
 class MainViewModel @Inject constructor(
-    profileRepository: ProfileRepository,
-    private val reconcileTodayTarget: ReconcileTodayTarget,
+    private val profileRepository: ProfileRepository,
+    private val applyTodayTarget: ApplyTodayTarget,
+    private val timeProvider: TimeProvider,
 ) : ViewModel() {
 
-    /**
-     * A crash or a failed write between DataStore and Room can leave today's target missing
-     * or stale, so it is rewritten before anything is shown. The gate stays in its loading
-     * state until that finishes, and a storage failure becomes a retryable error state
-     * instead of silently opening a screen without a goal.
-     */
-    private val startupState = MutableStateFlow(StartupState.IN_PROGRESS)
+    private val _uiState = MutableStateFlow(MainUiState())
+    val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
-    val uiState: StateFlow<MainUiState> =
-        combine(profileRepository.preferences, startupState) { preferences, startup ->
-            MainUiState(
-                isLoading = startup == StartupState.IN_PROGRESS,
-                isProfileComplete = preferences.profile.isComplete,
-                themeMode = preferences.themeMode,
-                appLanguage = preferences.appLanguage,
-                startupFailed = startup == StartupState.FAILED,
-            )
-        }.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-            initialValue = MainUiState(),
-        )
+    private var startupJob: Job? = null
 
     init {
-        reconcile()
+        start()
     }
 
     fun onRetryStartup() {
-        reconcile()
+        start()
     }
 
-    private fun reconcile() {
-        startupState.value = StartupState.IN_PROGRESS
-        viewModelScope.launch {
-            startupState.value =
+    private fun start() {
+        startupJob?.cancel()
+        _uiState.value = MainUiState()
+        startupJob =
+            viewModelScope.launch {
                 try {
-                    reconcileTodayTarget()
-                    StartupState.READY
+                    var syncedProfile: StoredProfile? = null
+                    profileRepository.preferences.collect { preferences ->
+                        if (preferences.profile != syncedProfile) {
+                            // Keep the gate closed until the stored target matches this profile.
+                            _uiState.value =
+                                _uiState.value.copy(
+                                    isLoading = true,
+                                    isProfileComplete = false,
+                                    startupFailed = false,
+                                    themeMode = preferences.themeMode,
+                                    appLanguage = preferences.appLanguage,
+                                )
+                            profileRepository.completePendingSave()
+                            applyTodayTarget(preferences.profile, timeProvider.today())
+                            syncedProfile = preferences.profile
+                        }
+                        _uiState.value =
+                            MainUiState(
+                                isLoading = false,
+                                isProfileComplete = preferences.profile.isComplete,
+                                themeMode = preferences.themeMode,
+                                appLanguage = preferences.appLanguage,
+                            )
+                    }
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (storageFailure: Exception) {
                     // Handled by surfacing a retryable error state; details are never logged.
-                    StartupState.FAILED
+                    _uiState.value = MainUiState(isLoading = false, startupFailed = true)
                 }
-        }
-    }
-
-    private enum class StartupState {
-        IN_PROGRESS,
-        READY,
-        FAILED,
-    }
-
-    private companion object {
-        const val STOP_TIMEOUT_MILLIS = 5_000L
+            }
     }
 }

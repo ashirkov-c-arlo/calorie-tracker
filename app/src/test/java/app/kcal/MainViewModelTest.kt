@@ -7,7 +7,6 @@ import app.kcal.domain.model.ThemeMode
 import app.kcal.domain.model.UserPreferences
 import app.kcal.domain.usecase.ApplyTodayTarget
 import app.kcal.domain.usecase.CalculateDailyTargets
-import app.kcal.domain.usecase.ReconcileTodayTarget
 import app.kcal.testing.FakeDailyTargetRepository
 import app.kcal.testing.FakeProfileRepository
 import app.kcal.testing.completeProfile
@@ -62,12 +61,13 @@ class MainViewModelTest {
 
         runCurrent()
 
-        assertEquals(MainUiState(), states.first())
         val loaded = states.last()
         assertEquals(false, loaded.isLoading)
         assertEquals(true, loaded.isProfileComplete)
+        assertEquals(false, loaded.startupFailed)
+        // The gate reports a complete profile only together with a stored target; the
+        // failing-write test below covers the opposite direction.
         assertNotNull(dailyTargetRepository.find(today))
-        assertTrue(states.none { !it.isLoading && it.isProfileComplete && dailyTargetMissing() })
     }
 
     @Test
@@ -146,7 +146,63 @@ class MainViewModelTest {
         assertNotNull(dailyTargetRepository.find(today))
     }
 
-    private fun dailyTargetMissing(): Boolean = dailyTargetRepository.snapshots.value.isEmpty()
+    @Test
+    fun `a failing preferences read becomes a retryable error instead of an endless loading state`() = runTest {
+        val failing = FakeProfileRepository(readFails = true)
+        val viewModel = viewModel(failing)
+        val states = collect(viewModel)
+
+        runCurrent()
+
+        val failed = states.last()
+        assertTrue(failed.startupFailed)
+        assertEquals(false, failed.isLoading)
+
+        // Retrying with a working repository is the recovery path the error screen offers.
+        val working = FakeProfileRepository(UserPreferences(profile = completeProfile()))
+        val recovered = viewModel(working)
+        val recoveredStates = collect(recovered)
+        runCurrent()
+
+        assertEquals(false, recoveredStates.last().startupFailed)
+        assertEquals(true, recoveredStates.last().isProfileComplete)
+    }
+
+    @Test
+    fun `completing the profile keeps the gate closed while the target write fails`() = runTest {
+        val repository = FakeProfileRepository(UserPreferences(profile = completeProfile(activityLevel = null)))
+        val viewModel = viewModel(repository)
+        val states = collect(viewModel)
+        runCurrent()
+        assertEquals(false, states.last().isProfileComplete)
+
+        dailyTargetRepository.failNextWrites(true)
+        repository.state.value = UserPreferences(profile = completeProfile())
+        runCurrent()
+
+        // The profile became complete, but its target could not be stored.
+        val failed = states.last()
+        assertTrue(failed.startupFailed)
+        assertEquals(false, failed.isProfileComplete)
+
+        dailyTargetRepository.failNextWrites(false)
+        viewModel.onRetryStartup()
+        runCurrent()
+
+        assertEquals(true, states.last().isProfileComplete)
+        assertNotNull(dailyTargetRepository.find(today))
+    }
+
+    @Test
+    fun `an interrupted save is finished before the target is recomputed`() = runTest {
+        val repository = FakeProfileRepository(UserPreferences(profile = completeProfile()))
+        val viewModel = viewModel(repository)
+        collect(viewModel)
+
+        runCurrent()
+
+        assertTrue(repository.pendingSaveCompletions > 0)
+    }
 
     private fun TestScope.collect(viewModel: MainViewModel): List<MainUiState> {
         val states = mutableListOf<MainUiState>()
@@ -157,10 +213,7 @@ class MainViewModelTest {
 
     private fun viewModel(repository: FakeProfileRepository) = MainViewModel(
         repository,
-        ReconcileTodayTarget(
-            repository,
-            ApplyTodayTarget(dailyTargetRepository, CalculateDailyTargets()),
-            timeProvider,
-        ),
+        ApplyTodayTarget(dailyTargetRepository, CalculateDailyTargets()),
+        timeProvider,
     )
 }

@@ -5,7 +5,6 @@ import app.kcal.domain.repository.DailyTargetRepository
 import app.kcal.domain.repository.ProfileRepository
 import app.kcal.domain.usecase.ApplyTodayTarget
 import app.kcal.domain.usecase.CalculateDailyTargets
-import app.kcal.domain.usecase.ReconcileTodayTarget
 import app.kcal.domain.usecase.SaveProfile
 import dagger.Module
 import dagger.Provides
@@ -35,11 +34,4 @@ object DomainModule {
         applyTodayTarget: ApplyTodayTarget,
         timeProvider: TimeProvider,
     ): SaveProfile = SaveProfile(profileRepository, applyTodayTarget, timeProvider)
-
-    @Provides
-    fun provideReconcileTodayTarget(
-        profileRepository: ProfileRepository,
-        applyTodayTarget: ApplyTodayTarget,
-        timeProvider: TimeProvider,
-    ): ReconcileTodayTarget = ReconcileTodayTarget(profileRepository, applyTodayTarget, timeProvider)
 }

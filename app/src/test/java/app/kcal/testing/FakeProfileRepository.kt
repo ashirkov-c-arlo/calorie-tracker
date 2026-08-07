@@ -8,17 +8,26 @@ import app.kcal.domain.model.UserPreferences
 import app.kcal.domain.repository.ProfileRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import java.io.IOException
 import java.time.LocalDate
 
 /** Hand-written fake so tests never touch DataStore or Room. */
-class FakeProfileRepository(initial: UserPreferences = UserPreferences()) : ProfileRepository {
+class FakeProfileRepository(initial: UserPreferences = UserPreferences(), private val readFails: Boolean = false) :
+    ProfileRepository {
 
     val state = MutableStateFlow(initial)
     val savedProfiles = mutableListOf<StoredProfile>()
     val savedDates = mutableListOf<LocalDate>()
+    var pendingSaveCompletions: Int = 0
 
-    override val preferences: Flow<UserPreferences> = state
+    override val preferences: Flow<UserPreferences> =
+        if (readFails) {
+            flow { throw IOException("preferences unavailable") }
+        } else {
+            state
+        }
 
     override val isProfileComplete: Flow<Boolean> = state.map { it.profile.isComplete }
 
@@ -28,6 +37,10 @@ class FakeProfileRepository(initial: UserPreferences = UserPreferences()) : Prof
         savedProfiles += profile
         savedDates += localDate
         state.value = state.value.copy(profile = profile)
+    }
+
+    override suspend fun completePendingSave() {
+        pendingSaveCompletions++
     }
 
     override suspend fun setUnitSystem(unitSystem: UnitSystem) {

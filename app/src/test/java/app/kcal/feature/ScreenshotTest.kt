@@ -105,6 +105,11 @@ class ScreenshotTest {
     }
 
     @Test
+    @Config(qualifiers = "+ru")
+    fun appStartupErrorWhiteRussian() =
+        capture(ThemeMode.WHITE) { KcalApp(uiState = MainUiState(isLoading = false, startupFailed = true)) }
+
+    @Test
     @Config(qualifiers = "+h2000dp")
     fun profileSetupErrorsWhite() = capture(ThemeMode.WHITE) { ProfileSetupFixture(invalidProfileFormUiState) }
 

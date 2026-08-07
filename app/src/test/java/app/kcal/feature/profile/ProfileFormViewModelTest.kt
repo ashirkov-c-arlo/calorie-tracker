@@ -32,6 +32,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -173,10 +174,10 @@ class ProfileFormViewModelTest {
         runCurrent()
 
         val saved = profileRepository.savedProfiles.single()
-        assertEquals(82.4, saved.currentWeightKg!!, 0.05)
-        assertEquals(176.0, saved.heightCm!!, 0.3)
-        assertEquals(78.0, saved.targetWeightKg!!, 0.05)
-        assertEquals(0.5, saved.requestedLossRateKgPerWeek!!, 0.005)
+        assertEquals(82.4, assertNotNull(saved.currentWeightKg), 0.05)
+        assertEquals(176.0, assertNotNull(saved.heightCm), 0.3)
+        assertEquals(78.0, assertNotNull(saved.targetWeightKg), 0.05)
+        assertEquals(0.5, assertNotNull(saved.requestedLossRateKgPerWeek), 0.005)
     }
 
     @Test
@@ -245,7 +246,11 @@ class ProfileFormViewModelTest {
         runCurrent()
         assertNull(viewModel.uiState.value.errors.lossRate)
         // Switching units re-renders the value with display precision, hence the tolerance.
-        assertEquals(5.0, profileRepository.savedProfiles.last().requestedLossRateKgPerWeek!!, 0.005)
+        assertEquals(
+            5.0,
+            assertNotNull(profileRepository.savedProfiles.last().requestedLossRateKgPerWeek),
+            0.005,
+        )
     }
 
     @Test

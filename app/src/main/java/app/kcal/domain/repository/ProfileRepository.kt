@@ -26,6 +26,12 @@ interface ProfileRepository {
      */
     suspend fun saveProfile(profile: StoredProfile, localDate: LocalDate)
 
+    /**
+     * Finishes a weight write that a previous save recorded but could not complete, for
+     * example because the process died. Does nothing when there is no pending write.
+     */
+    suspend fun completePendingSave()
+
     suspend fun setUnitSystem(unitSystem: UnitSystem)
 
     suspend fun setAppLanguage(appLanguage: AppLanguage)

@@ -11,6 +11,7 @@ import app.kcal.domain.model.UserPreferences
 import app.kcal.domain.repository.ProfileRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 import javax.inject.Inject
@@ -32,13 +33,23 @@ class ProfileRepositoryImpl @Inject constructor(
 
     override val themeMode: Flow<ThemeMode> = preferencesDataSource.preferences.map { it.themeMode }
 
+    /**
+     * The calculator inputs go into one atomic preferences edit that also records the weight
+     * Room still has to receive. The weight entry is written next and the marker is cleared
+     * last, so an interruption leaves a pending write that [completePendingSave] finishes
+     * instead of a silent mix of new settings and an old weight.
+     */
     override suspend fun saveProfile(profile: StoredProfile, localDate: LocalDate) {
-        preferencesDataSource.saveProfile(profile)
-        profile.currentWeightKg?.let { weightKg ->
-            weightEntryDao.upsert(
-                WeightEntryEntity(localDateEpochDay = localDate.toEpochDay().toInt(), kg = weightKg),
-            )
-        }
+        preferencesDataSource.saveProfile(profile, localDate.toEpochDay().toInt())
+        completePendingSave()
+    }
+
+    override suspend fun completePendingSave() {
+        val pending = preferencesDataSource.pendingWeightWrite.first() ?: return
+        weightEntryDao.upsert(
+            WeightEntryEntity(localDateEpochDay = pending.localDateEpochDay, kg = pending.kg),
+        )
+        preferencesDataSource.clearPendingWeightWrite()
     }
 
     override suspend fun setUnitSystem(unitSystem: UnitSystem) {

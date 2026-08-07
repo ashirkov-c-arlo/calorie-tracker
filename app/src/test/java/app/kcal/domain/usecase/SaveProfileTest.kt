@@ -28,8 +28,6 @@ class SaveProfileTest {
         )
     private val applyTodayTarget = ApplyTodayTarget(dailyTargetRepository, CalculateDailyTargets())
     private val saveProfile = SaveProfile(profileRepository, applyTodayTarget, timeProvider)
-    private val reconcileTodayTarget =
-        ReconcileTodayTarget(profileRepository, applyTodayTarget, timeProvider)
 
     private val today = LocalDate.of(2026, 3, 16)
     private val yesterday = LocalDate.of(2026, 3, 15)
@@ -50,20 +48,19 @@ class SaveProfileTest {
     @Test
     fun `saving again on the same day replaces only today's snapshot`() = runTest {
         saveProfile(completeProfile())
-        val pastSnapshot = dailyTargetRepository.find(today)!!.copy(localDate = yesterday)
+        val pastSnapshot = assertNotNull(dailyTargetRepository.find(today)).copy(localDate = yesterday)
         dailyTargetRepository.snapshots.value = dailyTargetRepository.snapshots.value + (yesterday to pastSnapshot)
 
         saveProfile(completeProfile(currentWeightKg = 80.0))
 
         assertEquals(pastSnapshot, dailyTargetRepository.find(yesterday))
-        assertTrue(dailyTargetRepository.find(today)!!.targets.kcal != pastSnapshot.targets.kcal)
+        assertTrue(assertNotNull(dailyTargetRepository.find(today)).targets.kcal != pastSnapshot.targets.kcal)
     }
 
     @Test
     fun `an unavailable target removes the stale snapshot instead of keeping it`() = runTest {
         saveProfile(completeProfile())
-        assertNotNull(dailyTargetRepository.find(today))
-        val pastSnapshot = dailyTargetRepository.find(today)!!.copy(localDate = yesterday)
+        val pastSnapshot = assertNotNull(dailyTargetRepository.find(today)).copy(localDate = yesterday)
         dailyTargetRepository.snapshots.value = dailyTargetRepository.snapshots.value + (yesterday to pastSnapshot)
 
         val result = saveProfile(completeProfile(ageYears = 15))
@@ -106,15 +103,15 @@ class SaveProfileTest {
         assertNull(dailyTargetRepository.find(today))
 
         dailyTargetRepository.failNextWrites(false)
-        reconcileTodayTarget()
+        applyTodayTarget(profileRepository.state.value.profile, today)
 
         assertNotNull(dailyTargetRepository.find(today))
     }
 
     @Test
-    fun `reconciliation rewrites a snapshot left over from an older profile`() = runTest {
+    fun `re-applying the target replaces a snapshot left over from an older profile`() = runTest {
         saveProfile(completeProfile())
-        val staleTarget = dailyTargetRepository.find(today)
+        val staleTarget = assertNotNull(dailyTargetRepository.find(today))
 
         // The profile is updated, but the target write fails afterwards.
         dailyTargetRepository.failNextWrites(true)
@@ -122,24 +119,24 @@ class SaveProfileTest {
         assertEquals(staleTarget, dailyTargetRepository.find(today))
 
         dailyTargetRepository.failNextWrites(false)
-        reconcileTodayTarget()
+        applyTodayTarget(profileRepository.state.value.profile, today)
 
         val repaired = assertNotNull(dailyTargetRepository.find(today))
-        assertTrue(repaired.targets.kcal != staleTarget!!.targets.kcal)
+        assertTrue(repaired.targets.kcal != staleTarget.targets.kcal)
     }
 
     @Test
-    fun `reconciliation is stable for an unchanged profile`() = runTest {
+    fun `re-applying the target is stable for an unchanged profile`() = runTest {
         saveProfile(completeProfile())
         val stored = dailyTargetRepository.find(today)
 
-        reconcileTodayTarget()
+        applyTodayTarget(profileRepository.state.value.profile, today)
 
         assertEquals(stored, dailyTargetRepository.find(today))
     }
 
     @Test
-    fun `reconciliation removes a snapshot that the stored profile no longer justifies`() = runTest {
+    fun `re-applying the target removes a snapshot the stored profile no longer justifies`() = runTest {
         saveProfile(completeProfile())
         assertNotNull(dailyTargetRepository.find(today))
 
@@ -148,16 +145,16 @@ class SaveProfileTest {
         assertNotNull(dailyTargetRepository.find(today))
 
         dailyTargetRepository.failNextWrites(false)
-        reconcileTodayTarget()
+        applyTodayTarget(profileRepository.state.value.profile, today)
 
         assertNull(dailyTargetRepository.find(today))
     }
 
     @Test
-    fun `reconciliation stores nothing while the profile is incomplete`() = runTest {
+    fun `re-applying the target stores nothing while the profile is incomplete`() = runTest {
         profileRepository.saveProfile(completeProfile(activityLevel = null), today)
 
-        reconcileTodayTarget()
+        applyTodayTarget(profileRepository.state.value.profile, today)
 
         assertNull(dailyTargetRepository.find(today))
         assertEquals(0, dailyTargetRepository.upsertCount)

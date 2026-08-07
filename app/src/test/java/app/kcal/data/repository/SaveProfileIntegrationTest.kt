@@ -13,7 +13,6 @@ import app.kcal.data.prefs.ProfilePreferencesDataSource
 import app.kcal.domain.usecase.ApplyTodayTarget
 import app.kcal.domain.usecase.CalculateDailyTargets
 import app.kcal.domain.usecase.DailyTargetResult
-import app.kcal.domain.usecase.ReconcileTodayTarget
 import app.kcal.domain.usecase.SaveProfile
 import app.kcal.testing.completeProfile
 import kotlinx.coroutines.flow.first
@@ -50,7 +49,8 @@ class SaveProfileIntegrationTest {
     private lateinit var profileRepository: ProfileRepositoryImpl
     private lateinit var dailyTargetRepository: DailyTargetRepositoryImpl
     private lateinit var saveProfile: SaveProfile
-    private lateinit var reconcileTodayTarget: ReconcileTodayTarget
+    private lateinit var applyTodayTarget: ApplyTodayTarget
+    private lateinit var preferencesDataSource: ProfilePreferencesDataSource
 
     @Before
     fun setUp() {
@@ -65,15 +65,15 @@ class SaveProfileIntegrationTest {
                 clock = Clock.fixed(Instant.parse("2026-03-15T09:00:00Z"), ZoneId.of("UTC")),
                 zoneId = ZoneId.of("UTC"),
             )
+        preferencesDataSource = ProfilePreferencesDataSource(dataStore)
         profileRepository =
             ProfileRepositoryImpl(
-                preferencesDataSource = ProfilePreferencesDataSource(dataStore),
+                preferencesDataSource = preferencesDataSource,
                 weightEntryDao = database.weightEntryDao(),
             )
         dailyTargetRepository = DailyTargetRepositoryImpl(database.dailyTargetSnapshotDao())
-        val applyTodayTarget = ApplyTodayTarget(dailyTargetRepository, CalculateDailyTargets())
+        applyTodayTarget = ApplyTodayTarget(dailyTargetRepository, CalculateDailyTargets())
         saveProfile = SaveProfile(profileRepository, applyTodayTarget, timeProvider)
-        reconcileTodayTarget = ReconcileTodayTarget(profileRepository, applyTodayTarget, timeProvider)
     }
 
     @After
@@ -121,15 +121,44 @@ class SaveProfileIntegrationTest {
     }
 
     @Test
-    fun `reconciliation recreates a snapshot that a partial save left missing`() = runTest {
+    fun `startup recreates a snapshot that a partial save left missing`() = runTest {
         saveProfile(completeProfile())
         val expected = assertNotNull(dailyTargetRepository.find(today))
-        // Simulates a process death between the DataStore write and the Room write.
+        // Simulates process death between the weight write and the snapshot write.
         dailyTargetRepository.delete(today)
 
-        reconcileTodayTarget()
+        applyTodayTarget(profileRepository.preferences.first().profile, today)
 
         assertEquals(expected, dailyTargetRepository.find(today))
+    }
+
+    @Test
+    fun `an interrupted save between preferences and the weight entry is completed later`() = runTest {
+        saveProfile(completeProfile())
+        val previousWeight = assertNotNull(database.weightEntryDao().findByDate(today.toEpochDay().toInt())).kg
+
+        // Simulates process death right after the atomic preferences write: the new settings
+        // and the pending weight are stored, but Room has not received the weight yet.
+        preferencesDataSource.saveProfile(
+            completeProfile(currentWeightKg = 79.0, heightCm = 180.0),
+            today.toEpochDay().toInt(),
+        )
+        assertEquals(previousWeight, profileRepository.preferences.first().profile.currentWeightKg)
+
+        profileRepository.completePendingSave()
+
+        val recovered = profileRepository.preferences.first().profile
+        assertEquals(79.0, recovered.currentWeightKg)
+        assertEquals(180.0, recovered.heightCm)
+        assertEquals(79.0, database.weightEntryDao().findByDate(today.toEpochDay().toInt())?.kg)
+        assertNull(preferencesDataSource.pendingWeightWrite.first())
+    }
+
+    @Test
+    fun `a completed save leaves no pending weight write behind`() = runTest {
+        saveProfile(completeProfile())
+
+        assertNull(preferencesDataSource.pendingWeightWrite.first())
     }
 
     @Test
@@ -141,6 +170,6 @@ class SaveProfileIntegrationTest {
         saveProfile(completeProfile(currentWeightKg = 75.0, targetWeightKg = 70.0))
 
         assertEquals(past, dailyTargetRepository.find(today.minusDays(3)))
-        assertTrue(dailyTargetRepository.find(today)!!.targets.kcal != past.targets.kcal)
+        assertTrue(assertNotNull(dailyTargetRepository.find(today)).targets.kcal != past.targets.kcal)
     }
 }
