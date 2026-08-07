@@ -31,7 +31,10 @@ class MainActivity : AppCompatActivity() {
             // bar icons follow the selected theme rather than the system one.
             LaunchedEffect(useBlackPalette) { applyKcalSystemBars(useBlackPalette) }
 
-            LaunchedEffect(uiState.appLanguage) { applyAppLanguage(uiState.appLanguage) }
+            // Only applied once preferences are loaded: applying the default during the
+            // initial loading state would clear a stored locale and recreate the activity.
+            val appLanguage = uiState.appLanguageToApply()
+            LaunchedEffect(appLanguage) { appLanguage?.let(::applyAppLanguage) }
 
             KcalTheme(themeMode = uiState.themeMode) {
                 KcalApp(uiState = uiState)

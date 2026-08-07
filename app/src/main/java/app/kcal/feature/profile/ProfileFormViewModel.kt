@@ -15,6 +15,7 @@ import app.kcal.domain.usecase.CalculateDailyTargets
 import app.kcal.domain.usecase.SaveProfile
 import app.kcal.domain.usecase.UnitConversions
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +27,9 @@ import javax.inject.Inject
  * Backs both the required first-run form and Settings: identical fields, identical
  * validation. Units, language and theme are applied immediately, while calculator inputs
  * are stored only on save.
+ *
+ * Every entered value is converted to canonical metric first, so validation limits do not
+ * depend on the displayed unit system.
  */
 @HiltViewModel
 class ProfileFormViewModel @Inject constructor(
@@ -41,14 +45,15 @@ class ProfileFormViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             val preferences = profileRepository.preferences.first()
+            val fields = preferences.profile.toFields(preferences.unitSystem)
             _uiState.value =
                 ProfileFormUiState(
                     isLoading = false,
-                    fields = preferences.profile.toFields(preferences.unitSystem),
+                    fields = fields,
                     unitSystem = preferences.unitSystem,
                     appLanguage = preferences.appLanguage,
                     themeMode = preferences.themeMode,
-                    target = previewFor(preferences.profile.toFields(preferences.unitSystem), preferences.unitSystem),
+                    target = previewFor(fields, preferences.unitSystem),
                 )
         }
     }
@@ -76,11 +81,13 @@ class ProfileFormViewModel @Inject constructor(
         val state = _uiState.value
         if (state.unitSystem == unitSystem) return
         val canonical = state.fields.toStoredProfile(state.unitSystem)
+        val fields = canonical.toFields(unitSystem, keepEnumsFrom = state.fields)
         _uiState.value =
             state.copy(
                 unitSystem = unitSystem,
-                fields = canonical.toFields(unitSystem, keepEnumsFrom = state.fields),
+                fields = fields,
                 errors = ProfileFormErrors(),
+                target = previewFor(fields, unitSystem),
             )
         viewModelScope.launch { profileRepository.setUnitSystem(unitSystem) }
     }
@@ -99,57 +106,91 @@ class ProfileFormViewModel @Inject constructor(
         val state = _uiState.value
         val errors = validate(state.fields, state.unitSystem)
         if (errors.hasAny) {
-            _uiState.value = state.copy(errors = errors)
+            _uiState.value = state.copy(errors = errors, saveFailed = false)
             return
         }
-        _uiState.value = state.copy(errors = ProfileFormErrors())
+        _uiState.value = state.copy(errors = ProfileFormErrors(), saveFailed = false)
         viewModelScope.launch {
-            val result = saveProfile(state.fields.toStoredProfile(state.unitSystem))
-            _uiState.value = _uiState.value.copy(target = result.toTargetPreview())
+            try {
+                val result = saveProfile(state.fields.toStoredProfile(state.unitSystem))
+                _uiState.value = _uiState.value.copy(target = result.toTargetPreview())
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (storageFailure: Exception) {
+                // The profile itself may already be stored; the target is repaired on the
+                // next start by ReconcileTodayTarget. Details are never logged in release.
+                _uiState.value = _uiState.value.copy(saveFailed = true)
+            }
         }
     }
 
     private fun updateFields(transform: (ProfileFormFields) -> ProfileFormFields) {
         val state = _uiState.value
         val fields = transform(state.fields)
-        _uiState.value = state.copy(fields = fields, target = previewFor(fields, state.unitSystem))
+        _uiState.value =
+            state.copy(fields = fields, target = previewFor(fields, state.unitSystem), saveFailed = false)
     }
 
     private fun previewFor(fields: ProfileFormFields, unitSystem: UnitSystem): TargetPreview =
         calculateDailyTargets.forStoredProfile(fields.toStoredProfile(unitSystem)).toTargetPreview()
 
+    /**
+     * One validation policy, expressed in canonical metric units. Imperial input is
+     * converted first, so the same value is accepted or rejected in both unit systems. The
+     * requested loss rate has no upper product limit: it is preserved and the domain
+     * guardrails cap the effective pace.
+     */
     private fun validate(fields: ProfileFormFields, unitSystem: UnitSystem): ProfileFormErrors {
-        val weightRange = if (unitSystem == UnitSystem.METRIC) METRIC_WEIGHT_RANGE else IMPERIAL_WEIGHT_RANGE
-        val rateRange = if (unitSystem == UnitSystem.METRIC) METRIC_RATE_RANGE else IMPERIAL_RATE_RANGE
+        val metric = unitSystem == UnitSystem.METRIC
         return ProfileFormErrors(
-            currentWeight = numberError(fields.currentWeight, weightRange),
-            height = heightError(fields, unitSystem),
+            currentWeight = weightError(fields.currentWeight, metric),
+            height = if (metric) metricHeightError(fields.height) else null,
+            heightFeet = if (metric) null else feetError(fields),
+            heightInches = if (metric) null else inchesError(fields.heightInches),
             age = intError(fields.age, AGE_RANGE),
             formulaVariant = ProfileFieldError.REQUIRED.takeIf { fields.energyEquationSex == null },
             activityLevel = ProfileFieldError.REQUIRED.takeIf { fields.activityLevel == null },
-            targetWeight = numberError(fields.targetWeight, weightRange),
-            lossRate = numberError(fields.lossRate, rateRange, allowZero = true),
+            targetWeight = weightError(fields.targetWeight, metric),
+            lossRate = rateError(fields.lossRate),
         )
     }
 
-    private fun heightError(fields: ProfileFormFields, unitSystem: UnitSystem): ProfileFieldError? =
-        if (unitSystem == UnitSystem.METRIC) {
-            numberError(fields.height, METRIC_HEIGHT_RANGE)
-        } else {
-            val feetError = intError(fields.heightFeet, FEET_RANGE)
-            val inchesError = numberError(fields.heightInches, INCHES_RANGE, allowZero = true)
-            feetError ?: inchesError
-        }
-
-    private fun numberError(
-        text: String,
-        range: ClosedFloatingPointRange<Double>,
-        allowZero: Boolean = false,
-    ): ProfileFieldError? {
+    private fun weightError(text: String, metric: Boolean): ProfileFieldError? {
         if (text.isBlank()) return ProfileFieldError.REQUIRED
-        val value = DecimalText.parse(text) ?: return ProfileFieldError.INVALID_NUMBER
-        if (allowZero && value == 0.0) return null
-        return if (value in range) null else ProfileFieldError.OUT_OF_RANGE
+        val entered = DecimalText.parse(text) ?: return ProfileFieldError.INVALID_NUMBER
+        val kg = if (metric) entered else UnitConversions.poundsToKilograms(entered)
+        return if (kg in WEIGHT_RANGE_KG) null else ProfileFieldError.OUT_OF_RANGE
+    }
+
+    private fun metricHeightError(text: String): ProfileFieldError? {
+        if (text.isBlank()) return ProfileFieldError.REQUIRED
+        val cm = DecimalText.parse(text) ?: return ProfileFieldError.INVALID_NUMBER
+        return if (cm in HEIGHT_RANGE_CM) null else ProfileFieldError.OUT_OF_RANGE
+    }
+
+    private fun feetError(fields: ProfileFormFields): ProfileFieldError? {
+        if (fields.heightFeet.isBlank()) return ProfileFieldError.REQUIRED
+        val feet = DecimalText.parseInt(fields.heightFeet) ?: return ProfileFieldError.INVALID_NUMBER
+        if (feet < 0) return ProfileFieldError.OUT_OF_RANGE
+        val inches = DecimalText.parse(fields.heightInches.ifBlank { "0" }) ?: return null
+        val cm = UnitConversions.feetAndInchesToCentimetres(feet, inches)
+        return if (cm in HEIGHT_RANGE_CM) null else ProfileFieldError.OUT_OF_RANGE
+    }
+
+    private fun inchesError(text: String): ProfileFieldError? {
+        if (text.isBlank()) return null
+        val inches = DecimalText.parse(text) ?: return ProfileFieldError.INVALID_NUMBER
+        return if (inches >= 0.0 && inches < UnitConversions.INCHES_PER_FOOT) {
+            null
+        } else {
+            ProfileFieldError.OUT_OF_RANGE
+        }
+    }
+
+    private fun rateError(text: String): ProfileFieldError? {
+        if (text.isBlank()) return ProfileFieldError.REQUIRED
+        val rate = DecimalText.parse(text) ?: return ProfileFieldError.INVALID_NUMBER
+        return if (rate >= 0.0) null else ProfileFieldError.OUT_OF_RANGE
     }
 
     private fun intError(text: String, range: IntRange): ProfileFieldError? {
@@ -159,39 +200,29 @@ class ProfileFormViewModel @Inject constructor(
     }
 
     private fun ProfileFormFields.toStoredProfile(unitSystem: UnitSystem): StoredProfile {
-        val weight = DecimalText.parse(currentWeight)
-        val targetWeightValue = DecimalText.parse(targetWeight)
-        val rate = DecimalText.parse(lossRate)
+        val metric = unitSystem == UnitSystem.METRIC
         return StoredProfile(
-            currentWeightKg = weight?.let {
-                if (unitSystem ==
-                    UnitSystem.METRIC
-                ) {
-                    it
-                } else {
-                    UnitConversions.poundsToKilograms(it)
-                }
-            },
-            heightCm = heightCm(unitSystem),
+            currentWeightKg = DecimalText.parse(currentWeight)?.toKilograms(metric),
+            heightCm = heightCm(metric),
             ageYears = DecimalText.parseInt(age),
             energyEquationSex = energyEquationSex,
             activityLevel = activityLevel,
-            targetWeightKg =
-            targetWeightValue?.let {
-                if (unitSystem == UnitSystem.METRIC) it else UnitConversions.poundsToKilograms(it)
-            },
+            targetWeightKg = DecimalText.parse(targetWeight)?.toKilograms(metric),
             requestedLossRateKgPerWeek =
-            rate?.let {
-                if (unitSystem == UnitSystem.METRIC) it else UnitConversions.poundsPerWeekToKilogramsPerWeek(it)
+            DecimalText.parse(lossRate)?.let {
+                if (metric) it else UnitConversions.poundsPerWeekToKilogramsPerWeek(it)
             },
         )
     }
 
-    private fun ProfileFormFields.heightCm(unitSystem: UnitSystem): Double? = if (unitSystem == UnitSystem.METRIC) {
+    private fun Double.toKilograms(metric: Boolean): Double =
+        if (metric) this else UnitConversions.poundsToKilograms(this)
+
+    private fun ProfileFormFields.heightCm(metric: Boolean): Double? = if (metric) {
         DecimalText.parse(height)
     } else {
         val feet = DecimalText.parseInt(heightFeet)
-        val inches = DecimalText.parse(heightInches) ?: 0.0
+        val inches = DecimalText.parse(heightInches.ifBlank { "0" }) ?: 0.0
         feet?.let { UnitConversions.feetAndInchesToCentimetres(it, inches) }
     }
 
@@ -203,43 +234,29 @@ class ProfileFormViewModel @Inject constructor(
         val metric = unitSystem == UnitSystem.METRIC
         val feetAndInches = heightCm?.let(UnitConversions::centimetresToFeetAndInches)
         return ProfileFormFields(
-            currentWeight =
-            currentWeightKg?.let {
-                DecimalText.format(if (metric) it else UnitConversions.kilogramsToPounds(it), locale)
-            }
-                .orEmpty(),
+            currentWeight = currentWeightKg.formatWeight(metric, locale),
             height = if (metric) heightCm?.let { DecimalText.format(it, locale) }.orEmpty() else "",
             heightFeet = if (metric) "" else feetAndInches?.feet?.toString().orEmpty(),
             heightInches = if (metric) "" else feetAndInches?.inches?.let { DecimalText.format(it, locale) }.orEmpty(),
             age = ageYears?.toString().orEmpty(),
             energyEquationSex = energyEquationSex ?: keepEnumsFrom?.energyEquationSex,
             activityLevel = activityLevel ?: keepEnumsFrom?.activityLevel,
-            targetWeight =
-            targetWeightKg?.let {
-                DecimalText.format(if (metric) it else UnitConversions.kilogramsToPounds(it), locale)
-            }
-                .orEmpty(),
+            targetWeight = targetWeightKg.formatWeight(metric, locale),
             lossRate =
             requestedLossRateKgPerWeek
-                ?.let {
-                    DecimalText.format(
-                        if (metric) it else UnitConversions.kilogramsPerWeekToPoundsPerWeek(it),
-                        locale,
-                        decimals = 2,
-                    )
-                }
+                ?.let { if (metric) it else UnitConversions.kilogramsPerWeekToPoundsPerWeek(it) }
+                ?.let { DecimalText.format(it, locale, decimals = 2) }
                 .orEmpty(),
         )
     }
 
+    private fun Double?.formatWeight(metric: Boolean, locale: java.util.Locale): String =
+        this?.let { DecimalText.format(if (metric) it else UnitConversions.kilogramsToPounds(it), locale) }
+            .orEmpty()
+
     private companion object {
-        val METRIC_WEIGHT_RANGE = 20.0..400.0
-        val IMPERIAL_WEIGHT_RANGE = 44.0..882.0
-        val METRIC_HEIGHT_RANGE = 50.0..250.0
-        val METRIC_RATE_RANGE = 0.0..5.0
-        val IMPERIAL_RATE_RANGE = 0.0..11.0
-        val INCHES_RANGE = 0.0..11.9
+        val WEIGHT_RANGE_KG = 20.0..400.0
+        val HEIGHT_RANGE_CM = 50.0..250.0
         val AGE_RANGE = 1..120
-        val FEET_RANGE = 1..8
     }
 }

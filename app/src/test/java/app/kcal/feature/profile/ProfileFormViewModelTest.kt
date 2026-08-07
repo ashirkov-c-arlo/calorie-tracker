@@ -8,6 +8,7 @@ import app.kcal.domain.model.EnergyEquationSex
 import app.kcal.domain.model.ThemeMode
 import app.kcal.domain.model.UnitSystem
 import app.kcal.domain.model.UserPreferences
+import app.kcal.domain.usecase.ApplyTodayTarget
 import app.kcal.domain.usecase.CalculateDailyTargets
 import app.kcal.domain.usecase.DailyTargetUnavailableReason
 import app.kcal.domain.usecase.DailyTargetWarning
@@ -212,7 +213,10 @@ class ProfileFormViewModelTest {
         viewModel.onLossRateChange("2.0")
         val guarded = viewModel.uiState.value.target
         assertTrue(guarded is TargetPreview.Available)
-        assertEquals(DailyTargetWarning.DEFICIT_CAPPED, guarded.warning)
+        assertEquals(
+            listOf(DailyTargetWarning.DEFICIT_CAPPED, DailyTargetWarning.RATE_LIMITED),
+            guarded.warnings,
+        )
         assertTrue(guarded.paceDiffersFromRequest)
 
         viewModel.onAgeChange("15")
@@ -220,6 +224,72 @@ class ProfileFormViewModelTest {
             TargetPreview.Unavailable(DailyTargetUnavailableReason.AGE_BELOW_MINIMUM),
             viewModel.uiState.value.target,
         )
+    }
+
+    @Test
+    fun `validation limits do not depend on the displayed unit system`() = runTest {
+        val viewModel = viewModel()
+        runCurrent()
+        fillValidMetricForm(viewModel)
+
+        // 5 kg per week is accepted as a request; guardrails cap the effective pace instead.
+        viewModel.onLossRateChange("5")
+        viewModel.onSave()
+        runCurrent()
+        assertNull(viewModel.uiState.value.errors.lossRate)
+
+        // The same value stays accepted after switching to pounds per week.
+        viewModel.onUnitSystemSelect(UnitSystem.IMPERIAL)
+        runCurrent()
+        viewModel.onSave()
+        runCurrent()
+        assertNull(viewModel.uiState.value.errors.lossRate)
+        // Switching units re-renders the value with display precision, hence the tolerance.
+        assertEquals(5.0, profileRepository.savedProfiles.last().requestedLossRateKgPerWeek!!, 0.005)
+    }
+
+    @Test
+    fun `feet and inches report their own errors and accept the full inch range`() = runTest {
+        val viewModel = viewModel()
+        runCurrent()
+        fillValidMetricForm(viewModel)
+        viewModel.onUnitSystemSelect(UnitSystem.IMPERIAL)
+        runCurrent()
+
+        viewModel.onHeightFeetChange("5")
+        viewModel.onHeightInchesChange("11.99")
+        viewModel.onSave()
+        runCurrent()
+        assertNull(viewModel.uiState.value.errors.heightFeet)
+        assertNull(viewModel.uiState.value.errors.heightInches)
+
+        viewModel.onHeightInchesChange("12.5")
+        viewModel.onSave()
+        runCurrent()
+        assertEquals(ProfileFieldError.OUT_OF_RANGE, viewModel.uiState.value.errors.heightInches)
+        assertNull(viewModel.uiState.value.errors.heightFeet)
+
+        viewModel.onHeightInchesChange("0")
+        viewModel.onHeightFeetChange("1")
+        viewModel.onSave()
+        runCurrent()
+        // 1 ft is below the shared 50 cm limit, and the combined error belongs to feet.
+        assertEquals(ProfileFieldError.OUT_OF_RANGE, viewModel.uiState.value.errors.heightFeet)
+    }
+
+    @Test
+    fun `a failed target write reports the failure and keeps the entered values`() = runTest {
+        val viewModel = viewModel()
+        runCurrent()
+        fillValidMetricForm(viewModel)
+        dailyTargetRepository.failNextWrites(true)
+
+        viewModel.onSave()
+        runCurrent()
+
+        assertTrue(viewModel.uiState.value.saveFailed)
+        assertEquals("82.4", viewModel.uiState.value.fields.currentWeight)
+        assertEquals(1, profileRepository.savedProfiles.size)
     }
 
     @Test
@@ -251,7 +321,11 @@ class ProfileFormViewModelTest {
         val calculate = CalculateDailyTargets()
         return ProfileFormViewModel(
             profileRepository = profileRepository,
-            saveProfile = SaveProfile(profileRepository, dailyTargetRepository, calculate, timeProvider),
+            saveProfile =
+            SaveProfile(
+                profileRepository,
+                ApplyTodayTarget(dailyTargetRepository, calculate, timeProvider),
+            ),
             calculateDailyTargets = calculate,
             localeProvider = AppLocaleProvider { locale },
         )

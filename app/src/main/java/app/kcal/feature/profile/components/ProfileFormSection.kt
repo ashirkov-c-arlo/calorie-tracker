@@ -44,6 +44,7 @@ fun ProfileFormSection(
     onActivityLevelSelect: (ActivityLevel) -> Unit,
     onTargetWeightChange: (String) -> Unit,
     onLossRateChange: (String) -> Unit,
+    onUnitSystemSelect: (UnitSystem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val metric = unitSystem == UnitSystem.METRIC
@@ -53,6 +54,17 @@ fun ProfileFormSection(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(KcalSpacing.medium),
     ) {
+        // The unit system belongs to the form itself: the required first-run screen must be
+        // able to enter imperial measurements before Settings becomes reachable.
+        SingleChoiceField(
+            label = stringResource(R.string.field_unit_system),
+            options = UnitSystem.entries,
+            selected = unitSystem,
+            optionLabel = { stringResource(it.unitSystemLabelRes()) },
+            error = null,
+            onSelect = onUnitSystemSelect,
+        )
+
         DecimalField(
             label = stringResource(R.string.field_current_weight),
             value = fields.currentWeight,
@@ -75,7 +87,7 @@ fun ProfileFormSection(
                     label = stringResource(R.string.field_height_feet),
                     value = fields.heightFeet,
                     unitLabel = stringResource(R.string.unit_ft),
-                    error = errors.height,
+                    error = errors.heightFeet,
                     onValueChange = onHeightFeetChange,
                     modifier = Modifier.weight(1f),
                     keyboardType = KeyboardType.Number,
@@ -84,7 +96,7 @@ fun ProfileFormSection(
                     label = stringResource(R.string.field_height_inches),
                     value = fields.heightInches,
                     unitLabel = stringResource(R.string.unit_in),
-                    error = null,
+                    error = errors.heightInches,
                     onValueChange = onHeightInchesChange,
                     modifier = Modifier.weight(1f),
                 )
@@ -187,7 +199,7 @@ fun TargetPreviewCard(target: TargetPreview, unitSystem: UnitSystem, modifier: M
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
-                    target.warning?.let { warning ->
+                    target.warnings.forEach { warning ->
                         Text(
                             text = stringResource(warning.messageRes()),
                             style = MaterialTheme.typography.bodySmall,
@@ -208,6 +220,11 @@ private fun formatRate(kgPerWeek: Double, unitSystem: UnitSystem, locale: java.u
         val pounds = UnitConversions.kilogramsPerWeekToPoundsPerWeek(kgPerWeek)
         "${DecimalText.format(pounds, locale, decimals = 2)} ${stringResource(R.string.unit_lb)}"
     }
+
+internal fun UnitSystem.unitSystemLabelRes(): Int = when (this) {
+    UnitSystem.METRIC -> R.string.unit_system_metric
+    UnitSystem.IMPERIAL -> R.string.unit_system_imperial
+}
 
 internal fun EnergyEquationSex.labelRes(): Int = when (this) {
     EnergyEquationSex.FEMALE -> R.string.formula_variant_female

@@ -53,6 +53,7 @@
 
     <string name="error_required">Required</string>
     <string name="error_invalid_number">Enter a number</string>
+    <string name="error_save_failed">Saving the target failed. Your profile is stored and the target is recalculated on the next start.</string>
     <string name="error_out_of_range">Value out of range</string>
 
     <string name="action_save">Save</string>
@@ -74,7 +75,7 @@
     <string name="unavailable_non_positive_energy">These values do not produce a valid estimate.</string>
 
     <string name="settings_section_profile">Profile</string>
-    <string name="settings_section_appearance">Units, language and theme</string>
+    <string name="settings_section_appearance">Language and theme</string>
 
     <string name="field_unit_system">Units</string>
     <string name="unit_system_metric">Metric (kg, cm)</string>

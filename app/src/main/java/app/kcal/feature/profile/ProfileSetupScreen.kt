@@ -27,6 +27,7 @@ import app.kcal.core.ui.LoadingScreen
 import app.kcal.domain.model.ActivityLevel
 import app.kcal.domain.model.EnergyEquationSex
 import app.kcal.domain.model.ThemeMode
+import app.kcal.domain.model.UnitSystem
 import app.kcal.feature.profile.components.ProfileFormSection
 import app.kcal.feature.profile.components.TargetPreviewCard
 
@@ -48,6 +49,7 @@ fun ProfileSetupRoute(viewModel: ProfileFormViewModel = hiltViewModel()) {
         onActivityLevelSelect = viewModel::onActivityLevelSelect,
         onTargetWeightChange = viewModel::onTargetWeightChange,
         onLossRateChange = viewModel::onLossRateChange,
+        onUnitSystemSelect = viewModel::onUnitSystemSelect,
         onSave = viewModel::onSave,
     )
 }
@@ -65,6 +67,7 @@ fun ProfileSetupScreen(
     onActivityLevelSelect: (ActivityLevel) -> Unit,
     onTargetWeightChange: (String) -> Unit,
     onLossRateChange: (String) -> Unit,
+    onUnitSystemSelect: (UnitSystem) -> Unit,
     onSave: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -96,6 +99,7 @@ fun ProfileSetupScreen(
                     onActivityLevelSelect = onActivityLevelSelect,
                     onTargetWeightChange = onTargetWeightChange,
                     onLossRateChange = onLossRateChange,
+                    onUnitSystemSelect = onUnitSystemSelect,
                 )
                 TargetPreviewCard(target = uiState.target, unitSystem = uiState.unitSystem)
                 Text(
@@ -103,6 +107,13 @@ fun ProfileSetupScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (uiState.saveFailed) {
+                    Text(
+                        text = stringResource(R.string.error_save_failed),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
                 Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.action_save))
                 }
@@ -124,8 +135,21 @@ private fun ProfileSetupScreenPreviewContent(uiState: ProfileFormUiState) {
         onActivityLevelSelect = {},
         onTargetWeightChange = {},
         onLossRateChange = {},
+        onUnitSystemSelect = {},
         onSave = {},
     )
+}
+
+@Preview(name = "Profile setup errors White", heightDp = 1400)
+@Composable
+private fun ProfileSetupErrorsWhitePreview() {
+    KcalTheme(themeMode = ThemeMode.WHITE) { ProfileSetupScreenPreviewContent(invalidProfileFormUiState) }
+}
+
+@Preview(name = "Profile setup errors Black", heightDp = 1400)
+@Composable
+private fun ProfileSetupErrorsBlackPreview() {
+    KcalTheme(themeMode = ThemeMode.BLACK) { ProfileSetupScreenPreviewContent(invalidProfileFormUiState) }
 }
 
 @Preview(name = "Profile setup empty White", heightDp = 1400)

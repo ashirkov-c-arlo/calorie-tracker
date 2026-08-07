@@ -9,6 +9,9 @@ import app.kcal.domain.model.UnitSystem
 import app.kcal.domain.usecase.DailyTargetResult
 import app.kcal.domain.usecase.DailyTargetUnavailableReason
 import app.kcal.domain.usecase.DailyTargetWarning
+import kotlinx.collections.immutable.PersistentList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toPersistentList
 
 /** Why a single field cannot be accepted. Rendered next to that field. */
 enum class ProfileFieldError {
@@ -20,6 +23,8 @@ enum class ProfileFieldError {
 data class ProfileFormErrors(
     val currentWeight: ProfileFieldError? = null,
     val height: ProfileFieldError? = null,
+    val heightFeet: ProfileFieldError? = null,
+    val heightInches: ProfileFieldError? = null,
     val age: ProfileFieldError? = null,
     val formulaVariant: ProfileFieldError? = null,
     val activityLevel: ProfileFieldError? = null,
@@ -29,6 +34,8 @@ data class ProfileFormErrors(
     val hasAny: Boolean
         get() = currentWeight != null ||
             height != null ||
+            heightFeet != null ||
+            heightInches != null ||
             age != null ||
             formulaVariant != null ||
             activityLevel != null ||
@@ -59,11 +66,11 @@ sealed interface TargetPreview {
         val targets: Macros,
         val requestedLossRateKgPerWeek: Double,
         val effectiveLossRateKgPerWeek: Double,
-        /** The strictest guardrail that changed the requested pace, if any. */
-        val warning: DailyTargetWarning?,
+        /** Every guardrail that changed the requested pace, in decreasing severity. */
+        val warnings: PersistentList<DailyTargetWarning>,
     ) : TargetPreview {
         val paceDiffersFromRequest: Boolean
-            get() = warning != null
+            get() = warnings.isNotEmpty()
     }
 
     data class Unavailable(val reason: DailyTargetUnavailableReason) : TargetPreview
@@ -77,11 +84,13 @@ data class ProfileFormUiState(
     val appLanguage: AppLanguage = AppLanguage.SYSTEM,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val target: TargetPreview = TargetPreview.Unavailable(DailyTargetUnavailableReason.MISSING_PROFILE_INPUTS),
+    /** The profile was stored, but keeping the target in sync failed. */
+    val saveFailed: Boolean = false,
 )
 
-/** The strictest guardrail is the one worth explaining, so warnings are ordered. */
-private val WARNING_PRIORITY =
-    listOf(
+/** Guardrails are rendered from the strictest to the mildest, and none of them is dropped. */
+private val WARNING_ORDER =
+    persistentListOf(
         DailyTargetWarning.TARGET_WEIGHT_REACHED,
         DailyTargetWarning.INTAKE_FLOOR_APPLIED,
         DailyTargetWarning.DEFICIT_CAPPED,
@@ -94,7 +103,7 @@ internal fun DailyTargetResult.toTargetPreview(): TargetPreview = when (this) {
             targets = targets,
             requestedLossRateKgPerWeek = requestedLossRateKgPerWeek,
             effectiveLossRateKgPerWeek = effectiveLossRateKgPerWeek,
-            warning = WARNING_PRIORITY.firstOrNull { it in warnings },
+            warnings = WARNING_ORDER.filter { it in warnings }.toPersistentList(),
         )
 
     is DailyTargetResult.Unavailable -> TargetPreview.Unavailable(reason)

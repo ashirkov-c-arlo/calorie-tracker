@@ -3,7 +3,6 @@ package app.kcal.domain.usecase
 import app.kcal.domain.model.Macros
 import app.kcal.domain.model.ProfileInputs
 import app.kcal.domain.model.StoredProfile
-import javax.inject.Inject
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -49,7 +48,7 @@ sealed interface DailyTargetResult {
  * rate/deficit/intake guardrails, weight-based protein, fat at 25% of energy, and
  * carbohydrates as the remainder. An LLM never performs this arithmetic.
  */
-class CalculateDailyTargets @Inject constructor() {
+class CalculateDailyTargets {
 
     fun forStoredProfile(profile: StoredProfile): DailyTargetResult = profile.toInputs()?.let { invoke(it) }
         ?: DailyTargetResult.Unavailable(DailyTargetUnavailableReason.MISSING_PROFILE_INPUTS)

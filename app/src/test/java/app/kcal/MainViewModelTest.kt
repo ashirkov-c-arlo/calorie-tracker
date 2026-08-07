@@ -1,9 +1,14 @@
 package app.kcal
 
+import app.kcal.core.common.TimeProvider
 import app.kcal.domain.model.AppLanguage
 import app.kcal.domain.model.StoredProfile
 import app.kcal.domain.model.ThemeMode
 import app.kcal.domain.model.UserPreferences
+import app.kcal.domain.usecase.ApplyTodayTarget
+import app.kcal.domain.usecase.CalculateDailyTargets
+import app.kcal.domain.usecase.ReconcileTodayTarget
+import app.kcal.testing.FakeDailyTargetRepository
 import app.kcal.testing.FakeProfileRepository
 import app.kcal.testing.completeProfile
 import kotlinx.coroutines.Dispatchers
@@ -18,6 +23,9 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneId
 import kotlin.test.assertEquals
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -33,10 +41,19 @@ class MainViewModelTest {
         Dispatchers.resetMain()
     }
 
+    private fun reconcileTodayTarget(repository: FakeProfileRepository) = ReconcileTodayTarget(
+        repository,
+        ApplyTodayTarget(
+            FakeDailyTargetRepository(),
+            CalculateDailyTargets(),
+            TimeProvider(Clock.fixed(Instant.parse("2026-03-15T09:00:00Z"), ZoneId.of("UTC")), ZoneId.of("UTC")),
+        ),
+    )
+
     @Test
     fun `starts loading and then reports the gate result, theme and language`() = runTest {
         val repository = FakeProfileRepository()
-        val viewModel = MainViewModel(repository)
+        val viewModel = MainViewModel(repository, reconcileTodayTarget(repository))
         val states = mutableListOf<MainUiState>()
         val collection = launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.toList(states) }
 
@@ -68,7 +85,7 @@ class MainViewModelTest {
             FakeProfileRepository(
                 UserPreferences(profile = completeProfile().copy(activityLevel = null)),
             )
-        val viewModel = MainViewModel(repository)
+        val viewModel = MainViewModel(repository, reconcileTodayTarget(repository))
         val states = mutableListOf<MainUiState>()
         val collection = launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.toList(states) }
 
@@ -83,7 +100,7 @@ class MainViewModelTest {
     fun `a missing current weight keeps the gate closed`() = runTest {
         val repository =
             FakeProfileRepository(UserPreferences(profile = StoredProfile(heightCm = 176.0)))
-        val viewModel = MainViewModel(repository)
+        val viewModel = MainViewModel(repository, reconcileTodayTarget(repository))
         val states = mutableListOf<MainUiState>()
         val collection = launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.toList(states) }
 

@@ -14,6 +14,8 @@ import app.kcal.feature.profile.ProfileSetupScreen
 import app.kcal.feature.profile.emptyProfileFormUiState
 import app.kcal.feature.profile.filledProfileFormUiState
 import app.kcal.feature.profile.guardedProfileFormUiState
+import app.kcal.feature.profile.invalidProfileFormUiState
+import app.kcal.feature.profile.russianProfileFormUiState
 import app.kcal.feature.settings.SettingsScreen
 import app.kcal.feature.today.TodayScreen
 import app.kcal.feature.trends.TrendsScreen
@@ -91,8 +93,16 @@ class ScreenshotTest {
     @Test
     @Config(qualifiers = "+ru-h2000dp")
     fun profileSetupGuardrailWhiteRussian() = capture(ThemeMode.WHITE) {
-        ProfileSetupFixture(guardedProfileFormUiState)
+        ProfileSetupFixture(russianProfileFormUiState)
     }
+
+    @Test
+    @Config(qualifiers = "+h2000dp")
+    fun profileSetupErrorsWhite() = capture(ThemeMode.WHITE) { ProfileSetupFixture(invalidProfileFormUiState) }
+
+    @Test
+    @Config(qualifiers = "+h2000dp")
+    fun profileSetupErrorsBlack() = capture(ThemeMode.BLACK) { ProfileSetupFixture(invalidProfileFormUiState) }
 
     @Test
     @Config(qualifiers = "+h2600dp")
@@ -122,7 +132,7 @@ class ScreenshotTest {
 
     @Test
     @Config(qualifiers = "+ru-h2600dp")
-    fun settingsWhiteRussian() = capture(ThemeMode.WHITE) { SettingsFixture(filledProfileFormUiState) }
+    fun settingsWhiteRussian() = capture(ThemeMode.WHITE) { SettingsFixture(russianProfileFormUiState) }
 
     @Composable
     private fun ProfileSetupFixture(uiState: ProfileFormUiState) {
@@ -137,6 +147,7 @@ class ScreenshotTest {
             onActivityLevelSelect = {},
             onTargetWeightChange = {},
             onLossRateChange = {},
+            onUnitSystemSelect = {},
             onSave = {},
         )
     }

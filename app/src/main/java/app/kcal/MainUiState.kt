@@ -9,3 +9,10 @@ data class MainUiState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val appLanguage: AppLanguage = AppLanguage.SYSTEM,
 )
+
+/**
+ * The interface language to hand to the app-locale API, or null while preferences are still
+ * loading. Applying the default during a cold start would clear a stored locale and make the
+ * activity recreate twice.
+ */
+internal fun MainUiState.appLanguageToApply(): AppLanguage? = appLanguage.takeUnless { isLoading }

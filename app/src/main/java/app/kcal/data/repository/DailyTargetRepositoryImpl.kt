@@ -25,6 +25,10 @@ class DailyTargetRepositoryImpl @Inject constructor(private val dao: DailyTarget
             ),
         )
     }
+
+    override suspend fun delete(localDate: LocalDate) {
+        dao.deleteByDate(localDate.epochDayInt())
+    }
 }
 
 private fun LocalDate.epochDayInt(): Int = toEpochDay().toInt()

@@ -128,6 +128,7 @@ fun SettingsScreen(
                     onActivityLevelSelect = onActivityLevelSelect,
                     onTargetWeightChange = onTargetWeightChange,
                     onLossRateChange = onLossRateChange,
+                    onUnitSystemSelect = onUnitSystemSelect,
                 )
                 TargetPreviewCard(target = uiState.target, unitSystem = uiState.unitSystem)
                 Text(
@@ -135,6 +136,13 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (uiState.saveFailed) {
+                    Text(
+                        text = stringResource(R.string.error_save_failed),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
                 Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.action_save))
                 }
@@ -144,14 +152,6 @@ fun SettingsScreen(
                 Text(
                     text = stringResource(R.string.settings_section_appearance),
                     style = MaterialTheme.typography.titleMedium,
-                )
-                SingleChoiceField(
-                    label = stringResource(R.string.field_unit_system),
-                    options = UnitSystem.entries,
-                    selected = uiState.unitSystem,
-                    optionLabel = { stringResource(it.labelRes()) },
-                    error = null,
-                    onSelect = onUnitSystemSelect,
                 )
                 SingleChoiceField(
                     label = stringResource(R.string.field_language),

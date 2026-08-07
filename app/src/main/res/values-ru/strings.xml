@@ -51,6 +51,7 @@
 
     <string name="error_required">Обязательное поле</string>
     <string name="error_invalid_number">Введите число</string>
+    <string name="error_save_failed">Не удалось сохранить цель. Профиль сохранен, цель будет пересчитана при следующем запуске.</string>
     <string name="error_out_of_range">Значение вне допустимого диапазона</string>
 
     <string name="action_save">Сохранить</string>
@@ -72,7 +73,7 @@
     <string name="unavailable_non_positive_energy">С такими значениями оценку получить нельзя.</string>
 
     <string name="settings_section_profile">Профиль</string>
-    <string name="settings_section_appearance">Единицы, язык и тема</string>
+    <string name="settings_section_appearance">Язык и тема</string>
 
     <string name="field_unit_system">Единицы</string>
     <string name="unit_system_metric">Метрические (кг, см)</string>

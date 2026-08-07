@@ -13,39 +13,61 @@ import java.util.Locale
  */
 private val calculate = CalculateDailyTargets()
 
-private val honouredPaceProfile =
-    StoredProfile(
-        currentWeightKg = 82.4,
-        heightCm = 176.0,
-        ageYears = 34,
-        energyEquationSex = EnergyEquationSex.MALE,
-        activityLevel = ActivityLevel.LIGHT,
-        targetWeightKg = 78.0,
-        requestedLossRateKgPerWeek = 0.3,
-    )
-
-private val guardedPaceProfile = honouredPaceProfile.copy(requestedLossRateKgPerWeek = 2.0)
+private const val CURRENT_WEIGHT_KG = 82.4
+private const val HEIGHT_CM = 176.0
+private const val AGE_YEARS = 34
+private const val TARGET_WEIGHT_KG = 78.0
+private const val HONOURED_RATE_KG_PER_WEEK = 0.3
+private const val GUARDED_RATE_KG_PER_WEEK = 2.0
 
 internal val emptyProfileFormUiState = ProfileFormUiState(isLoading = false)
 
-internal val filledProfileFormUiState = honouredPaceProfile.toPreviewState()
+internal val filledProfileFormUiState = previewState(HONOURED_RATE_KG_PER_WEEK)
 
-internal val guardedProfileFormUiState = guardedPaceProfile.toPreviewState()
+internal val guardedProfileFormUiState = previewState(GUARDED_RATE_KG_PER_WEEK)
 
-private fun StoredProfile.toPreviewState(): ProfileFormUiState {
-    val locale = Locale.US
+internal val russianProfileFormUiState =
+    previewState(GUARDED_RATE_KG_PER_WEEK, locale = Locale.forLanguageTag("ru"))
+
+/** The state a user sees after pressing Save on an invalid form. */
+internal val invalidProfileFormUiState =
+    ProfileFormUiState(
+        isLoading = false,
+        fields = ProfileFormFields(currentWeight = "abc", height = "500", age = "34"),
+        errors =
+        ProfileFormErrors(
+            currentWeight = ProfileFieldError.INVALID_NUMBER,
+            height = ProfileFieldError.OUT_OF_RANGE,
+            formulaVariant = ProfileFieldError.REQUIRED,
+            activityLevel = ProfileFieldError.REQUIRED,
+            targetWeight = ProfileFieldError.REQUIRED,
+            lossRate = ProfileFieldError.REQUIRED,
+        ),
+    )
+
+private fun previewState(rateKgPerWeek: Double, locale: Locale = Locale.US): ProfileFormUiState {
+    val profile =
+        StoredProfile(
+            currentWeightKg = CURRENT_WEIGHT_KG,
+            heightCm = HEIGHT_CM,
+            ageYears = AGE_YEARS,
+            energyEquationSex = EnergyEquationSex.MALE,
+            activityLevel = ActivityLevel.LIGHT,
+            targetWeightKg = TARGET_WEIGHT_KG,
+            requestedLossRateKgPerWeek = rateKgPerWeek,
+        )
     return ProfileFormUiState(
         isLoading = false,
         fields =
         ProfileFormFields(
-            currentWeight = DecimalText.format(currentWeightKg!!, locale),
-            height = DecimalText.format(heightCm!!, locale),
-            age = ageYears!!.toString(),
-            energyEquationSex = energyEquationSex,
-            activityLevel = activityLevel,
-            targetWeight = DecimalText.format(targetWeightKg!!, locale),
-            lossRate = DecimalText.format(requestedLossRateKgPerWeek!!, locale, decimals = 2),
+            currentWeight = DecimalText.format(CURRENT_WEIGHT_KG, locale),
+            height = DecimalText.format(HEIGHT_CM, locale),
+            age = AGE_YEARS.toString(),
+            energyEquationSex = profile.energyEquationSex,
+            activityLevel = profile.activityLevel,
+            targetWeight = DecimalText.format(TARGET_WEIGHT_KG, locale),
+            lossRate = DecimalText.format(rateKgPerWeek, locale, decimals = 2),
         ),
-        target = calculate.forStoredProfile(this).toTargetPreview(),
+        target = calculate.forStoredProfile(profile).toTargetPreview(),
     )
 }
