@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_today">Сегодня</string>
+    <string name="nav_trends">Динамика</string>
+    <string name="nav_history">История</string>
+
+    <string name="today_title">Сегодня</string>
+    <string name="trends_title">Динамика</string>
+    <string name="history_title">История</string>
+    <string name="settings_title">Настройки</string>
+    <string name="profile_setup_title">Ваш профиль</string>
+
+    <string name="settings_open_content_description">Открыть настройки</string>
+    <string name="navigate_back_content_description">Назад</string>
+
+    <string name="loading">Загрузка…</string>
+
+    <string name="placeholder_today">Здесь появится прогресс по калориям и макронутриентам вместе со списком приёмов пищи.</string>
+    <string name="placeholder_trends">Здесь появятся точки веса и скользящее среднее за 7 дней.</string>
+    <string name="placeholder_history">Здесь появятся дни и недели ISO с сохранёнными для них целями.</string>
+    <string name="placeholder_settings">Здесь появятся профиль, вариант формулы, активность, единицы, язык и тема.</string>
+    <string name="placeholder_profile_setup">Здесь появится обязательная форма профиля. Пока она не сохранена, основная навигация закрыта.</string>
+</resources>

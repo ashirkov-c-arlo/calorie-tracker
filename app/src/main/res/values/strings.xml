@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">Kcal</string>
+
+    <string name="nav_today">Today</string>
+    <string name="nav_trends">Trends</string>
+    <string name="nav_history">History</string>
+
+    <string name="today_title">Today</string>
+    <string name="trends_title">Trends</string>
+    <string name="history_title">History</string>
+    <string name="settings_title">Settings</string>
+    <string name="profile_setup_title">Your profile</string>
+
+    <string name="settings_open_content_description">Open settings</string>
+    <string name="navigate_back_content_description">Back</string>
+
+    <string name="loading">Loading…</string>
+
+    <string name="placeholder_today">Daily calorie and macro progress with your meals will appear here.</string>
+    <string name="placeholder_trends">Your weight points and the 7-day moving average will appear here.</string>
+    <string name="placeholder_history">Days and ISO weeks with their saved targets will appear here.</string>
+    <string name="placeholder_settings">Profile, formula variant, activity, units, language, and theme will appear here.</string>
+    <string name="placeholder_profile_setup">The required profile form will appear here. Until it is saved, the main navigation stays closed.</string>
+</resources>
