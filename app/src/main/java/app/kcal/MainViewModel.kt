@@ -16,10 +16,9 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Owns the app shell state. Reading preferences, finishing an interrupted save and
- * rewriting today's target all happen in one pipeline, so the gate reports a complete
- * profile only once its target is stored, and any storage failure becomes a retryable
- * error state instead of an open screen without a goal.
+ * Owns the app shell state. Reading preferences and rewriting today's target happen in one
+ * pipeline, so the gate reports a complete profile only once its target is stored, and any
+ * storage failure becomes a retryable error state instead of an open screen without a goal.
  */
 @HiltViewModel
 class MainViewModel @Inject constructor(
@@ -59,7 +58,6 @@ class MainViewModel @Inject constructor(
                                     themeMode = preferences.themeMode,
                                     appLanguage = preferences.appLanguage,
                                 )
-                            profileRepository.completePendingSave()
                             applyTodayTarget(preferences.profile, timeProvider.today())
                             syncedProfile = preferences.profile
                         }
@@ -75,7 +73,14 @@ class MainViewModel @Inject constructor(
                     throw cancellation
                 } catch (storageFailure: Exception) {
                     // Handled by surfacing a retryable error state; details are never logged.
-                    _uiState.value = MainUiState(isLoading = false, startupFailed = true)
+                    // The last known theme and language are kept so the error screen is
+                    // rendered as the user configured it and no locale is cleared.
+                    _uiState.value =
+                        _uiState.value.copy(
+                            isLoading = false,
+                            isProfileComplete = false,
+                            startupFailed = true,
+                        )
                 }
             }
     }

@@ -9,6 +9,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.kcal.core.common.TimeProvider
 import app.kcal.data.db.KcalDatabase
+import app.kcal.data.db.WeightEntryEntity
 import app.kcal.data.prefs.ProfilePreferencesDataSource
 import app.kcal.domain.usecase.ApplyTodayTarget
 import app.kcal.domain.usecase.CalculateDailyTargets
@@ -133,32 +134,34 @@ class SaveProfileIntegrationTest {
     }
 
     @Test
-    fun `an interrupted save between preferences and the weight entry is completed later`() = runTest {
+    fun `an interruption after the weight write leaves a consistent older profile`() = runTest {
         saveProfile(completeProfile())
-        val previousWeight = assertNotNull(database.weightEntryDao().findByDate(today.toEpochDay().toInt())).kg
 
-        // Simulates process death right after the atomic preferences write: the new settings
-        // and the pending weight are stored, but Room has not received the weight yet.
-        preferencesDataSource.saveProfile(
-            completeProfile(currentWeightKg = 79.0, heightCm = 180.0),
-            today.toEpochDay().toInt(),
+        // Simulates process death between the two writes of a later edit: the weight entry
+        // landed, the atomic preferences edit did not.
+        database.weightEntryDao().upsert(
+            WeightEntryEntity(localDateEpochDay = today.toEpochDay().toInt(), kg = 79.0),
         )
-        assertEquals(previousWeight, profileRepository.preferences.first().profile.currentWeightKg)
 
-        profileRepository.completePendingSave()
+        val profile = profileRepository.preferences.first().profile
+        assertEquals(79.0, profile.currentWeightKg)
+        // The previous settings are intact, so nothing pairs new settings with a stale weight.
+        assertEquals(176.0, profile.heightCm)
+        assertEquals(78.0, profile.targetWeightKg)
 
-        val recovered = profileRepository.preferences.first().profile
-        assertEquals(79.0, recovered.currentWeightKg)
-        assertEquals(180.0, recovered.heightCm)
-        assertEquals(79.0, database.weightEntryDao().findByDate(today.toEpochDay().toInt())?.kg)
-        assertNull(preferencesDataSource.pendingWeightWrite.first())
+        // Startup recomputes today's target from exactly that consistent pair.
+        val expected = applyTodayTarget(profile, today)
+        assertTrue(expected is DailyTargetResult.Available)
+        assertEquals(expected.targets, assertNotNull(dailyTargetRepository.find(today)).targets)
     }
 
     @Test
-    fun `a completed save leaves no pending weight write behind`() = runTest {
+    fun `preferences never store a copy of the current weight`() = runTest {
         saveProfile(completeProfile())
 
-        assertNull(preferencesDataSource.pendingWeightWrite.first())
+        // Only the weight entry table knows the current weight.
+        assertNull(preferencesDataSource.preferences.first().profile.currentWeightKg)
+        assertEquals(82.4, profileRepository.preferences.first().profile.currentWeightKg)
     }
 
     @Test

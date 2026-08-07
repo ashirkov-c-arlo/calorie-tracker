@@ -18,9 +18,6 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** A weight entry that was recorded in preferences but has not reached Room yet. */
-data class PendingWeightWrite(val kg: Double, val localDateEpochDay: Int)
-
 /**
  * Canonical preference storage: kilograms, centimetres and whole years only. Calculator
  * inputs have no defaults, so a missing key means "not entered yet". Current weight is not
@@ -48,22 +45,11 @@ class ProfilePreferencesDataSource @Inject constructor(private val dataStore: Da
         }
 
     /**
-     * The weight write that still has to reach Room, together with the date it belongs to.
-     * This is a write-ahead marker, not a second source of truth: it is cleared as soon as
-     * the weight entry is stored, and current weight is always read from Room.
-     */
-    val pendingWeightWrite: Flow<PendingWeightWrite?> =
-        dataStore.data.map { stored ->
-            val kg = stored[Keys.PENDING_WEIGHT_KG]
-            val epochDay = stored[Keys.PENDING_WEIGHT_EPOCH_DAY]
-            if (kg != null && epochDay != null) PendingWeightWrite(kg, epochDay) else null
-        }
-
-    /**
      * Writes every calculator input that is present in one atomic edit, so the stored
-     * settings can never be half applied, and records the weight that Room must receive.
+     * settings can never be half applied. Current weight is deliberately absent: it lives
+     * only as the latest weight entry in Room.
      */
-    suspend fun saveProfile(profile: StoredProfile, localDateEpochDay: Int) {
+    suspend fun saveProfile(profile: StoredProfile) {
         dataStore.edit { preferences ->
             profile.heightCm?.let { preferences[Keys.HEIGHT_CM] = it }
             profile.ageYears?.let { preferences[Keys.AGE_YEARS] = it }
@@ -73,17 +59,6 @@ class ProfilePreferencesDataSource @Inject constructor(private val dataStore: Da
             profile.requestedLossRateKgPerWeek?.let {
                 preferences[Keys.REQUESTED_LOSS_RATE_KG_PER_WEEK] = it
             }
-            profile.currentWeightKg?.let {
-                preferences[Keys.PENDING_WEIGHT_KG] = it
-                preferences[Keys.PENDING_WEIGHT_EPOCH_DAY] = localDateEpochDay
-            }
-        }
-    }
-
-    suspend fun clearPendingWeightWrite() {
-        dataStore.edit { preferences ->
-            preferences.remove(Keys.PENDING_WEIGHT_KG)
-            preferences.remove(Keys.PENDING_WEIGHT_EPOCH_DAY)
         }
     }
 
@@ -109,8 +84,6 @@ class ProfilePreferencesDataSource @Inject constructor(private val dataStore: Da
         val UNIT_SYSTEM = stringPreferencesKey("unit_system")
         val APP_LANGUAGE = stringPreferencesKey("app_language")
         val THEME_MODE = stringPreferencesKey("theme_mode")
-        val PENDING_WEIGHT_KG = doublePreferencesKey("pending_weight_kg")
-        val PENDING_WEIGHT_EPOCH_DAY = intPreferencesKey("pending_weight_epoch_day")
     }
 }
 

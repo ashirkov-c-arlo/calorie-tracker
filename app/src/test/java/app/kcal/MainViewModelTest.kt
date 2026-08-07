@@ -148,8 +148,8 @@ class MainViewModelTest {
 
     @Test
     fun `a failing preferences read becomes a retryable error instead of an endless loading state`() = runTest {
-        val failing = FakeProfileRepository(readFails = true)
-        val viewModel = viewModel(failing)
+        val repository = FakeProfileRepository(UserPreferences(profile = completeProfile()), readFails = true)
+        val viewModel = viewModel(repository)
         val states = collect(viewModel)
 
         runCurrent()
@@ -158,14 +158,15 @@ class MainViewModelTest {
         assertTrue(failed.startupFailed)
         assertEquals(false, failed.isLoading)
 
-        // Retrying with a working repository is the recovery path the error screen offers.
-        val working = FakeProfileRepository(UserPreferences(profile = completeProfile()))
-        val recovered = viewModel(working)
-        val recoveredStates = collect(recovered)
+        // Retry uses the same view model, as the error screen does.
+        repository.readFails = false
+        viewModel.onRetryStartup()
         runCurrent()
 
-        assertEquals(false, recoveredStates.last().startupFailed)
-        assertEquals(true, recoveredStates.last().isProfileComplete)
+        val recovered = states.last()
+        assertEquals(false, recovered.startupFailed)
+        assertEquals(true, recovered.isProfileComplete)
+        assertNotNull(dailyTargetRepository.find(today))
     }
 
     @Test
@@ -194,14 +195,26 @@ class MainViewModelTest {
     }
 
     @Test
-    fun `an interrupted save is finished before the target is recomputed`() = runTest {
-        val repository = FakeProfileRepository(UserPreferences(profile = completeProfile()))
+    fun `the error state keeps the stored language and theme`() = runTest {
+        val repository =
+            FakeProfileRepository(
+                UserPreferences(
+                    profile = completeProfile(),
+                    themeMode = ThemeMode.BLACK,
+                    appLanguage = AppLanguage.RUSSIAN,
+                ),
+            )
+        dailyTargetRepository.failNextWrites(true)
         val viewModel = viewModel(repository)
-        collect(viewModel)
+        val states = collect(viewModel)
 
         runCurrent()
 
-        assertTrue(repository.pendingSaveCompletions > 0)
+        val failed = states.last()
+        assertTrue(failed.startupFailed)
+        assertEquals(ThemeMode.BLACK, failed.themeMode)
+        assertEquals(AppLanguage.RUSSIAN, failed.appLanguage)
+        assertEquals(AppLanguage.RUSSIAN, failed.appLanguageToApply())
     }
 
     private fun TestScope.collect(viewModel: MainViewModel): List<MainUiState> {

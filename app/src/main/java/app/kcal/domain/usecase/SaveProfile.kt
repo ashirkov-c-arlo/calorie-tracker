@@ -8,10 +8,10 @@ import app.kcal.domain.repository.ProfileRepository
  * Persists the calculator inputs and keeps today's target consistent with them.
  *
  * Values that would break the persisted-data invariants are rejected before anything is
- * written. The write then spans DataStore and Room, so it cannot be one transaction: the
- * user's input is stored first and today's snapshot is written or removed second, both for
- * the same local date. If the second step fails or the process dies in between,
- * [ReconcileTodayTarget] rewrites the snapshot on the next start.
+ * written. The write then spans Room and DataStore, so it cannot be one transaction: the
+ * weight entry, the calculator inputs and today's snapshot are stored in that order, all for
+ * the same local date. If a later step fails or the process dies in between, the app shell
+ * rewrites today's snapshot from the stored profile on the next start.
  */
 class SaveProfile(
     private val profileRepository: ProfileRepository,

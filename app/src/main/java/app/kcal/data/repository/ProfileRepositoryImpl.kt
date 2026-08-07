@@ -11,7 +11,6 @@ import app.kcal.domain.model.UserPreferences
 import app.kcal.domain.repository.ProfileRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 import javax.inject.Inject
@@ -34,22 +33,19 @@ class ProfileRepositoryImpl @Inject constructor(
     override val themeMode: Flow<ThemeMode> = preferencesDataSource.preferences.map { it.themeMode }
 
     /**
-     * The calculator inputs go into one atomic preferences edit that also records the weight
-     * Room still has to receive. The weight entry is written next and the marker is cleared
-     * last, so an interruption leaves a pending write that [completePendingSave] finishes
-     * instead of a silent mix of new settings and an old weight.
+     * The weight entry is written before the calculator inputs, and the inputs go into one
+     * atomic preferences edit. An interruption can therefore only lose the edit itself: what
+     * remains is the previous, consistent set of settings together with a freshly logged
+     * weight, never new settings paired with a stale weight. Current weight is never
+     * duplicated into preferences.
      */
     override suspend fun saveProfile(profile: StoredProfile, localDate: LocalDate) {
-        preferencesDataSource.saveProfile(profile, localDate.toEpochDay().toInt())
-        completePendingSave()
-    }
-
-    override suspend fun completePendingSave() {
-        val pending = preferencesDataSource.pendingWeightWrite.first() ?: return
-        weightEntryDao.upsert(
-            WeightEntryEntity(localDateEpochDay = pending.localDateEpochDay, kg = pending.kg),
-        )
-        preferencesDataSource.clearPendingWeightWrite()
+        profile.currentWeightKg?.let { weightKg ->
+            weightEntryDao.upsert(
+                WeightEntryEntity(localDateEpochDay = localDate.toEpochDay().toInt(), kg = weightKg),
+            )
+        }
+        preferencesDataSource.saveProfile(profile)
     }
 
     override suspend fun setUnitSystem(unitSystem: UnitSystem) {
