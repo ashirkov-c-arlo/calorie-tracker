@@ -136,8 +136,6 @@ class ScreenshotTest {
                     currentWeight = "181.7",
                     heightFeet = "5",
                     heightInches = "9.3",
-                    targetWeight = "172.0",
-                    lossRate = "0.66",
                 ),
             ),
         )
@@ -159,7 +157,7 @@ class ScreenshotTest {
             onFormulaVariantSelect = {},
             onActivityLevelSelect = {},
             onTargetWeightChange = {},
-            onLossRateChange = {},
+            onLossPaceSelect = {},
             onUnitSystemSelect = {},
             onSave = {},
         )
@@ -178,7 +176,7 @@ class ScreenshotTest {
             onFormulaVariantSelect = {},
             onActivityLevelSelect = {},
             onTargetWeightChange = {},
-            onLossRateChange = {},
+            onLossPaceSelect = {},
             onUnitSystemSelect = {},
             onAppLanguageSelect = {},
             onThemeModeSelect = {},

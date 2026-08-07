@@ -6,6 +6,7 @@ import app.kcal.domain.repository.ProfileRepository
 import app.kcal.domain.usecase.ApplyTodayTarget
 import app.kcal.domain.usecase.CalculateDailyTargets
 import app.kcal.domain.usecase.SaveProfile
+import app.kcal.domain.usecase.SuggestLossPaces
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -21,6 +22,10 @@ object DomainModule {
 
     @Provides
     fun provideCalculateDailyTargets(): CalculateDailyTargets = CalculateDailyTargets()
+
+    @Provides
+    fun provideSuggestLossPaces(calculateDailyTargets: CalculateDailyTargets): SuggestLossPaces =
+        SuggestLossPaces(calculateDailyTargets)
 
     @Provides
     fun provideApplyTodayTarget(

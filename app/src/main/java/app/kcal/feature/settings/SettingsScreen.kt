@@ -32,6 +32,7 @@ import app.kcal.core.ui.LoadingScreen
 import app.kcal.domain.model.ActivityLevel
 import app.kcal.domain.model.AppLanguage
 import app.kcal.domain.model.EnergyEquationSex
+import app.kcal.domain.model.LossPace
 import app.kcal.domain.model.ThemeMode
 import app.kcal.domain.model.UnitSystem
 import app.kcal.feature.profile.ProfileFormUiState
@@ -59,7 +60,7 @@ fun SettingsRoute(onBackClick: () -> Unit, viewModel: ProfileFormViewModel = hil
         onFormulaVariantSelect = viewModel::onFormulaVariantSelect,
         onActivityLevelSelect = viewModel::onActivityLevelSelect,
         onTargetWeightChange = viewModel::onTargetWeightChange,
-        onLossRateChange = viewModel::onLossRateChange,
+        onLossPaceSelect = viewModel::onLossPaceSelect,
         onUnitSystemSelect = viewModel::onUnitSystemSelect,
         onAppLanguageSelect = viewModel::onAppLanguageSelect,
         onThemeModeSelect = viewModel::onThemeModeSelect,
@@ -79,8 +80,8 @@ fun SettingsScreen(
     onAgeChange: (String) -> Unit,
     onFormulaVariantSelect: (EnergyEquationSex) -> Unit,
     onActivityLevelSelect: (ActivityLevel) -> Unit,
-    onTargetWeightChange: (String) -> Unit,
-    onLossRateChange: (String) -> Unit,
+    onTargetWeightChange: (Double) -> Unit,
+    onLossPaceSelect: (LossPace) -> Unit,
     onUnitSystemSelect: (UnitSystem) -> Unit,
     onAppLanguageSelect: (AppLanguage) -> Unit,
     onThemeModeSelect: (ThemeMode) -> Unit,
@@ -127,8 +128,10 @@ fun SettingsScreen(
                     onFormulaVariantSelect = onFormulaVariantSelect,
                     onActivityLevelSelect = onActivityLevelSelect,
                     onTargetWeightChange = onTargetWeightChange,
-                    onLossRateChange = onLossRateChange,
+                    onLossPaceSelect = onLossPaceSelect,
                     onUnitSystemSelect = onUnitSystemSelect,
+                    targetWeightRangeKg = uiState.targetWeightRangeKg,
+                    lossPaceOptions = uiState.lossPaceOptions,
                 )
                 TargetPreviewCard(target = uiState.target, unitSystem = uiState.unitSystem)
                 Text(
@@ -204,7 +207,7 @@ private fun SettingsScreenPreviewContent(uiState: ProfileFormUiState) {
         onFormulaVariantSelect = {},
         onActivityLevelSelect = {},
         onTargetWeightChange = {},
-        onLossRateChange = {},
+        onLossPaceSelect = {},
         onUnitSystemSelect = {},
         onAppLanguageSelect = {},
         onThemeModeSelect = {},
@@ -236,8 +239,6 @@ private fun SettingsImperialWhitePreview() {
                     currentWeight = "181.7",
                     heightFeet = "5",
                     heightInches = "9.3",
-                    targetWeight = "172.0",
-                    lossRate = "1.10",
                 ),
             ),
         )

@@ -26,6 +26,7 @@ import app.kcal.core.designsystem.KcalTheme
 import app.kcal.core.ui.LoadingScreen
 import app.kcal.domain.model.ActivityLevel
 import app.kcal.domain.model.EnergyEquationSex
+import app.kcal.domain.model.LossPace
 import app.kcal.domain.model.ThemeMode
 import app.kcal.domain.model.UnitSystem
 import app.kcal.feature.profile.components.ProfileFormSection
@@ -48,7 +49,7 @@ fun ProfileSetupRoute(viewModel: ProfileFormViewModel = hiltViewModel()) {
         onFormulaVariantSelect = viewModel::onFormulaVariantSelect,
         onActivityLevelSelect = viewModel::onActivityLevelSelect,
         onTargetWeightChange = viewModel::onTargetWeightChange,
-        onLossRateChange = viewModel::onLossRateChange,
+        onLossPaceSelect = viewModel::onLossPaceSelect,
         onUnitSystemSelect = viewModel::onUnitSystemSelect,
         onSave = viewModel::onSave,
     )
@@ -65,8 +66,8 @@ fun ProfileSetupScreen(
     onAgeChange: (String) -> Unit,
     onFormulaVariantSelect: (EnergyEquationSex) -> Unit,
     onActivityLevelSelect: (ActivityLevel) -> Unit,
-    onTargetWeightChange: (String) -> Unit,
-    onLossRateChange: (String) -> Unit,
+    onTargetWeightChange: (Double) -> Unit,
+    onLossPaceSelect: (LossPace) -> Unit,
     onUnitSystemSelect: (UnitSystem) -> Unit,
     onSave: () -> Unit,
     modifier: Modifier = Modifier,
@@ -98,8 +99,10 @@ fun ProfileSetupScreen(
                     onFormulaVariantSelect = onFormulaVariantSelect,
                     onActivityLevelSelect = onActivityLevelSelect,
                     onTargetWeightChange = onTargetWeightChange,
-                    onLossRateChange = onLossRateChange,
+                    onLossPaceSelect = onLossPaceSelect,
                     onUnitSystemSelect = onUnitSystemSelect,
+                    targetWeightRangeKg = uiState.targetWeightRangeKg,
+                    lossPaceOptions = uiState.lossPaceOptions,
                 )
                 TargetPreviewCard(target = uiState.target, unitSystem = uiState.unitSystem)
                 Text(
@@ -134,7 +137,7 @@ private fun ProfileSetupScreenPreviewContent(uiState: ProfileFormUiState) {
         onFormulaVariantSelect = {},
         onActivityLevelSelect = {},
         onTargetWeightChange = {},
-        onLossRateChange = {},
+        onLossPaceSelect = {},
         onUnitSystemSelect = {},
         onSave = {},
     )

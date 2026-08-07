@@ -3,6 +3,8 @@ package app.kcal.feature.profile
 import app.kcal.domain.model.ActivityLevel
 import app.kcal.domain.model.AppLanguage
 import app.kcal.domain.model.EnergyEquationSex
+import app.kcal.domain.model.LossPace
+import app.kcal.domain.model.LossPaceOptions
 import app.kcal.domain.model.Macros
 import app.kcal.domain.model.ThemeMode
 import app.kcal.domain.model.UnitSystem
@@ -55,8 +57,9 @@ data class ProfileFormFields(
     val age: String = "",
     val energyEquationSex: EnergyEquationSex? = null,
     val activityLevel: ActivityLevel? = null,
-    val targetWeight: String = "",
-    val lossRate: String = "",
+    /** Canonical kilograms picked with the slider; null until the user chooses a value. */
+    val targetWeightKg: Double? = null,
+    val lossPace: LossPace? = null,
 )
 
 /** The estimate shown under the form, or the reason there is none. */
@@ -81,6 +84,10 @@ data class ProfileFormUiState(
     val fields: ProfileFormFields = ProfileFormFields(),
     val errors: ProfileFormErrors = ProfileFormErrors(),
     val unitSystem: UnitSystem = UnitSystem.METRIC,
+    /** Target weights within the reference body mass index range for the entered height. */
+    val targetWeightRangeKg: ClosedFloatingPointRange<Double>? = null,
+    /** The three paces derived from the entered profile, or null when none applies. */
+    val lossPaceOptions: LossPaceOptions? = null,
     val appLanguage: AppLanguage = AppLanguage.SYSTEM,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val target: TargetPreview = TargetPreview.Unavailable(DailyTargetUnavailableReason.MISSING_PROFILE_INPUTS),

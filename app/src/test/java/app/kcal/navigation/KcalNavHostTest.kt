@@ -85,7 +85,7 @@ class KcalNavHostTest {
                             onFormulaVariantSelect = {},
                             onActivityLevelSelect = {},
                             onTargetWeightChange = {},
-                            onLossRateChange = {},
+                            onLossPaceSelect = {},
                             onUnitSystemSelect = {},
                             onAppLanguageSelect = {},
                             onThemeModeSelect = {},

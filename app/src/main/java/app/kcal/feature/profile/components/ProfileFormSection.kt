@@ -18,10 +18,13 @@ import app.kcal.core.designsystem.KcalSpacing
 import app.kcal.core.ui.currentLocale
 import app.kcal.domain.model.ActivityLevel
 import app.kcal.domain.model.EnergyEquationSex
+import app.kcal.domain.model.LossPace
+import app.kcal.domain.model.LossPaceOptions
 import app.kcal.domain.model.UnitSystem
 import app.kcal.domain.usecase.DailyTargetUnavailableReason
 import app.kcal.domain.usecase.DailyTargetWarning
 import app.kcal.domain.usecase.UnitConversions
+import app.kcal.feature.profile.ProfileFieldError
 import app.kcal.feature.profile.ProfileFormErrors
 import app.kcal.feature.profile.ProfileFormFields
 import app.kcal.feature.profile.TargetPreview
@@ -42,9 +45,11 @@ fun ProfileFormSection(
     onAgeChange: (String) -> Unit,
     onFormulaVariantSelect: (EnergyEquationSex) -> Unit,
     onActivityLevelSelect: (ActivityLevel) -> Unit,
-    onTargetWeightChange: (String) -> Unit,
-    onLossRateChange: (String) -> Unit,
+    onTargetWeightChange: (Double) -> Unit,
+    onLossPaceSelect: (LossPace) -> Unit,
     onUnitSystemSelect: (UnitSystem) -> Unit,
+    targetWeightRangeKg: ClosedFloatingPointRange<Double>?,
+    lossPaceOptions: LossPaceOptions?,
     modifier: Modifier = Modifier,
 ) {
     val metric = unitSystem == UnitSystem.METRIC
@@ -131,22 +136,73 @@ fun ProfileFormSection(
             onSelect = onActivityLevelSelect,
         )
 
-        DecimalField(
-            label = stringResource(R.string.field_target_weight),
-            value = fields.targetWeight,
-            unitLabel = weightUnit,
+        TargetWeightSlider(
+            valueKg = fields.targetWeightKg,
+            rangeKg = targetWeightRangeKg,
+            unitSystem = unitSystem,
             error = errors.targetWeight,
             onValueChange = onTargetWeightChange,
         )
 
-        DecimalField(
-            label = stringResource(R.string.field_loss_rate),
-            value = fields.lossRate,
-            unitLabel = stringResource(if (metric) R.string.unit_kg_per_week else R.string.unit_lb_per_week),
+        LossPaceField(
+            selected = fields.lossPace,
+            options = lossPaceOptions,
+            unitSystem = unitSystem,
             error = errors.lossRate,
-            onValueChange = onLossRateChange,
+            onSelect = onLossPaceSelect,
         )
     }
+}
+
+/**
+ * The three paces are derived from the entered profile, so each of them lands inside the
+ * guardrails and visibly changes the calorie target.
+ */
+@Composable
+private fun LossPaceField(
+    selected: LossPace?,
+    options: LossPaceOptions?,
+    unitSystem: UnitSystem,
+    error: ProfileFieldError?,
+    onSelect: (LossPace) -> Unit,
+) {
+    if (options == null) {
+        Column {
+            Text(text = stringResource(R.string.field_loss_pace), style = MaterialTheme.typography.titleSmall)
+            Text(
+                text = stringResource(R.string.loss_pace_unavailable),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        return
+    }
+    val locale = currentLocale()
+    val metric = unitSystem == UnitSystem.METRIC
+    val rateUnit = stringResource(if (metric) R.string.unit_kg_per_week else R.string.unit_lb_per_week)
+    SingleChoiceField(
+        label = stringResource(R.string.field_loss_pace),
+        options = LossPace.entries,
+        selected = selected,
+        optionLabel = { pace ->
+            val kilograms = options.rateFor(pace)
+            val shown = if (metric) kilograms else UnitConversions.kilogramsPerWeekToPoundsPerWeek(kilograms)
+            stringResource(
+                R.string.loss_pace_option,
+                stringResource(pace.labelRes()),
+                DecimalText.format(shown, locale, decimals = 2),
+                rateUnit,
+            )
+        },
+        error = error,
+        onSelect = onSelect,
+    )
+}
+
+internal fun LossPace.labelRes(): Int = when (this) {
+    LossPace.SLOW -> R.string.loss_pace_slow
+    LossPace.MODERATE -> R.string.loss_pace_moderate
+    LossPace.FAST -> R.string.loss_pace_fast
 }
 
 /** The locally calculated estimate, or a localized explanation of why there is none. */
