@@ -650,7 +650,7 @@ Mandatory coverage:
 | ViewModel state sequences | JVM unit + Turbine |
 | Room DAOs and **every** migration | Robolectric + `MigrationTestHelper` |
 | Screens: rendering of all primary states | Robolectric + `createAndroidComposeRule` |
-| White/Black visual regression | Roborazzi (`app/build/outputs/roborazzi/`) |
+| White/Black visual regression | Roborazzi (baselines in `app/screenshots/`) |
 
 Rules:
 - Time and zone are always injected (`Clock`, `ZoneId`). A test that depends on the real
