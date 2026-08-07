@@ -6,11 +6,14 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.room.Room
+import app.kcal.core.common.AppLocaleProvider
 import app.kcal.data.db.DailyTargetSnapshotDao
 import app.kcal.data.db.KcalDatabase
 import app.kcal.data.db.MealEntryDao
 import app.kcal.data.db.WeightEntryDao
+import app.kcal.data.repository.DailyTargetRepositoryImpl
 import app.kcal.data.repository.ProfileRepositoryImpl
+import app.kcal.domain.repository.DailyTargetRepository
 import app.kcal.domain.repository.ProfileRepository
 import dagger.Binds
 import dagger.Module
@@ -18,6 +21,9 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import java.time.Clock
+import java.time.ZoneId
+import java.util.Locale
 import javax.inject.Singleton
 
 @Module
@@ -47,6 +53,15 @@ object DataModule {
         )
 
     private const val PREFERENCES_NAME = "kcal_preferences"
+
+    @Provides
+    fun provideClock(): Clock = Clock.systemUTC()
+
+    @Provides
+    fun provideZoneId(): ZoneId = ZoneId.systemDefault()
+
+    @Provides
+    fun provideAppLocaleProvider(): AppLocaleProvider = AppLocaleProvider { Locale.getDefault() }
 }
 
 @Module
@@ -55,4 +70,7 @@ interface RepositoryModule {
 
     @Binds
     fun bindProfileRepository(impl: ProfileRepositoryImpl): ProfileRepository
+
+    @Binds
+    fun bindDailyTargetRepository(impl: DailyTargetRepositoryImpl): DailyTargetRepository
 }

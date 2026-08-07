@@ -27,6 +27,9 @@ interface DailyTargetSnapshotDao {
 
     @Query("SELECT * FROM daily_target_snapshots WHERE local_date_epoch_day = :epochDay")
     suspend fun findByDate(epochDay: Int): DailyTargetSnapshotEntity?
+
+    @Query("SELECT * FROM daily_target_snapshots WHERE local_date_epoch_day = :epochDay")
+    fun observeByDate(epochDay: Int): Flow<DailyTargetSnapshotEntity?>
 }
 
 @Dao

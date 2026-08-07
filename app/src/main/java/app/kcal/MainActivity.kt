@@ -4,13 +4,16 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.kcal.core.designsystem.KcalTheme
 import app.kcal.core.designsystem.applyKcalSystemBars
 import app.kcal.core.designsystem.shouldUseBlackPalette
+import app.kcal.domain.model.AppLanguage
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -28,9 +31,26 @@ class MainActivity : AppCompatActivity() {
             // bar icons follow the selected theme rather than the system one.
             LaunchedEffect(useBlackPalette) { applyKcalSystemBars(useBlackPalette) }
 
+            LaunchedEffect(uiState.appLanguage) { applyAppLanguage(uiState.appLanguage) }
+
             KcalTheme(themeMode = uiState.themeMode) {
                 KcalApp(uiState = uiState)
             }
+        }
+    }
+
+    /**
+     * Applies the selected interface language through the AppCompat app-locale API. The call
+     * is skipped when the locales already match, because applying them recreates the
+     * activity.
+     */
+    private fun applyAppLanguage(appLanguage: AppLanguage) {
+        val requested =
+            appLanguage.languageTag
+                ?.let { LocaleListCompat.forLanguageTags(it) }
+                ?: LocaleListCompat.getEmptyLocaleList()
+        if (AppCompatDelegate.getApplicationLocales() != requested) {
+            AppCompatDelegate.setApplicationLocales(requested)
         }
     }
 }

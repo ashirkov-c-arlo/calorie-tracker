@@ -1,11 +1,13 @@
 package app.kcal
 
+import app.kcal.domain.model.AppLanguage
+import app.kcal.domain.model.StoredProfile
 import app.kcal.domain.model.ThemeMode
-import app.kcal.domain.repository.ProfileRepository
+import app.kcal.domain.model.UserPreferences
+import app.kcal.testing.FakeProfileRepository
+import app.kcal.testing.completeProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -32,33 +34,62 @@ class MainViewModelTest {
     }
 
     @Test
-    fun `starts loading and then reports the gate result and theme`() = runTest {
-        val repository = FakeProfileRepository(isComplete = false, themeMode = ThemeMode.SYSTEM)
+    fun `starts loading and then reports the gate result, theme and language`() = runTest {
+        val repository = FakeProfileRepository()
         val viewModel = MainViewModel(repository)
         val states = mutableListOf<MainUiState>()
         val collection = launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.toList(states) }
 
         runCurrent()
-        repository.isComplete.value = true
-        repository.theme.value = ThemeMode.BLACK
+        repository.state.value =
+            UserPreferences(
+                profile = completeProfile(),
+                themeMode = ThemeMode.BLACK,
+                appLanguage = AppLanguage.RUSSIAN,
+            )
         runCurrent()
         collection.cancel()
 
+        assertEquals(MainUiState(), states.first())
         assertEquals(
-            MainUiState(isLoading = true, isProfileComplete = false, themeMode = ThemeMode.SYSTEM),
-            states.first(),
-        )
-        assertEquals(
-            MainUiState(isLoading = false, isProfileComplete = true, themeMode = ThemeMode.BLACK),
+            MainUiState(
+                isLoading = false,
+                isProfileComplete = true,
+                themeMode = ThemeMode.BLACK,
+                appLanguage = AppLanguage.RUSSIAN,
+            ),
             states.last(),
         )
     }
 
-    private class FakeProfileRepository(isComplete: Boolean, themeMode: ThemeMode) : ProfileRepository {
-        val isComplete = MutableStateFlow(isComplete)
-        val theme = MutableStateFlow(themeMode)
+    @Test
+    fun `an incomplete profile keeps the gate closed`() = runTest {
+        val repository =
+            FakeProfileRepository(
+                UserPreferences(profile = completeProfile().copy(activityLevel = null)),
+            )
+        val viewModel = MainViewModel(repository)
+        val states = mutableListOf<MainUiState>()
+        val collection = launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.toList(states) }
 
-        override val isProfileComplete: Flow<Boolean> = this.isComplete
-        override val themeMode: Flow<ThemeMode> = theme
+        runCurrent()
+        collection.cancel()
+
+        assertEquals(false, states.last().isProfileComplete)
+        assertEquals(false, states.last().isLoading)
+    }
+
+    @Test
+    fun `a missing current weight keeps the gate closed`() = runTest {
+        val repository =
+            FakeProfileRepository(UserPreferences(profile = StoredProfile(heightCm = 176.0)))
+        val viewModel = MainViewModel(repository)
+        val states = mutableListOf<MainUiState>()
+        val collection = launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.toList(states) }
+
+        runCurrent()
+        collection.cancel()
+
+        assertEquals(false, states.last().isProfileComplete)
     }
 }

@@ -28,7 +28,7 @@ import app.kcal.R
 import app.kcal.core.designsystem.KcalTheme
 import app.kcal.domain.model.ThemeMode
 import app.kcal.feature.history.HistoryScreen
-import app.kcal.feature.settings.SettingsScreen
+import app.kcal.feature.settings.SettingsRoute
 import app.kcal.feature.today.TodayScreen
 import app.kcal.feature.trends.TrendsScreen
 import kotlin.reflect.KClass
@@ -43,13 +43,19 @@ enum class TopLevelDestination(
     @param:StringRes val labelRes: Int,
     val icon: ImageVector,
 ) {
-    TODAY(TodayRoute, TodayRoute::class, R.string.nav_today, Icons.Filled.Home),
-    TRENDS(TrendsRoute, TrendsRoute::class, R.string.nav_trends, Icons.Filled.DateRange),
-    HISTORY(HistoryRoute, HistoryRoute::class, R.string.nav_history, Icons.AutoMirrored.Filled.List),
+    TODAY(TodayDestination, TodayDestination::class, R.string.nav_today, Icons.Filled.Home),
+    TRENDS(TrendsDestination, TrendsDestination::class, R.string.nav_trends, Icons.Filled.DateRange),
+    HISTORY(HistoryDestination, HistoryDestination::class, R.string.nav_history, Icons.AutoMirrored.Filled.List),
 }
 
 @Composable
-fun KcalNavHost(modifier: Modifier = Modifier, navController: NavHostController = rememberNavController()) {
+fun KcalNavHost(
+    modifier: Modifier = Modifier,
+    navController: NavHostController = rememberNavController(),
+    settingsContent: @Composable (onBackClick: () -> Unit) -> Unit = { onBackClick ->
+        SettingsRoute(onBackClick = onBackClick)
+    },
+) {
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = currentBackStackEntry?.destination
 
@@ -61,7 +67,7 @@ fun KcalNavHost(modifier: Modifier = Modifier, navController: NavHostController 
                     currentDestination = currentDestination,
                     onSelect = { destination ->
                         navController.navigate(destination.route) {
-                            popUpTo(TodayRoute) { saveState = true }
+                            popUpTo(TodayDestination) { saveState = true }
                             launchSingleTop = true
                             restoreState = true
                         }
@@ -72,16 +78,16 @@ fun KcalNavHost(modifier: Modifier = Modifier, navController: NavHostController 
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = TodayRoute,
+            startDestination = TodayDestination,
             modifier = Modifier.padding(innerPadding),
         ) {
-            composable<TodayRoute> {
-                TodayScreen(onSettingsClick = { navController.navigate(SettingsRoute) })
+            composable<TodayDestination> {
+                TodayScreen(onSettingsClick = { navController.navigate(SettingsDestination) })
             }
-            composable<TrendsRoute> { TrendsScreen() }
-            composable<HistoryRoute> { HistoryScreen() }
-            composable<SettingsRoute> {
-                SettingsScreen(onBackClick = { navController.popBackStack() })
+            composable<TrendsDestination> { TrendsScreen() }
+            composable<HistoryDestination> { HistoryScreen() }
+            composable<SettingsDestination> {
+                settingsContent { navController.popBackStack() }
             }
         }
     }

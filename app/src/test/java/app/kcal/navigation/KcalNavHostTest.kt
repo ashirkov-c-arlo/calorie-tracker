@@ -13,6 +13,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.kcal.R
 import app.kcal.core.designsystem.KcalTheme
 import app.kcal.domain.model.ThemeMode
+import app.kcal.feature.profile.filledProfileFormUiState
+import app.kcal.feature.settings.SettingsScreen
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -57,7 +59,7 @@ class KcalNavHostTest {
         composeRule.onNodeWithContentDescription(string(R.string.settings_open_content_description))
             .performClick()
 
-        composeRule.onNodeWithText(string(R.string.placeholder_settings)).assertIsDisplayed()
+        composeRule.onNodeWithText(string(R.string.settings_section_profile)).assertIsDisplayed()
         composeRule.onAllNodesWithText(string(R.string.nav_trends)).assertCountEquals(0)
 
         composeRule.onNodeWithContentDescription(string(R.string.navigate_back_content_description))
@@ -66,9 +68,32 @@ class KcalNavHostTest {
         composeRule.onNodeWithText(string(R.string.placeholder_today)).assertIsDisplayed()
     }
 
+    /** The settings route resolves a Hilt view model, so the test injects the stateless screen. */
     private fun showNavHost() {
         composeRule.setContent {
-            KcalTheme(themeMode = ThemeMode.WHITE) { KcalNavHost() }
+            KcalTheme(themeMode = ThemeMode.WHITE) {
+                KcalNavHost(
+                    settingsContent = { onBackClick ->
+                        SettingsScreen(
+                            uiState = filledProfileFormUiState,
+                            onBackClick = onBackClick,
+                            onCurrentWeightChange = {},
+                            onHeightChange = {},
+                            onHeightFeetChange = {},
+                            onHeightInchesChange = {},
+                            onAgeChange = {},
+                            onFormulaVariantSelect = {},
+                            onActivityLevelSelect = {},
+                            onTargetWeightChange = {},
+                            onLossRateChange = {},
+                            onUnitSystemSelect = {},
+                            onAppLanguageSelect = {},
+                            onThemeModeSelect = {},
+                            onSave = {},
+                        )
+                    },
+                )
+            }
         }
     }
 
