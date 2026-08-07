@@ -36,12 +36,6 @@ android {
         buildConfigField("String", "LLM_API_KEY", "\"${localProperty("LLM_API_KEY")}\"")
     }
 
-    buildTypes {
-        release {
-            isMinifyEnabled = false
-        }
-    }
-
     buildFeatures {
         compose = true
         buildConfig = true
@@ -66,13 +60,9 @@ kotlin {
     }
 }
 
-// Production code compiles with the pinned JVM 17 toolchain. Robolectric's Android 36
-// runtime refuses to start on anything below Java 21, so only the JVM test runtime is
-// raised. Android Studio's bundled JBR already satisfies it.
-tasks.withType<Test>().configureEach {
-    javaLauncher = javaToolchains.launcherFor {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
+// Screenshot baselines are committed, so `verifyRoborazziDebug` also protects a clean checkout.
+roborazzi {
+    outputDir = layout.projectDirectory.dir("screenshots")
 }
 
 ksp {

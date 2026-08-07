@@ -18,16 +18,9 @@ output.json
 
 # IDE
 *.iml
-.idea/caches/
-.idea/libraries/
-.idea/modules.xml
-.idea/workspace.xml
-.idea/navEditor.xml
-.idea/assetWizardSettings.xml
-.idea/deploymentTargetSelector.xml
-.idea/deploymentTargetDropDown.xml
-.idea/appInsightsSettings.xml
-.idea/androidTestResultsUserPreferences.xml
+.idea/
+.android/
+.m2/
 
 # Compiled class file
 *.class

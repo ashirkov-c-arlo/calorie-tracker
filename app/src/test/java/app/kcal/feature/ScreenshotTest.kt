@@ -12,6 +12,7 @@ import app.kcal.feature.profile.ProfileSetupScreen
 import app.kcal.feature.settings.SettingsScreen
 import app.kcal.feature.today.TodayScreen
 import app.kcal.feature.trends.TrendsScreen
+import app.kcal.navigation.KcalNavHost
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
 import org.junit.Test
@@ -67,6 +68,12 @@ class ScreenshotTest {
 
     @Test
     fun appLoadingWhite() = capture(ThemeMode.WHITE) { KcalApp(uiState = MainUiState()) }
+
+    @Test
+    fun navHostWhite() = capture(ThemeMode.WHITE) { KcalNavHost() }
+
+    @Test
+    fun navHostBlack() = capture(ThemeMode.BLACK) { KcalNavHost() }
 
     private fun capture(themeMode: ThemeMode, content: @Composable () -> Unit) {
         composeRule.setContent {
