@@ -75,6 +75,14 @@ class ScreenshotTest {
     fun appLoadingBlack() = capture(ThemeMode.BLACK) { KcalApp(uiState = MainUiState()) }
 
     @Test
+    fun appStartupErrorWhite() =
+        capture(ThemeMode.WHITE) { KcalApp(uiState = MainUiState(isLoading = false, startupFailed = true)) }
+
+    @Test
+    fun appStartupErrorBlack() =
+        capture(ThemeMode.BLACK) { KcalApp(uiState = MainUiState(isLoading = false, startupFailed = true)) }
+
+    @Test
     @Config(qualifiers = "+h2000dp")
     fun profileSetupEmptyWhite() = capture(ThemeMode.WHITE) { ProfileSetupFixture(emptyProfileFormUiState) }
 

@@ -27,16 +27,19 @@ object DomainModule {
     fun provideApplyTodayTarget(
         dailyTargetRepository: DailyTargetRepository,
         calculateDailyTargets: CalculateDailyTargets,
-        timeProvider: TimeProvider,
-    ): ApplyTodayTarget = ApplyTodayTarget(dailyTargetRepository, calculateDailyTargets, timeProvider)
+    ): ApplyTodayTarget = ApplyTodayTarget(dailyTargetRepository, calculateDailyTargets)
 
     @Provides
-    fun provideSaveProfile(profileRepository: ProfileRepository, applyTodayTarget: ApplyTodayTarget): SaveProfile =
-        SaveProfile(profileRepository, applyTodayTarget)
+    fun provideSaveProfile(
+        profileRepository: ProfileRepository,
+        applyTodayTarget: ApplyTodayTarget,
+        timeProvider: TimeProvider,
+    ): SaveProfile = SaveProfile(profileRepository, applyTodayTarget, timeProvider)
 
     @Provides
     fun provideReconcileTodayTarget(
         profileRepository: ProfileRepository,
         applyTodayTarget: ApplyTodayTarget,
-    ): ReconcileTodayTarget = ReconcileTodayTarget(profileRepository, applyTodayTarget)
+        timeProvider: TimeProvider,
+    ): ReconcileTodayTarget = ReconcileTodayTarget(profileRepository, applyTodayTarget, timeProvider)
 }

@@ -53,10 +53,13 @@
 
     <string name="error_required">Required</string>
     <string name="error_invalid_number">Enter a number</string>
-    <string name="error_save_failed">Saving the target failed. Your profile is stored and the target is recalculated on the next start.</string>
+    <string name="error_save_failed">Could not save the changes. Try again.</string>
     <string name="error_out_of_range">Value out of range</string>
 
     <string name="action_save">Save</string>
+    <string name="action_retry">Try again</string>
+
+    <string name="startup_failed">Local storage is unavailable, so the daily target could not be prepared.</string>
 
     <string name="target_title">Estimated daily target</string>
     <string name="target_kcal">%1$s kcal</string>
@@ -66,7 +69,7 @@
 
     <string name="warning_rate_limited">The pace is limited to at most 1 kg per week and 1 percent of your body weight.</string>
     <string name="warning_deficit_capped">The deficit is capped at 20 percent of your daily energy use and at 750 kcal.</string>
-    <string name="warning_intake_floor">The target is kept at the minimum intake for the selected formula variant.</string>
+    <string name="warning_intake_floor">The minimum intake for the selected formula variant limited the deficit.</string>
     <string name="warning_target_reached">Your current weight already reached the target, so the goal is maintenance.</string>
 
     <string name="unavailable_missing_inputs">Fill in every field to see an estimate.</string>

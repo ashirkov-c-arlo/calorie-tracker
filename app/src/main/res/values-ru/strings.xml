@@ -51,10 +51,13 @@
 
     <string name="error_required">Обязательное поле</string>
     <string name="error_invalid_number">Введите число</string>
-    <string name="error_save_failed">Не удалось сохранить цель. Профиль сохранен, цель будет пересчитана при следующем запуске.</string>
+    <string name="error_save_failed">Не удалось сохранить изменения. Попробуйте снова.</string>
     <string name="error_out_of_range">Значение вне допустимого диапазона</string>
 
     <string name="action_save">Сохранить</string>
+    <string name="action_retry">Повторить</string>
+
+    <string name="startup_failed">Локальное хранилище недоступно, поэтому дневную цель не удалось подготовить.</string>
 
     <string name="target_title">Расчетная цель на день</string>
     <string name="target_kcal">%1$s ккал</string>
@@ -64,7 +67,7 @@
 
     <string name="warning_rate_limited">Темп ограничен до 1 кг в неделю и 1 процента массы тела.</string>
     <string name="warning_deficit_capped">Дефицит ограничен 20 процентами суточного расхода энергии и 750 ккал.</string>
-    <string name="warning_intake_floor">Цель удерживается на минимальном потреблении для выбранного варианта формулы.</string>
+    <string name="warning_intake_floor">Минимальное потребление для выбранного варианта формулы ограничило дефицит.</string>
     <string name="warning_target_reached">Текущий вес уже достиг целевого, поэтому цель — поддержание веса.</string>
 
     <string name="unavailable_missing_inputs">Заполните все поля, чтобы увидеть оценку.</string>

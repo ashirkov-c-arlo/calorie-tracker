@@ -26,10 +26,10 @@ class SaveProfileTest {
             clock = Clock.fixed(Instant.parse("2026-03-15T23:30:00Z"), ZoneId.of("UTC")),
             zoneId = ZoneId.of("Europe/Berlin"),
         )
-    private val applyTodayTarget =
-        ApplyTodayTarget(dailyTargetRepository, CalculateDailyTargets(), timeProvider)
-    private val saveProfile = SaveProfile(profileRepository, applyTodayTarget)
-    private val reconcileTodayTarget = ReconcileTodayTarget(profileRepository, applyTodayTarget)
+    private val applyTodayTarget = ApplyTodayTarget(dailyTargetRepository, CalculateDailyTargets())
+    private val saveProfile = SaveProfile(profileRepository, applyTodayTarget, timeProvider)
+    private val reconcileTodayTarget =
+        ReconcileTodayTarget(profileRepository, applyTodayTarget, timeProvider)
 
     private val today = LocalDate.of(2026, 3, 16)
     private val yesterday = LocalDate.of(2026, 3, 15)
@@ -112,24 +112,84 @@ class SaveProfileTest {
     }
 
     @Test
-    fun `reconciliation leaves an existing snapshot untouched`() = runTest {
+    fun `reconciliation rewrites a snapshot left over from an older profile`() = runTest {
+        saveProfile(completeProfile())
+        val staleTarget = dailyTargetRepository.find(today)
+
+        // The profile is updated, but the target write fails afterwards.
+        dailyTargetRepository.failNextWrites(true)
+        assertFailsWith<IOException> { saveProfile(completeProfile(currentWeightKg = 70.0, targetWeightKg = 65.0)) }
+        assertEquals(staleTarget, dailyTargetRepository.find(today))
+
+        dailyTargetRepository.failNextWrites(false)
+        reconcileTodayTarget()
+
+        val repaired = assertNotNull(dailyTargetRepository.find(today))
+        assertTrue(repaired.targets.kcal != staleTarget!!.targets.kcal)
+    }
+
+    @Test
+    fun `reconciliation is stable for an unchanged profile`() = runTest {
         saveProfile(completeProfile())
         val stored = dailyTargetRepository.find(today)
-        val writes = dailyTargetRepository.upsertCount
 
         reconcileTodayTarget()
 
         assertEquals(stored, dailyTargetRepository.find(today))
-        assertEquals(writes, dailyTargetRepository.upsertCount)
     }
 
     @Test
-    fun `reconciliation does nothing while the profile is incomplete`() = runTest {
-        profileRepository.saveProfile(completeProfile(activityLevel = null))
+    fun `reconciliation removes a snapshot that the stored profile no longer justifies`() = runTest {
+        saveProfile(completeProfile())
+        assertNotNull(dailyTargetRepository.find(today))
+
+        dailyTargetRepository.failNextWrites(true)
+        assertFailsWith<IOException> { saveProfile(completeProfile(ageYears = 15)) }
+        assertNotNull(dailyTargetRepository.find(today))
+
+        dailyTargetRepository.failNextWrites(false)
+        reconcileTodayTarget()
+
+        assertNull(dailyTargetRepository.find(today))
+    }
+
+    @Test
+    fun `reconciliation stores nothing while the profile is incomplete`() = runTest {
+        profileRepository.saveProfile(completeProfile(activityLevel = null), today)
 
         reconcileTodayTarget()
 
         assertNull(dailyTargetRepository.find(today))
         assertEquals(0, dailyTargetRepository.upsertCount)
+    }
+
+    @Test
+    fun `values that break the persisted invariants are never written`() = runTest {
+        listOf(
+            completeProfile(currentWeightKg = Double.NaN),
+            completeProfile(heightCm = Double.POSITIVE_INFINITY),
+            completeProfile(targetWeightKg = -1.0),
+            completeProfile(requestedLossRateKgPerWeek = -0.5),
+            completeProfile(ageYears = 0),
+        ).forEach { invalid ->
+            val result = saveProfile(invalid)
+
+            assertEquals(
+                DailyTargetResult.Unavailable(DailyTargetUnavailableReason.INVALID_MEASUREMENTS),
+                result,
+                "expected a rejected save for $invalid",
+            )
+        }
+
+        assertTrue(profileRepository.savedProfiles.isEmpty())
+        assertEquals(0, dailyTargetRepository.upsertCount)
+    }
+
+    @Test
+    fun `the weight entry and the snapshot share one local date`() = runTest {
+        saveProfile(completeProfile())
+
+        assertEquals(listOf(today), profileRepository.savedDates)
+        assertEquals(today, dailyTargetRepository.snapshots.value.keys.single())
     }
 }

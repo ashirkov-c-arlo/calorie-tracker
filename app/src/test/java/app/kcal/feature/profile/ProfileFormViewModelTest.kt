@@ -324,7 +324,8 @@ class ProfileFormViewModelTest {
             saveProfile =
             SaveProfile(
                 profileRepository,
-                ApplyTodayTarget(dailyTargetRepository, calculate, timeProvider),
+                ApplyTodayTarget(dailyTargetRepository, calculate),
+                timeProvider,
             ),
             calculateDailyTargets = calculate,
             localeProvider = AppLocaleProvider { locale },

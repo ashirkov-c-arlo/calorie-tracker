@@ -69,13 +69,11 @@ class SaveProfileIntegrationTest {
             ProfileRepositoryImpl(
                 preferencesDataSource = ProfilePreferencesDataSource(dataStore),
                 weightEntryDao = database.weightEntryDao(),
-                timeProvider = timeProvider,
             )
         dailyTargetRepository = DailyTargetRepositoryImpl(database.dailyTargetSnapshotDao())
-        val applyTodayTarget =
-            ApplyTodayTarget(dailyTargetRepository, CalculateDailyTargets(), timeProvider)
-        saveProfile = SaveProfile(profileRepository, applyTodayTarget)
-        reconcileTodayTarget = ReconcileTodayTarget(profileRepository, applyTodayTarget)
+        val applyTodayTarget = ApplyTodayTarget(dailyTargetRepository, CalculateDailyTargets())
+        saveProfile = SaveProfile(profileRepository, applyTodayTarget, timeProvider)
+        reconcileTodayTarget = ReconcileTodayTarget(profileRepository, applyTodayTarget, timeProvider)
     }
 
     @After

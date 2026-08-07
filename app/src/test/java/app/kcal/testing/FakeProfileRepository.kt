@@ -9,12 +9,14 @@ import app.kcal.domain.repository.ProfileRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
+import java.time.LocalDate
 
 /** Hand-written fake so tests never touch DataStore or Room. */
 class FakeProfileRepository(initial: UserPreferences = UserPreferences()) : ProfileRepository {
 
     val state = MutableStateFlow(initial)
-    var savedProfiles = mutableListOf<StoredProfile>()
+    val savedProfiles = mutableListOf<StoredProfile>()
+    val savedDates = mutableListOf<LocalDate>()
 
     override val preferences: Flow<UserPreferences> = state
 
@@ -22,8 +24,9 @@ class FakeProfileRepository(initial: UserPreferences = UserPreferences()) : Prof
 
     override val themeMode: Flow<ThemeMode> = state.map { it.themeMode }
 
-    override suspend fun saveProfile(profile: StoredProfile) {
+    override suspend fun saveProfile(profile: StoredProfile, localDate: LocalDate) {
         savedProfiles += profile
+        savedDates += localDate
         state.value = state.value.copy(profile = profile)
     }
 

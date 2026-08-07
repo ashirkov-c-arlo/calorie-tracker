@@ -1,37 +1,33 @@
 package app.kcal.domain.usecase
 
-import app.kcal.core.common.TimeProvider
 import app.kcal.domain.model.DailyTargetSnapshot
 import app.kcal.domain.model.StoredProfile
 import app.kcal.domain.repository.DailyTargetRepository
+import java.time.LocalDate
 
 /**
- * Makes today's stored target consistent with [profile]: it writes the recalculated
- * snapshot, and removes a now-stale one when the profile no longer yields a target. Past
- * snapshots are never touched.
+ * Makes the target stored for [localDate] consistent with [profile]: it writes the
+ * recalculated snapshot, and removes a now-stale one when the profile yields no target.
+ * The caller passes the date, so one logical operation cannot straddle midnight.
  */
 class ApplyTodayTarget(
     private val dailyTargetRepository: DailyTargetRepository,
     private val calculateDailyTargets: CalculateDailyTargets,
-    private val timeProvider: TimeProvider,
 ) {
-    suspend operator fun invoke(profile: StoredProfile): DailyTargetResult {
+    suspend operator fun invoke(profile: StoredProfile, localDate: LocalDate): DailyTargetResult {
         val result = calculateDailyTargets.forStoredProfile(profile)
-        val today = timeProvider.today()
         when (result) {
             is DailyTargetResult.Available ->
                 dailyTargetRepository.upsert(
                     DailyTargetSnapshot(
-                        localDate = today,
+                        localDate = localDate,
                         targets = result.targets,
                         effectiveLossRateKgPerWeek = result.effectiveLossRateKgPerWeek,
                     ),
                 )
 
-            is DailyTargetResult.Unavailable -> dailyTargetRepository.delete(today)
+            is DailyTargetResult.Unavailable -> dailyTargetRepository.delete(localDate)
         }
         return result
     }
-
-    suspend fun todaySnapshotExists(): Boolean = dailyTargetRepository.find(timeProvider.today()) != null
 }

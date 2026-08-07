@@ -6,6 +6,7 @@ import app.kcal.domain.model.ThemeMode
 import app.kcal.domain.model.UnitSystem
 import app.kcal.domain.model.UserPreferences
 import kotlinx.coroutines.flow.Flow
+import java.time.LocalDate
 
 /**
  * Profile and interface preferences. Current weight is the latest weight entry, never a
@@ -19,8 +20,11 @@ interface ProfileRepository {
 
     val themeMode: Flow<ThemeMode>
 
-    /** Stores the calculator inputs and upserts the current weight for [today]. */
-    suspend fun saveProfile(profile: StoredProfile)
+    /**
+     * Stores the calculator inputs and upserts the current weight for [localDate]. The date
+     * is passed in so one logical save cannot straddle midnight.
+     */
+    suspend fun saveProfile(profile: StoredProfile, localDate: LocalDate)
 
     suspend fun setUnitSystem(unitSystem: UnitSystem)
 
