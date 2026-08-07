@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
@@ -24,6 +25,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import app.kcal.R
+import app.kcal.core.designsystem.KcalTheme
+import app.kcal.domain.model.ThemeMode
 import app.kcal.feature.history.HistoryScreen
 import app.kcal.feature.settings.SettingsScreen
 import app.kcal.feature.today.TodayScreen
@@ -101,3 +104,19 @@ private fun KcalBottomBar(currentDestination: NavDestination?, onSelect: (TopLev
 
 private fun NavDestination?.isTopLevel(): Boolean =
     this != null && TopLevelDestination.entries.any { hasRoute(it.routeClass) }
+
+@Preview(name = "Navigation White")
+@Composable
+private fun KcalNavHostWhitePreview() {
+    KcalTheme(themeMode = ThemeMode.WHITE) {
+        KcalNavHost()
+    }
+}
+
+@Preview(name = "Navigation Black")
+@Composable
+private fun KcalNavHostBlackPreview() {
+    KcalTheme(themeMode = ThemeMode.BLACK) {
+        KcalNavHost()
+    }
+}

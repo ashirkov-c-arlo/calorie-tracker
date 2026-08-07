@@ -70,6 +70,9 @@ class ScreenshotTest {
     fun appLoadingWhite() = capture(ThemeMode.WHITE) { KcalApp(uiState = MainUiState()) }
 
     @Test
+    fun appLoadingBlack() = capture(ThemeMode.BLACK) { KcalApp(uiState = MainUiState()) }
+
+    @Test
     fun navHostWhite() = capture(ThemeMode.WHITE) { KcalNavHost() }
 
     @Test
