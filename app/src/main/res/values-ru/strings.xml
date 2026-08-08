@@ -33,7 +33,7 @@
     <string name="loss_pace_moderate">Средний</string>
     <string name="loss_pace_fast">Быстрый</string>
     <string name="loss_pace_option">%1$s · %2$s %3$s</string>
-    <string name="loss_pace_unavailable">Заполните поля выше, чтобы увидеть доступные темпы. Их нет, пока текущий вес уже не выше целевого.</string>
+    <string name="loss_pace_unavailable">Укажите текущий вес, чтобы увидеть доступные темпы.</string>
     <string name="target_weight_unset">Не выбрано</string>
     <string name="target_weight_needs_height">Укажите рост, чтобы выбрать целевой вес.</string>
     <string name="target_weight_range_hint">Индекс массы тела %1$s–%2$s при вашем росте — это %3$s–%4$s %5$s.</string>

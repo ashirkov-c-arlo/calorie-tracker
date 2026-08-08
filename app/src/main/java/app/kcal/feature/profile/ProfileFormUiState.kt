@@ -59,6 +59,9 @@ data class ProfileFormFields(
     val activityLevel: ActivityLevel? = null,
     /** Canonical kilograms picked with the slider; null until the user chooses a value. */
     val targetWeightKg: Double? = null,
+    /** The stored or selected intent, in kilograms per week; never rewritten to fit a pace. */
+    val requestedLossRateKgPerWeek: Double? = null,
+    /** Which offered pace produces exactly the requested rate, if any. */
     val lossPace: LossPace? = null,
 )
 
@@ -91,6 +94,8 @@ data class ProfileFormUiState(
     val appLanguage: AppLanguage = AppLanguage.SYSTEM,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val target: TargetPreview = TargetPreview.Unavailable(DailyTargetUnavailableReason.MISSING_PROFILE_INPUTS),
+    /** A save is in flight; further taps are ignored so two saves cannot interleave. */
+    val isSaving: Boolean = false,
     /** The profile was stored, but keeping the target in sync failed. */
     val saveFailed: Boolean = false,
 )

@@ -35,7 +35,7 @@
     <string name="loss_pace_moderate">Moderate</string>
     <string name="loss_pace_fast">Fast</string>
     <string name="loss_pace_option">%1$s · %2$s %3$s</string>
-    <string name="loss_pace_unavailable">Fill in the fields above to see the available paces. There is none while the current weight is already at or below the target.</string>
+    <string name="loss_pace_unavailable">Enter your current weight to see the available paces.</string>
     <string name="target_weight_unset">Not selected</string>
     <string name="target_weight_needs_height">Enter your height to choose a target weight.</string>
     <string name="target_weight_range_hint">Body mass index %1$s–%2$s at your height means %3$s–%4$s %5$s.</string>

@@ -50,6 +50,12 @@ class SaveProfileIntegrationTest {
     private lateinit var profileRepository: ProfileRepositoryImpl
     private lateinit var dailyTargetRepository: DailyTargetRepositoryImpl
     private lateinit var saveProfile: SaveProfile
+
+    /** The app shell owns the snapshot write; the tests drive it explicitly. */
+    private suspend fun saveAndSync(profile: app.kcal.domain.model.StoredProfile) {
+        saveProfile(profile)
+        applyTodayTarget(profileRepository.preferences.first().profile, today)
+    }
     private lateinit var applyTodayTarget: ApplyTodayTarget
     private lateinit var preferencesDataSource: ProfilePreferencesDataSource
 
@@ -73,8 +79,9 @@ class SaveProfileIntegrationTest {
                 weightEntryDao = database.weightEntryDao(),
             )
         dailyTargetRepository = DailyTargetRepositoryImpl(database.dailyTargetSnapshotDao())
-        applyTodayTarget = ApplyTodayTarget(dailyTargetRepository, CalculateDailyTargets())
-        saveProfile = SaveProfile(profileRepository, applyTodayTarget, timeProvider)
+        val calculate = CalculateDailyTargets()
+        applyTodayTarget = ApplyTodayTarget(dailyTargetRepository, calculate)
+        saveProfile = SaveProfile(profileRepository, calculate, timeProvider)
     }
 
     @After
@@ -85,6 +92,7 @@ class SaveProfileIntegrationTest {
     @Test
     fun `saving writes preferences, the weight entry and today's snapshot`() = runTest {
         val result = saveProfile(completeProfile())
+        applyTodayTarget(profileRepository.preferences.first().profile, today)
 
         assertTrue(result is DailyTargetResult.Available)
         val preferences = profileRepository.preferences.first()
@@ -101,21 +109,21 @@ class SaveProfileIntegrationTest {
     fun `the gate opens only after the profile is complete`() = runTest {
         assertFalse(profileRepository.isProfileComplete.first())
 
-        saveProfile(completeProfile(activityLevel = null))
+        saveAndSync(completeProfile(activityLevel = null))
         assertFalse(profileRepository.isProfileComplete.first())
         assertNull(dailyTargetRepository.find(today))
 
-        saveProfile(completeProfile())
+        saveAndSync(completeProfile())
         assertTrue(profileRepository.isProfileComplete.first())
         assertNotNull(dailyTargetRepository.find(today))
     }
 
     @Test
     fun `saving an out of scope age removes the stored target but keeps the profile`() = runTest {
-        saveProfile(completeProfile())
+        saveAndSync(completeProfile())
         assertNotNull(dailyTargetRepository.find(today))
 
-        saveProfile(completeProfile(ageYears = 15))
+        saveAndSync(completeProfile(ageYears = 15))
 
         assertNull(dailyTargetRepository.find(today))
         assertEquals(15, profileRepository.preferences.first().profile.ageYears)
@@ -123,7 +131,7 @@ class SaveProfileIntegrationTest {
 
     @Test
     fun `startup recreates a snapshot that a partial save left missing`() = runTest {
-        saveProfile(completeProfile())
+        saveAndSync(completeProfile())
         val expected = assertNotNull(dailyTargetRepository.find(today))
         // Simulates process death between the weight write and the snapshot write.
         dailyTargetRepository.delete(today)
@@ -135,7 +143,7 @@ class SaveProfileIntegrationTest {
 
     @Test
     fun `an interruption after the weight write leaves a consistent older profile`() = runTest {
-        saveProfile(completeProfile())
+        saveAndSync(completeProfile())
 
         // Simulates process death between the two writes of a later edit: the weight entry
         // landed, the atomic preferences edit did not.
@@ -157,7 +165,7 @@ class SaveProfileIntegrationTest {
 
     @Test
     fun `preferences never store a copy of the current weight`() = runTest {
-        saveProfile(completeProfile())
+        saveAndSync(completeProfile())
 
         // Only the weight entry table knows the current weight.
         assertNull(preferencesDataSource.preferences.first().profile.currentWeightKg)
@@ -166,11 +174,11 @@ class SaveProfileIntegrationTest {
 
     @Test
     fun `changing the profile later never rewrites a past snapshot`() = runTest {
-        saveProfile(completeProfile())
+        saveAndSync(completeProfile())
         val past = assertNotNull(dailyTargetRepository.find(today)).copy(localDate = today.minusDays(3))
         dailyTargetRepository.upsert(past)
 
-        saveProfile(completeProfile(currentWeightKg = 75.0, targetWeightKg = 70.0))
+        saveAndSync(completeProfile(currentWeightKg = 75.0, targetWeightKg = 70.0))
 
         assertEquals(past, dailyTargetRepository.find(today.minusDays(3)))
         assertTrue(assertNotNull(dailyTargetRepository.find(today)).targets.kcal != past.targets.kcal)

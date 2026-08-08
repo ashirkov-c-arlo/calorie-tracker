@@ -19,6 +19,8 @@ class FakeProfileRepository(
     initial: UserPreferences = UserPreferences(),
     /** Simulates storage that cannot be read; flipping it back lets a retry succeed. */
     var readFails: Boolean = false,
+    /** Simulates a failing profile write. */
+    var writeFails: Boolean = false,
 ) : ProfileRepository {
 
     val state = MutableStateFlow(initial)
@@ -36,6 +38,7 @@ class FakeProfileRepository(
     override val themeMode: Flow<ThemeMode> = state.map { it.themeMode }
 
     override suspend fun saveProfile(profile: StoredProfile, localDate: LocalDate) {
+        if (writeFails) throw IOException("profile storage unavailable")
         savedProfiles += profile
         savedDates += localDate
         state.value = state.value.copy(profile = profile)

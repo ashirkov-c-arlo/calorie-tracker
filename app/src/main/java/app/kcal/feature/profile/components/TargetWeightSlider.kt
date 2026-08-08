@@ -4,30 +4,36 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import app.kcal.R
 import app.kcal.core.common.DecimalText
 import app.kcal.core.designsystem.KcalSpacing
+import app.kcal.core.designsystem.KcalTheme
 import app.kcal.core.ui.currentLocale
+import app.kcal.domain.model.ThemeMode
 import app.kcal.domain.model.UnitSystem
 import app.kcal.domain.usecase.BodyMetrics
+import app.kcal.domain.usecase.UnitConversions
 import app.kcal.feature.profile.ProfileFieldError
+import java.util.Locale
 
 /**
- * Target weight is chosen with a slider bounded by the reference body mass index range for
- * the entered height, so the value is always inside that range. Nothing is preselected: the
- * readout stays empty until the user moves the slider or a stored value exists. The view
- * model quantises the reported value, so the slider itself stays continuous.
+ * Target weight is chosen with a slider. The hint states the weight interval for the
+ * reference body mass index range at the entered height, but the value is never coerced into
+ * it: a stored value outside that interval keeps its place and simply widens the slider.
+ * Nothing is preselected, so the readout stays "not selected" until the user picks a value.
  */
 @Composable
 fun TargetWeightSlider(
     valueKg: Double?,
-    rangeKg: ClosedFloatingPointRange<Double>?,
+    referenceRangeKg: ClosedFloatingPointRange<Double>?,
     unitSystem: UnitSystem,
     error: ProfileFieldError?,
     onValueChange: (Double) -> Unit,
@@ -51,36 +57,44 @@ fun TargetWeightSlider(
                 valueKg?.let { "${formatWeight(it, metric, locale)} $unitLabel" }
                     ?: stringResource(R.string.target_weight_unset),
                 style = MaterialTheme.typography.titleSmall,
+                color =
+                if (valueKg == null) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
             )
         }
 
-        if (rangeKg == null) {
+        if (referenceRangeKg == null) {
             Text(
                 text = stringResource(R.string.target_weight_needs_height),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            return@Column
+        } else {
+            val sliderRange = referenceRangeKg.widenedFor(valueKg)
+            Slider(
+                value = (valueKg ?: sliderRange.start).toFloat(),
+                onValueChange = { onValueChange(it.toDouble()) },
+                valueRange = sliderRange.start.toFloat()..sliderRange.endInclusive.toFloat(),
+            )
+            Text(
+                text =
+                stringResource(
+                    R.string.target_weight_range_hint,
+                    DecimalText.format(BodyMetrics.MIN_REFERENCE_BMI, locale),
+                    DecimalText.format(BodyMetrics.MAX_REFERENCE_BMI, locale),
+                    formatWeight(referenceRangeKg.start, metric, locale),
+                    formatWeight(referenceRangeKg.endInclusive, metric, locale),
+                    unitLabel,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
-        Slider(
-            value = (valueKg ?: rangeKg.start).toFloat(),
-            onValueChange = { onValueChange(it.toDouble()) },
-            valueRange = rangeKg.start.toFloat()..rangeKg.endInclusive.toFloat(),
-        )
-        Text(
-            text =
-            stringResource(
-                R.string.target_weight_range_hint,
-                DecimalText.format(BodyMetrics.MIN_REFERENCE_BMI, locale),
-                DecimalText.format(BodyMetrics.MAX_REFERENCE_BMI, locale),
-                formatWeight(rangeKg.start, metric, locale),
-                formatWeight(rangeKg.endInclusive, metric, locale),
-                unitLabel,
-            ),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        // Rendered in every branch, so a missing value is reported even without a height.
         if (error != null) {
             Text(
                 text = stringResource(error.messageRes()),
@@ -91,7 +105,67 @@ fun TargetWeightSlider(
     }
 }
 
-private fun formatWeight(kilograms: Double, metric: Boolean, locale: java.util.Locale): String = DecimalText.format(
-    if (metric) kilograms else app.kcal.domain.usecase.UnitConversions.kilogramsToPounds(kilograms),
-    locale,
-)
+/** Keeps a value that lies outside the reference range reachable instead of clamping it. */
+private fun ClosedFloatingPointRange<Double>.widenedFor(valueKg: Double?): ClosedFloatingPointRange<Double> {
+    if (valueKg == null) return this
+    return minOf(start, valueKg)..maxOf(endInclusive, valueKg)
+}
+
+private fun formatWeight(kilograms: Double, metric: Boolean, locale: Locale): String =
+    DecimalText.format(if (metric) kilograms else UnitConversions.kilogramsToPounds(kilograms), locale)
+
+@Composable
+private fun TargetWeightSliderPreviewContent(
+    valueKg: Double?,
+    referenceRangeKg: ClosedFloatingPointRange<Double>?,
+    error: ProfileFieldError?,
+) {
+    TargetWeightSlider(
+        valueKg = valueKg,
+        referenceRangeKg = referenceRangeKg,
+        unitSystem = UnitSystem.METRIC,
+        error = error,
+        onValueChange = {},
+        modifier = Modifier.padding(KcalSpacing.medium),
+    )
+}
+
+@Preview(name = "Target weight content White")
+@Composable
+private fun TargetWeightSliderWhitePreview() {
+    KcalTheme(themeMode = ThemeMode.WHITE) {
+        TargetWeightSliderPreviewContent(72.0, BodyMetrics.targetWeightRangeKg(176.0), null)
+    }
+}
+
+@Preview(name = "Target weight content Black")
+@Composable
+private fun TargetWeightSliderBlackPreview() {
+    KcalTheme(themeMode = ThemeMode.BLACK) {
+        TargetWeightSliderPreviewContent(72.0, BodyMetrics.targetWeightRangeKg(176.0), null)
+    }
+}
+
+@Preview(name = "Target weight unselected White")
+@Composable
+private fun TargetWeightSliderUnselectedWhitePreview() {
+    KcalTheme(themeMode = ThemeMode.WHITE) {
+        TargetWeightSliderPreviewContent(null, BodyMetrics.targetWeightRangeKg(176.0), null)
+    }
+}
+
+@Preview(name = "Target weight without height Black")
+@Composable
+private fun TargetWeightSliderNoHeightBlackPreview() {
+    KcalTheme(themeMode = ThemeMode.BLACK) {
+        TargetWeightSliderPreviewContent(null, null, ProfileFieldError.REQUIRED)
+    }
+}
+
+@Preview(name = "Target weight outside the reference range White")
+@Composable
+private fun TargetWeightSliderOutsideRangeWhitePreview() {
+    KcalTheme(themeMode = ThemeMode.WHITE) {
+        TargetWeightSliderPreviewContent(95.0, BodyMetrics.targetWeightRangeKg(176.0), null)
+    }
+}

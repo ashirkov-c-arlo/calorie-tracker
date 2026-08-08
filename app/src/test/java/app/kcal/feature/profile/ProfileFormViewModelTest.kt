@@ -13,6 +13,7 @@ import app.kcal.domain.usecase.ApplyTodayTarget
 import app.kcal.domain.usecase.BodyMetrics
 import app.kcal.domain.usecase.CalculateDailyTargets
 import app.kcal.domain.usecase.DailyTargetUnavailableReason
+import app.kcal.domain.usecase.DailyTargetWarning
 import app.kcal.domain.usecase.SaveProfile
 import app.kcal.domain.usecase.SuggestLossPaces
 import app.kcal.testing.FakeDailyTargetRepository
@@ -20,7 +21,9 @@ import app.kcal.testing.FakeProfileRepository
 import app.kcal.testing.completeProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -81,7 +84,8 @@ class ProfileFormViewModelTest {
 
     @Test
     fun `stored values prefill the form with the app locale and the matching pace`() = runTest {
-        val stored = completeProfile(targetWeightKg = 72.0, requestedLossRateKgPerWeek = 0.29)
+        val moderateRate = assertNotNull(SuggestLossPaces()(completeProfile())).moderateKgPerWeek
+        val stored = completeProfile(targetWeightKg = 72.0, requestedLossRateKgPerWeek = moderateRate)
         profileRepository.state.value = UserPreferences(profile = stored)
         val viewModel = viewModel(locale = Locale.forLanguageTag("ru"))
         runCurrent()
@@ -93,29 +97,68 @@ class ProfileFormViewModelTest {
         assertEquals(72.0, state.fields.targetWeightKg)
         assertEquals(EnergyEquationSex.MALE, state.fields.energyEquationSex)
         assertEquals(ActivityLevel.LIGHT, state.fields.activityLevel)
-        // 0.29 kg per week is the moderate pace for this profile.
+        assertEquals(moderateRate, state.fields.requestedLossRateKgPerWeek)
         assertEquals(LossPace.MODERATE, state.fields.lossPace)
     }
 
     @Test
-    fun `the target weight slider is bounded by the reference range for the entered height`() = runTest {
+    fun `a stored rate that matches no option keeps its value and stays selected on save`() = runTest {
+        val stored = completeProfile(targetWeightKg = 72.0, requestedLossRateKgPerWeek = 0.5)
+        profileRepository.state.value = UserPreferences(profile = stored)
+        val viewModel = viewModel()
+        runCurrent()
+
+        // The intent is preserved and no option is highlighted instead of it.
+        assertEquals(0.5, viewModel.uiState.value.fields.requestedLossRateKgPerWeek)
+        assertNull(viewModel.uiState.value.fields.lossPace)
+
+        viewModel.onSave()
+        runCurrent()
+
+        assertEquals(0.5, profileRepository.savedProfiles.single().requestedLossRateKgPerWeek)
+    }
+
+    @Test
+    fun `a stored target weight outside the reference range is never changed`() = runTest {
+        val stored = completeProfile(targetWeightKg = 95.0)
+        profileRepository.state.value = UserPreferences(profile = stored)
+        val viewModel = viewModel()
+        runCurrent()
+
+        assertEquals(95.0, viewModel.uiState.value.fields.targetWeightKg)
+
+        // Editing the height through intermediate values must not move the target weight.
+        viewModel.onHeightChange("1")
+        viewModel.onHeightChange("18")
+        viewModel.onHeightChange("180")
+        assertEquals(95.0, viewModel.uiState.value.fields.targetWeightKg)
+
+        viewModel.onSave()
+        runCurrent()
+        assertEquals(95.0, profileRepository.savedProfiles.single().targetWeightKg)
+    }
+
+    @Test
+    fun `the reference range follows the entered height without coercing the value`() = runTest {
         val viewModel = viewModel()
         runCurrent()
 
         viewModel.onHeightChange("176")
-        val range = assertNotNull(viewModel.uiState.value.targetWeightRangeKg)
-        assertEquals(assertNotNull(BodyMetrics.targetWeightRangeKg(176.0)), range)
+        assertEquals(
+            assertNotNull(BodyMetrics.targetWeightRangeKg(176.0)),
+            assertNotNull(viewModel.uiState.value.targetWeightRangeKg),
+        )
 
-        // A value outside the range is pulled back into it instead of being stored as is.
-        viewModel.onTargetWeightChange(40.0)
-        assertEquals(range.start, viewModel.uiState.value.fields.targetWeightKg)
+        // The slider quantises to half kilograms and keeps exactly what it reports.
+        viewModel.onTargetWeightChange(72.3)
+        assertEquals(72.5, viewModel.uiState.value.fields.targetWeightKg)
 
-        viewModel.onTargetWeightChange(200.0)
-        assertEquals(range.endInclusive, viewModel.uiState.value.fields.targetWeightKg)
+        viewModel.onHeightChange("150")
+        assertEquals(72.5, viewModel.uiState.value.fields.targetWeightKg)
     }
 
     @Test
-    fun `every offered pace produces a different calorie target`() = runTest {
+    fun `selecting a pace stores that intent and updates the preview`() = runTest {
         val viewModel = viewModel()
         runCurrent()
         fillValidMetricForm(viewModel)
@@ -124,18 +167,26 @@ class ProfileFormViewModelTest {
         assertTrue(options.slowKgPerWeek < options.moderateKgPerWeek)
         assertTrue(options.moderateKgPerWeek < options.fastKgPerWeek)
 
-        val targets =
-            LossPace.entries.map { pace ->
+        val previews =
+            LossPace.entries.associateWith { pace ->
                 viewModel.onLossPaceSelect(pace)
+                assertEquals(options.rateFor(pace), viewModel.uiState.value.fields.requestedLossRateKgPerWeek)
+                assertEquals(pace, viewModel.uiState.value.fields.lossPace)
                 val preview = viewModel.uiState.value.target
                 assertTrue(preview is TargetPreview.Available, "expected a target for $pace")
-                // The offered paces stay inside the guardrails, so nothing is capped.
-                assertTrue(preview.warnings.isEmpty(), "pace $pace should not hit a guardrail")
-                preview.targets.kcal
+                preview
             }
 
-        assertEquals(targets.distinct().size, targets.size)
-        assertEquals(targets.sortedDescending(), targets)
+        val slow = previews.getValue(LossPace.SLOW)
+        val moderate = previews.getValue(LossPace.MODERATE)
+        val fast = previews.getValue(LossPace.FAST)
+        assertTrue(slow.targets.kcal > moderate.targets.kcal)
+        assertTrue(moderate.targets.kcal >= fast.targets.kcal)
+        // A guardrail is never silent: the requested pace is kept and the reason is shown.
+        assertEquals(options.fastKgPerWeek, fast.requestedLossRateKgPerWeek)
+        if (fast.effectiveLossRateKgPerWeek < fast.requestedLossRateKgPerWeek) {
+            assertTrue(fast.warnings.isNotEmpty())
+        }
     }
 
     @Test
@@ -171,20 +222,58 @@ class ProfileFormViewModelTest {
     }
 
     @Test
-    fun `reaching the target weight needs no pace and stores a zero rate`() = runTest {
+    fun `reaching the target weight keeps the chosen pace and reports maintenance`() = runTest {
         val viewModel = viewModel()
         runCurrent()
-        fillValidMetricForm(viewModel, selectPace = false)
+        fillValidMetricForm(viewModel)
         // A target above the current weight leaves nothing to lose.
         viewModel.onCurrentWeightChange("60")
 
-        assertNull(viewModel.uiState.value.lossPaceOptions)
+        val chosenRate = assertNotNull(viewModel.uiState.value.fields.requestedLossRateKgPerWeek)
+        val preview = viewModel.uiState.value.target
+        assertTrue(preview is TargetPreview.Available)
+        assertTrue(DailyTargetWarning.TARGET_WEIGHT_REACHED in preview.warnings)
 
         viewModel.onSave()
         runCurrent()
 
         assertNull(viewModel.uiState.value.errors.lossRate)
-        assertEquals(0.0, assertNotNull(profileRepository.savedProfiles.single().requestedLossRateKgPerWeek))
+        // The intent is stored exactly as chosen, not replaced with a fabricated zero and not
+        // remapped after the weight changed the offered options.
+        assertEquals(chosenRate, profileRepository.savedProfiles.single().requestedLossRateKgPerWeek)
+        assertTrue(chosenRate > 0.0)
+    }
+
+    @Test
+    fun `a pace is still offered while the target itself is unavailable`() = runTest {
+        val viewModel = viewModel()
+        runCurrent()
+        fillValidMetricForm(viewModel)
+        viewModel.onAgeChange("15")
+
+        assertNotNull(viewModel.uiState.value.lossPaceOptions)
+
+        viewModel.onSave()
+        runCurrent()
+
+        assertNull(viewModel.uiState.value.errors.lossRate)
+        assertEquals(15, profileRepository.savedProfiles.single().ageYears)
+    }
+
+    @Test
+    fun `a second save is ignored while the first one is still running`() = runTest {
+        // A queueing dispatcher keeps the first save in flight while the second tap arrives.
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        fillValidMetricForm(viewModel)
+
+        viewModel.onSave()
+        viewModel.onSave()
+        advanceUntilIdle()
+
+        assertEquals(1, profileRepository.savedProfiles.size)
+        assertEquals(false, viewModel.uiState.value.isSaving)
     }
 
     @Test
@@ -227,8 +316,7 @@ class ProfileFormViewModelTest {
         assertEquals(72.0, saved.targetWeightKg)
         val options = assertNotNull(viewModel.uiState.value.lossPaceOptions)
         assertEquals(options.slowKgPerWeek, saved.requestedLossRateKgPerWeek)
-        assertEquals(1, dailyTargetRepository.upsertCount)
-        assertNotNull(dailyTargetRepository.find(LocalDate.of(2026, 3, 15)))
+        assertEquals(LocalDate.of(2026, 3, 15), profileRepository.savedDates.single())
     }
 
     @Test
@@ -340,22 +428,22 @@ class ProfileFormViewModelTest {
             TargetPreview.Unavailable(DailyTargetUnavailableReason.AGE_BELOW_MINIMUM),
             viewModel.uiState.value.target,
         )
-        assertNull(viewModel.uiState.value.lossPaceOptions)
     }
 
     @Test
-    fun `a failed target write reports the failure and keeps the entered values`() = runTest {
+    fun `a failed profile write reports the failure and keeps the entered values`() = runTest {
         val viewModel = viewModel()
         runCurrent()
         fillValidMetricForm(viewModel)
-        dailyTargetRepository.failNextWrites(true)
+        profileRepository.writeFails = true
 
         viewModel.onSave()
         runCurrent()
 
         assertTrue(viewModel.uiState.value.saveFailed)
+        assertEquals(false, viewModel.uiState.value.isSaving)
         assertEquals("82.4", viewModel.uiState.value.fields.currentWeight)
-        assertEquals(1, profileRepository.savedProfiles.size)
+        assertTrue(profileRepository.savedProfiles.isEmpty())
     }
 
     @Test
@@ -387,14 +475,9 @@ class ProfileFormViewModelTest {
         val calculate = CalculateDailyTargets()
         return ProfileFormViewModel(
             profileRepository = profileRepository,
-            saveProfile =
-            SaveProfile(
-                profileRepository,
-                ApplyTodayTarget(dailyTargetRepository, calculate),
-                timeProvider,
-            ),
+            saveProfile = SaveProfile(profileRepository, calculate, timeProvider),
             calculateDailyTargets = calculate,
-            suggestLossPaces = SuggestLossPaces(calculate),
+            suggestLossPaces = SuggestLossPaces(),
             localeProvider = AppLocaleProvider { locale },
         )
     }

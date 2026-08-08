@@ -24,8 +24,7 @@ object DomainModule {
     fun provideCalculateDailyTargets(): CalculateDailyTargets = CalculateDailyTargets()
 
     @Provides
-    fun provideSuggestLossPaces(calculateDailyTargets: CalculateDailyTargets): SuggestLossPaces =
-        SuggestLossPaces(calculateDailyTargets)
+    fun provideSuggestLossPaces(): SuggestLossPaces = SuggestLossPaces()
 
     @Provides
     fun provideApplyTodayTarget(
@@ -36,7 +35,7 @@ object DomainModule {
     @Provides
     fun provideSaveProfile(
         profileRepository: ProfileRepository,
-        applyTodayTarget: ApplyTodayTarget,
+        calculateDailyTargets: CalculateDailyTargets,
         timeProvider: TimeProvider,
-    ): SaveProfile = SaveProfile(profileRepository, applyTodayTarget, timeProvider)
+    ): SaveProfile = SaveProfile(profileRepository, calculateDailyTargets, timeProvider)
 }

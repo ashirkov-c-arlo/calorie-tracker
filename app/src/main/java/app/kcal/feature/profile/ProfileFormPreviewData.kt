@@ -15,7 +15,7 @@ import java.util.Locale
  * the real use cases, so a preview can never display invented numbers.
  */
 private val calculate = CalculateDailyTargets()
-private val suggestLossPaces = SuggestLossPaces(calculate)
+private val suggestLossPaces = SuggestLossPaces()
 
 private const val CURRENT_WEIGHT_KG = 82.4
 private const val HEIGHT_CM = 176.0

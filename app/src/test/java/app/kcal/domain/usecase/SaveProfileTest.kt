@@ -26,138 +26,37 @@ class SaveProfileTest {
             clock = Clock.fixed(Instant.parse("2026-03-15T23:30:00Z"), ZoneId.of("UTC")),
             zoneId = ZoneId.of("Europe/Berlin"),
         )
-    private val applyTodayTarget = ApplyTodayTarget(dailyTargetRepository, CalculateDailyTargets())
-    private val saveProfile = SaveProfile(profileRepository, applyTodayTarget, timeProvider)
+    private val calculate = CalculateDailyTargets()
+    private val applyTodayTarget = ApplyTodayTarget(dailyTargetRepository, calculate)
+    private val saveProfile = SaveProfile(profileRepository, calculate, timeProvider)
 
     private val today = LocalDate.of(2026, 3, 16)
     private val yesterday = LocalDate.of(2026, 3, 15)
 
+    /** The app shell owns the snapshot write, so the tests trigger it explicitly. */
+    private suspend fun syncTarget(localDate: LocalDate = today) =
+        applyTodayTarget(profileRepository.state.value.profile, localDate)
+
     @Test
-    fun `saving stores the profile and creates today's snapshot`() = runTest {
+    fun `saving stores the profile for the local date and reports the estimate`() = runTest {
         val result = saveProfile(completeProfile())
 
         assertTrue(result is DailyTargetResult.Available)
         assertEquals(listOf(completeProfile()), profileRepository.savedProfiles)
-
-        // 23:30 UTC is already the next day in Berlin, so the snapshot uses the local date.
-        val snapshot = dailyTargetRepository.find(today)
-        assertEquals(result.targets, snapshot?.targets)
-        assertEquals(result.effectiveLossRateKgPerWeek, snapshot?.effectiveLossRateKgPerWeek)
+        // 23:30 UTC is already the next day in Berlin, so the save uses the local date.
+        assertEquals(listOf(today), profileRepository.savedDates)
     }
 
     @Test
-    fun `saving again on the same day replaces only today's snapshot`() = runTest {
+    fun `saving does not write the snapshot itself`() = runTest {
         saveProfile(completeProfile())
-        val pastSnapshot = assertNotNull(dailyTargetRepository.find(today)).copy(localDate = yesterday)
-        dailyTargetRepository.snapshots.value = dailyTargetRepository.snapshots.value + (yesterday to pastSnapshot)
 
-        saveProfile(completeProfile(currentWeightKg = 80.0))
-
-        assertEquals(pastSnapshot, dailyTargetRepository.find(yesterday))
-        assertTrue(assertNotNull(dailyTargetRepository.find(today)).targets.kcal != pastSnapshot.targets.kcal)
-    }
-
-    @Test
-    fun `an unavailable target removes the stale snapshot instead of keeping it`() = runTest {
-        saveProfile(completeProfile())
-        val pastSnapshot = assertNotNull(dailyTargetRepository.find(today)).copy(localDate = yesterday)
-        dailyTargetRepository.snapshots.value = dailyTargetRepository.snapshots.value + (yesterday to pastSnapshot)
-
-        val result = saveProfile(completeProfile(ageYears = 15))
-
-        assertEquals(DailyTargetResult.Unavailable(DailyTargetUnavailableReason.AGE_BELOW_MINIMUM), result)
-        assertNull(dailyTargetRepository.find(today))
-        assertEquals(pastSnapshot, dailyTargetRepository.find(yesterday))
-    }
-
-    @Test
-    fun `an incomplete profile stores no snapshot`() = runTest {
-        val result = saveProfile(completeProfile(activityLevel = null))
-
-        assertEquals(
-            DailyTargetResult.Unavailable(DailyTargetUnavailableReason.MISSING_PROFILE_INPUTS),
-            result,
-        )
-        assertNull(dailyTargetRepository.find(today))
         assertEquals(0, dailyTargetRepository.upsertCount)
-    }
-
-    @Test
-    fun `repeating the same save is idempotent`() = runTest {
-        saveProfile(completeProfile())
-        val first = dailyTargetRepository.snapshots.value
-
-        saveProfile(completeProfile())
-
-        assertEquals(first, dailyTargetRepository.snapshots.value)
-    }
-
-    @Test
-    fun `a failed target write keeps the stored profile and is repaired on the next start`() = runTest {
-        dailyTargetRepository.failNextWrites(true)
-
-        assertFailsWith<IOException> { saveProfile(completeProfile()) }
-
-        // The profile is stored and now reports complete, but the target is missing.
-        assertEquals(listOf(completeProfile()), profileRepository.savedProfiles)
         assertNull(dailyTargetRepository.find(today))
 
-        dailyTargetRepository.failNextWrites(false)
-        applyTodayTarget(profileRepository.state.value.profile, today)
+        syncTarget()
 
         assertNotNull(dailyTargetRepository.find(today))
-    }
-
-    @Test
-    fun `re-applying the target replaces a snapshot left over from an older profile`() = runTest {
-        saveProfile(completeProfile())
-        val staleTarget = assertNotNull(dailyTargetRepository.find(today))
-
-        // The profile is updated, but the target write fails afterwards.
-        dailyTargetRepository.failNextWrites(true)
-        assertFailsWith<IOException> { saveProfile(completeProfile(currentWeightKg = 70.0, targetWeightKg = 65.0)) }
-        assertEquals(staleTarget, dailyTargetRepository.find(today))
-
-        dailyTargetRepository.failNextWrites(false)
-        applyTodayTarget(profileRepository.state.value.profile, today)
-
-        val repaired = assertNotNull(dailyTargetRepository.find(today))
-        assertTrue(repaired.targets.kcal != staleTarget.targets.kcal)
-    }
-
-    @Test
-    fun `re-applying the target is stable for an unchanged profile`() = runTest {
-        saveProfile(completeProfile())
-        val stored = dailyTargetRepository.find(today)
-
-        applyTodayTarget(profileRepository.state.value.profile, today)
-
-        assertEquals(stored, dailyTargetRepository.find(today))
-    }
-
-    @Test
-    fun `re-applying the target removes a snapshot the stored profile no longer justifies`() = runTest {
-        saveProfile(completeProfile())
-        assertNotNull(dailyTargetRepository.find(today))
-
-        dailyTargetRepository.failNextWrites(true)
-        assertFailsWith<IOException> { saveProfile(completeProfile(ageYears = 15)) }
-        assertNotNull(dailyTargetRepository.find(today))
-
-        dailyTargetRepository.failNextWrites(false)
-        applyTodayTarget(profileRepository.state.value.profile, today)
-
-        assertNull(dailyTargetRepository.find(today))
-    }
-
-    @Test
-    fun `re-applying the target stores nothing while the profile is incomplete`() = runTest {
-        profileRepository.saveProfile(completeProfile(activityLevel = null), today)
-
-        applyTodayTarget(profileRepository.state.value.profile, today)
-
-        assertNull(dailyTargetRepository.find(today))
-        assertEquals(0, dailyTargetRepository.upsertCount)
     }
 
     @Test
@@ -179,14 +78,90 @@ class SaveProfileTest {
         }
 
         assertTrue(profileRepository.savedProfiles.isEmpty())
-        assertEquals(0, dailyTargetRepository.upsertCount)
     }
 
     @Test
-    fun `the weight entry and the snapshot share one local date`() = runTest {
-        saveProfile(completeProfile())
+    fun `the requested rate is stored exactly as chosen even when a guardrail lowers it`() = runTest {
+        val result = saveProfile(completeProfile(requestedLossRateKgPerWeek = 2.0))
 
-        assertEquals(listOf(today), profileRepository.savedDates)
-        assertEquals(today, dailyTargetRepository.snapshots.value.keys.single())
+        assertEquals(2.0, profileRepository.savedProfiles.single().requestedLossRateKgPerWeek)
+        assertTrue(result is DailyTargetResult.Available)
+        assertEquals(2.0, result.requestedLossRateKgPerWeek)
+        assertTrue(result.effectiveLossRateKgPerWeek < result.requestedLossRateKgPerWeek)
+        assertTrue(result.warnings.isNotEmpty())
+    }
+
+    @Test
+    fun `the shell writes today's snapshot and replaces only today's`() = runTest {
+        saveProfile(completeProfile())
+        syncTarget()
+        val pastSnapshot = assertNotNull(dailyTargetRepository.find(today)).copy(localDate = yesterday)
+        dailyTargetRepository.snapshots.value = dailyTargetRepository.snapshots.value + (yesterday to pastSnapshot)
+
+        saveProfile(completeProfile(currentWeightKg = 70.0, targetWeightKg = 65.0))
+        syncTarget()
+
+        assertEquals(pastSnapshot, dailyTargetRepository.find(yesterday))
+        assertTrue(assertNotNull(dailyTargetRepository.find(today)).targets.kcal != pastSnapshot.targets.kcal)
+    }
+
+    @Test
+    fun `a snapshot left over from an older profile is replaced on the next sync`() = runTest {
+        saveProfile(completeProfile())
+        syncTarget()
+        val staleTarget = assertNotNull(dailyTargetRepository.find(today))
+
+        // The profile is updated, but the snapshot write fails.
+        saveProfile(completeProfile(currentWeightKg = 70.0, targetWeightKg = 65.0))
+        dailyTargetRepository.failNextWrites(true)
+        assertFailsWith<IOException> { syncTarget() }
+        assertEquals(staleTarget, dailyTargetRepository.find(today))
+
+        dailyTargetRepository.failNextWrites(false)
+        syncTarget()
+
+        assertTrue(assertNotNull(dailyTargetRepository.find(today)).targets.kcal != staleTarget.targets.kcal)
+    }
+
+    @Test
+    fun `a snapshot the stored profile no longer justifies is removed`() = runTest {
+        saveProfile(completeProfile())
+        syncTarget()
+        assertNotNull(dailyTargetRepository.find(today))
+
+        saveProfile(completeProfile(ageYears = 15))
+        syncTarget()
+
+        assertNull(dailyTargetRepository.find(today))
+    }
+
+    @Test
+    fun `syncing is stable and stores nothing while the profile is incomplete`() = runTest {
+        saveProfile(completeProfile())
+        syncTarget()
+        val stored = dailyTargetRepository.find(today)
+
+        syncTarget()
+        assertEquals(stored, dailyTargetRepository.find(today))
+
+        profileRepository.saveProfile(completeProfile(activityLevel = null), today)
+        syncTarget()
+        assertNull(dailyTargetRepository.find(today))
+    }
+
+    @Test
+    fun `a snapshot from a previous day is never rewritten after midnight`() = runTest {
+        // The user saved yesterday and the app is opened today: past snapshots are immutable,
+        // so only today's is written. A day without a snapshot is a normal state, exactly like
+        // any day the app was not opened at all.
+        saveProfile(completeProfile())
+        syncTarget(yesterday)
+        val yesterdaySnapshot = assertNotNull(dailyTargetRepository.find(yesterday))
+
+        profileRepository.saveProfile(completeProfile(currentWeightKg = 70.0), today)
+        syncTarget(today)
+
+        assertEquals(yesterdaySnapshot, dailyTargetRepository.find(yesterday))
+        assertTrue(assertNotNull(dailyTargetRepository.find(today)).targets.kcal != yesterdaySnapshot.targets.kcal)
     }
 }
