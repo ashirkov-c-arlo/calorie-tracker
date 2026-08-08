@@ -5,6 +5,8 @@ import app.kcal.llm.NutritionParser
 import app.kcal.llm.fake.FakeNutritionParser
 import app.kcal.llm.remote.LlmProxyConfig
 import app.kcal.llm.remote.NutritionProxyClient
+import app.kcal.llm.remote.PROXY_CONNECT_TIMEOUT_MILLIS
+import app.kcal.llm.remote.PROXY_REQUEST_TIMEOUT_MILLIS
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -39,8 +41,8 @@ object LlmModule {
     fun provideHttpClient(json: Json): HttpClient = HttpClient(OkHttp) {
         install(ContentNegotiation) { json(json) }
         install(HttpTimeout) {
-            requestTimeoutMillis = REQUEST_TIMEOUT_MILLIS
-            connectTimeoutMillis = CONNECT_TIMEOUT_MILLIS
+            requestTimeoutMillis = PROXY_REQUEST_TIMEOUT_MILLIS
+            connectTimeoutMillis = PROXY_CONNECT_TIMEOUT_MILLIS
         }
     }
 
@@ -65,7 +67,4 @@ object LlmModule {
     } else {
         proxyClient.get()
     }
-
-    private const val REQUEST_TIMEOUT_MILLIS = 30_000L
-    private const val CONNECT_TIMEOUT_MILLIS = 10_000L
 }

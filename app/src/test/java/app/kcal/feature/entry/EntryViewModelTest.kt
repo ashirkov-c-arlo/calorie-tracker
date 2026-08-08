@@ -171,6 +171,32 @@ class EntryViewModelTest {
     }
 
     @Test
+    fun `a plain parse drops a pending clarification`() = runTest {
+        val parser =
+            ScriptedParser(
+                ParseResult.NeedsClarification("How large was the serving?"),
+                ParseResult.Failure(FailureReason.UNKNOWN),
+            )
+        val viewModel = viewModel(parser)
+        viewModel.onTextChange("chicken with rice")
+        viewModel.onParse()
+        runCurrent()
+        viewModel.onClarificationAnswerChange("about 250 g")
+
+        viewModel.onParse()
+        runCurrent()
+
+        assertNull(viewModel.uiState.value.clarificationQuestion)
+        assertEquals("", viewModel.uiState.value.clarificationAnswer)
+        assertEquals(FailureReason.UNKNOWN, viewModel.uiState.value.failure)
+
+        viewModel.onSubmitClarification()
+        runCurrent()
+        assertEquals(2, parser.inputs.size)
+        assertNull((parser.inputs.last() as UserInput.Text).clarification)
+    }
+
+    @Test
     fun `editing the description drops the pending clarification`() = runTest {
         val parser =
             ScriptedParser(

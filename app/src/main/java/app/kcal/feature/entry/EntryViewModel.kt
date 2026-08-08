@@ -158,7 +158,16 @@ class EntryViewModel @Inject constructor(
 
     private fun parse(input: UserInput) {
         lastInput = input
-        _uiState.value = _uiState.value.copy(isParsing = true, failure = null, textMissing = false)
+        _uiState.value =
+            _uiState.value.copy(
+                isParsing = true,
+                failure = null,
+                textMissing = false,
+                // The contract only allows the question from the immediately preceding response,
+                // so a question-free submission drops any earlier clarification.
+                clarificationQuestion = input.clarification?.question,
+                clarificationAnswer = input.clarification?.answer.orEmpty(),
+            )
         viewModelScope.launch {
             val result =
                 try {

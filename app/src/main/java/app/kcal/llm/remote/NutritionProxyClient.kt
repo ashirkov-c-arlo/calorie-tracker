@@ -32,6 +32,10 @@ import javax.inject.Singleton
 /** Base URL and routing key from `BuildConfig`; both are empty until a proxy is configured. */
 data class LlmProxyConfig(val baseUrl: String, val apiKey: String)
 
+/** Contract §9 timeouts, kept next to the transport that has to honour them. */
+internal const val PROXY_REQUEST_TIMEOUT_MILLIS = 30_000L
+internal const val PROXY_CONNECT_TIMEOUT_MILLIS = 10_000L
+
 /**
  * The app's only nutrition transport. Retries are owned by the proxy, so this client never
  * loops: a failure surfaces as an explicit Retry action in the UI. Raw bodies are never

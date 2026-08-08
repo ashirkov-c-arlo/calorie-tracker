@@ -7,12 +7,16 @@ import app.kcal.llm.FailureReason
 import app.kcal.llm.ParseResult
 import app.kcal.llm.UserInput
 import io.ktor.client.HttpClient
+import io.ktor.client.HttpClientConfig
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.respondError
 import io.ktor.client.engine.mock.toByteArray
+import io.ktor.client.network.sockets.ConnectTimeoutException
+import io.ktor.client.network.sockets.SocketTimeoutException
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
@@ -22,6 +26,7 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import org.junit.Test
@@ -126,6 +131,34 @@ class NutritionProxyClientTest {
     }
 
     @Test
+    fun `a rejected api key is an auth failure`() = runTest {
+        listOf(HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden).forEach { status ->
+            val client = client { respondJson("""{"type":"error","code":"AUTH"}""", status) }
+            assertEquals(FailureReason.AUTH, failure(client), "status $status")
+        }
+    }
+
+    @Test
+    fun `a stalled proxy hits the contract request timeout`() = runTest {
+        val client =
+            client(configure = { install(HttpTimeout) { requestTimeoutMillis = PROXY_REQUEST_TIMEOUT_MILLIS } }) {
+                delay(PROXY_REQUEST_TIMEOUT_MILLIS + 1_000)
+                respondJson(fixture("parse_text_success.json"))
+            }
+
+        assertEquals(FailureReason.TIMEOUT, failure(client))
+    }
+
+    @Test
+    fun `connect and socket timeouts are reported as timeouts, not as offline`() = runTest {
+        val connectTimeout = client { throw ConnectTimeoutException("connect timed out") }
+        val socketTimeout = client { throw SocketTimeoutException("socket timed out") }
+
+        assertEquals(FailureReason.TIMEOUT, failure(connectTimeout))
+        assertEquals(FailureReason.TIMEOUT, failure(socketTimeout))
+    }
+
+    @Test
     fun `a connectivity failure is reported as offline`() = runTest {
         val client = client { throw IOException("no route to host") }
 
@@ -169,6 +202,7 @@ class NutritionProxyClientTest {
     private fun client(
         baseUrl: String = "https://proxy.invalid",
         locale: Locale = Locale.US,
+        configure: HttpClientConfig<*>.() -> Unit = {},
         handler: MockRequestHandler,
     ): NutritionProxyClient {
         val engine =
@@ -179,6 +213,7 @@ class NutritionProxyClientTest {
         val httpClient =
             HttpClient(engine) {
                 install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+                configure()
             }
         return NutritionProxyClient(
             httpClient = httpClient,
