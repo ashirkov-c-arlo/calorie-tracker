@@ -7,9 +7,7 @@ import app.kcal.domain.model.MacroTotals
 import app.kcal.domain.model.Macros
 import app.kcal.domain.repository.DailyTargetRepository
 import app.kcal.domain.repository.MealRepository
-import app.kcal.domain.repository.ProfileRepository
 import app.kcal.domain.usecase.AggregateMealMacros
-import app.kcal.domain.usecase.ApplyTodayTarget
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.CancellationException
@@ -18,7 +16,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.math.MathContext
@@ -29,8 +26,6 @@ import javax.inject.Inject
 class TodayViewModel @Inject constructor(
     private val mealRepository: MealRepository,
     private val dailyTargetRepository: DailyTargetRepository,
-    private val profileRepository: ProfileRepository,
-    private val applyTodayTarget: ApplyTodayTarget,
     private val aggregateMealMacros: AggregateMealMacros,
     private val timeProvider: TimeProvider,
 ) : ViewModel() {
@@ -45,7 +40,7 @@ class TodayViewModel @Inject constructor(
         load(observedDate)
     }
 
-    /** Repairs and observes the current local day after navigation or app resume. */
+    /** Observes the current local day after navigation or app resume. */
     fun onVisible() {
         val today = timeProvider.today()
         if (today != observedDate || _uiState.value.hasError) load(today)
@@ -74,8 +69,6 @@ class TodayViewModel @Inject constructor(
         loadJob =
             viewModelScope.launch {
                 try {
-                    val profile = profileRepository.preferences.first().profile
-                    applyTodayTarget(profile, today)
                     combine(
                         mealRepository.observeByDate(today),
                         dailyTargetRepository.observe(today),

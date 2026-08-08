@@ -12,8 +12,8 @@ import app.kcal.domain.repository.ProfileRepository
  * local date, so an interruption can only lose the edit itself and never pair new settings
  * with a stale weight.
  *
- * Today's target snapshot is deliberately **not** written here: startup and Today rollover
- * both route that write through [ApplyTodayTarget], so a late profile save cannot directly
+ * Today's target snapshot is deliberately **not** written here: the app shell serializes
+ * profile and local-date changes through [ApplyTodayTarget], so a stale calculation cannot
  * overwrite a newer target.
  */
 class SaveProfile(

@@ -2,14 +2,18 @@ package app.kcal
 
 import app.kcal.core.common.TimeProvider
 import app.kcal.domain.model.AppLanguage
+import app.kcal.domain.model.DailyTargetSnapshot
 import app.kcal.domain.model.StoredProfile
 import app.kcal.domain.model.ThemeMode
 import app.kcal.domain.model.UserPreferences
+import app.kcal.domain.repository.DailyTargetRepository
 import app.kcal.domain.usecase.ApplyTodayTarget
 import app.kcal.domain.usecase.CalculateDailyTargets
+import app.kcal.domain.usecase.DailyTargetResult
 import app.kcal.testing.FakeDailyTargetRepository
 import app.kcal.testing.FakeProfileRepository
 import app.kcal.testing.completeProfile
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.toList
@@ -28,6 +32,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -36,15 +42,13 @@ import kotlin.test.assertTrue
 class MainViewModelTest {
 
     private val today = LocalDate.of(2026, 3, 15)
-    private val timeProvider =
-        TimeProvider(
-            clock = Clock.fixed(Instant.parse("2026-03-15T09:00:00Z"), ZoneId.of("UTC")),
-            zoneId = ZoneId.of("UTC"),
-        )
+    private val clock = MutableClock(Instant.parse("2026-03-15T09:00:00Z"))
+    private val timeProvider = TimeProvider(clock = clock, zoneId = ZoneId.of("UTC"))
     private val dailyTargetRepository = FakeDailyTargetRepository()
 
     @Before
     fun setUp() {
+        clock.current = Instant.parse("2026-03-15T09:00:00Z")
         Dispatchers.setMain(UnconfinedTestDispatcher())
     }
 
@@ -68,6 +72,48 @@ class MainViewModelTest {
         // The gate reports a complete profile only together with a stored target; the
         // failing-write test below covers the opposite direction.
         assertNotNull(dailyTargetRepository.find(today))
+    }
+
+    @Test
+    fun `resume after midnight creates the new day target in the app shell`() = runTest {
+        val repository = FakeProfileRepository(UserPreferences(profile = completeProfile()))
+        val viewModel = viewModel(repository)
+        runCurrent()
+        val firstTarget = assertNotNull(dailyTargetRepository.find(today))
+
+        clock.current = Instant.parse("2026-03-16T00:01:00Z")
+        viewModel.onAppResumed()
+        runCurrent()
+
+        val nextTarget = assertNotNull(dailyTargetRepository.find(today.plusDays(1)))
+        assertEquals(firstTarget.targets, nextTarget.targets)
+        assertEquals(2, dailyTargetRepository.upsertCount)
+    }
+
+    @Test
+    fun `a delayed old profile write cannot finish after the latest profile target`() = runTest {
+        val profileA = completeProfile(currentWeightKg = 82.4)
+        val profileB = completeProfile(currentWeightKg = 95.0)
+        val profiles = FakeProfileRepository(UserPreferences(profile = profileA))
+        val targets = DelayedFirstWriteRepository()
+        val viewModel = viewModel(profiles, targets)
+
+        targets.firstWriteStarted.await()
+        profiles.state.value = UserPreferences(profile = profileB)
+        runCurrent()
+        assertEquals(1, targets.startedWrites)
+
+        targets.releaseFirstWrite.complete(Unit)
+        runCurrent()
+
+        val calculator = CalculateDailyTargets()
+        val expectedA = assertIs<DailyTargetResult.Available>(calculator.forStoredProfile(profileA)).targets
+        val expectedB = assertIs<DailyTargetResult.Available>(calculator.forStoredProfile(profileB)).targets
+        assertNotEquals(expectedA, expectedB)
+        assertEquals(listOf(expectedA, expectedB), targets.completedWrites.map { it.targets })
+        assertEquals(expectedB, targets.find(today)?.targets)
+        assertEquals(1, targets.maxConcurrentWrites)
+        assertTrue(viewModel.uiState.value.isProfileComplete)
     }
 
     @Test
@@ -224,9 +270,47 @@ class MainViewModelTest {
         return states
     }
 
-    private fun viewModel(repository: FakeProfileRepository) = MainViewModel(
-        repository,
-        ApplyTodayTarget(dailyTargetRepository, CalculateDailyTargets()),
-        timeProvider,
-    )
+    private fun viewModel(repository: FakeProfileRepository, targets: DailyTargetRepository = dailyTargetRepository) =
+        MainViewModel(
+            repository,
+            ApplyTodayTarget(targets, CalculateDailyTargets()),
+            timeProvider,
+        )
+
+    private class MutableClock(var current: Instant) : Clock() {
+        override fun getZone(): ZoneId = ZoneId.of("UTC")
+
+        override fun withZone(zone: ZoneId): Clock = this
+
+        override fun instant(): Instant = current
+    }
+
+    private class DelayedFirstWriteRepository(
+        private val delegate: FakeDailyTargetRepository = FakeDailyTargetRepository(),
+    ) : DailyTargetRepository by delegate {
+        val firstWriteStarted = CompletableDeferred<Unit>()
+        val releaseFirstWrite = CompletableDeferred<Unit>()
+        val completedWrites = mutableListOf<DailyTargetSnapshot>()
+        var startedWrites = 0
+            private set
+        var maxConcurrentWrites = 0
+            private set
+        private var activeWrites = 0
+
+        override suspend fun upsert(snapshot: DailyTargetSnapshot) {
+            startedWrites++
+            activeWrites++
+            maxConcurrentWrites = maxOf(maxConcurrentWrites, activeWrites)
+            try {
+                if (startedWrites == 1) {
+                    firstWriteStarted.complete(Unit)
+                    releaseFirstWrite.await()
+                }
+                delegate.upsert(snapshot)
+                completedWrites += snapshot
+            } finally {
+                activeWrites--
+            }
+        }
+    }
 }

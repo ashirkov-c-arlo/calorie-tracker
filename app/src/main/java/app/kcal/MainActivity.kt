@@ -42,6 +42,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        viewModel.onAppResumed()
+    }
+
     /**
      * Applies the selected interface language through the AppCompat app-locale API. The call
      * is skipped when the locales already match, because applying them recreates the

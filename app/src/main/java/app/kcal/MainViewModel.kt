@@ -12,7 +12,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import javax.inject.Inject
 
 /**
@@ -30,10 +32,15 @@ class MainViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
+    private val currentDate = MutableStateFlow(timeProvider.today())
     private var startupJob: Job? = null
 
     init {
         start()
+    }
+
+    fun onAppResumed() {
+        currentDate.value = timeProvider.today()
     }
 
     fun onRetryStartup() {
@@ -41,15 +48,18 @@ class MainViewModel @Inject constructor(
     }
 
     private fun start() {
-        startupJob?.cancel()
+        if (startupJob?.isActive == true) return
         _uiState.value = MainUiState()
         startupJob =
             viewModelScope.launch {
                 try {
-                    var syncedProfile: StoredProfile? = null
-                    profileRepository.preferences.collect { preferences ->
-                        if (preferences.profile != syncedProfile) {
-                            // Keep the gate closed until the stored target matches this profile.
+                    var syncedTarget: Pair<StoredProfile, LocalDate>? = null
+                    combine(profileRepository.preferences, currentDate) { preferences, _ ->
+                        preferences to timeProvider.today()
+                    }.collect { (preferences, localDate) ->
+                        val target = preferences.profile to localDate
+                        if (target != syncedTarget) {
+                            // This serial collector is the sole owner of target replacement.
                             _uiState.value =
                                 _uiState.value.copy(
                                     isLoading = true,
@@ -58,8 +68,8 @@ class MainViewModel @Inject constructor(
                                     themeMode = preferences.themeMode,
                                     appLanguage = preferences.appLanguage,
                                 )
-                            applyTodayTarget(preferences.profile, timeProvider.today())
-                            syncedProfile = preferences.profile
+                            applyTodayTarget(preferences.profile, localDate)
+                            syncedTarget = target
                         }
                         _uiState.value =
                             MainUiState(
