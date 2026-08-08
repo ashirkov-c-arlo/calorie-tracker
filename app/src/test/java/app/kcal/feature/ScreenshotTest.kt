@@ -13,6 +13,7 @@ import app.kcal.feature.entry.ManualEntryUiState
 import app.kcal.feature.entry.manualEntryContentPreviewState
 import app.kcal.feature.entry.manualEntryEmptyPreviewState
 import app.kcal.feature.entry.manualEntryErrorPreviewState
+import app.kcal.feature.entry.manualEntrySaveFailedPreviewState
 import app.kcal.feature.entry.manualEntryValidationPreviewState
 import app.kcal.feature.history.HistoryScreen
 import app.kcal.feature.profile.ProfileFormUiState
@@ -104,6 +105,16 @@ class ScreenshotTest {
 
     @Test
     fun manualEntryErrorBlack() = capture(ThemeMode.BLACK) { ManualEntryFixture(manualEntryErrorPreviewState) }
+
+    @Test
+    @Config(qualifiers = "+h1600dp")
+    fun manualEntrySaveFailedWhite() =
+        capture(ThemeMode.WHITE) { ManualEntryFixture(manualEntrySaveFailedPreviewState) }
+
+    @Test
+    @Config(qualifiers = "+h1600dp")
+    fun manualEntrySaveFailedBlack() =
+        capture(ThemeMode.BLACK) { ManualEntryFixture(manualEntrySaveFailedPreviewState) }
 
     @Test
     @Config(qualifiers = "+h2400dp")

@@ -157,6 +157,37 @@ class ManualEntryViewModelTest {
     }
 
     @Test
+    fun `editing only the name preserves every exact stored decimal`() = runTest {
+        val originalItem =
+            foodItem(
+                name = "Original",
+                grams = 100.05,
+                proteinG = 12.55,
+                fatG = 0.04,
+                carbsG = 33.333333333333336,
+            )
+        val repository = FakeMealRepository(listOf(mealEntry(id = 9, items = listOf(originalItem))))
+        val viewModel = viewModel(repository, Locale.forLanguageTag("ru"))
+
+        viewModel.load(9)
+        runCurrent()
+        val loaded = viewModel.uiState.value.items.single()
+        assertEquals("100,05", loaded.grams)
+        assertEquals("12,55", loaded.protein)
+        assertEquals("0,04", loaded.fat)
+
+        viewModel.onItemChange(loaded.key, ManualEntryField.NAME, "Renamed")
+        viewModel.onSave()
+        runCurrent()
+
+        val saved = repository.meals.value.single().items.single()
+        assertEquals(originalItem.grams, saved.grams)
+        assertEquals(originalItem.macros.proteinG, saved.macros.proteinG)
+        assertEquals(originalItem.macros.fatG, saved.macros.fatG)
+        assertEquals(originalItem.macros.carbsG, saved.macros.carbsG)
+    }
+
+    @Test
     fun `load and save failures retain a retryable form`() = runTest {
         val repository = FakeMealRepository().apply { readFails = true }
         val viewModel = viewModel(repository)

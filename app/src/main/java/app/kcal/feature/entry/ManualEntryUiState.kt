@@ -110,3 +110,8 @@ internal val manualEntryValidationPreviewState = ManualEntryUiState(
 )
 
 internal val manualEntryErrorPreviewState = ManualEntryUiState(isLoading = false, loadFailed = true)
+
+internal val manualEntrySaveFailedPreviewState = manualEntryContentPreviewState.copy(
+    items = persistentListOf(manualEntryContentPreviewState.items.first()),
+    saveFailed = true,
+)

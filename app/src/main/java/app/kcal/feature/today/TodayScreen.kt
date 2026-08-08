@@ -1,5 +1,6 @@
 package app.kcal.feature.today
 
+import android.content.res.Configuration
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,12 +25,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.kcal.R
 import app.kcal.core.common.DecimalText
@@ -38,7 +40,7 @@ import app.kcal.core.designsystem.KcalTheme
 import app.kcal.core.ui.ErrorScreen
 import app.kcal.core.ui.LoadingScreen
 import app.kcal.core.ui.currentLocale
-import app.kcal.domain.model.Macros
+import app.kcal.domain.model.MacroTotals
 import app.kcal.domain.model.ThemeMode
 
 @Composable
@@ -49,7 +51,7 @@ fun TodayRoute(
     viewModel: TodayViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    LaunchedEffect(viewModel) { viewModel.onVisible() }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.onVisible() }
     TodayScreen(
         uiState = uiState,
         onSettingsClick = onSettingsClick,
@@ -151,7 +153,11 @@ private fun TodayContent(
 }
 
 @Composable
-private fun DailyProgressCard(consumed: Macros, progress: TodayMacroProgressUiState?, modifier: Modifier = Modifier) {
+private fun DailyProgressCard(
+    consumed: MacroTotals,
+    progress: TodayMacroProgressUiState?,
+    modifier: Modifier = Modifier,
+) {
     val locale = currentLocale()
     OutlinedCard(modifier = modifier.fillMaxWidth()) {
         Column(
@@ -164,7 +170,7 @@ private fun DailyProgressCard(consumed: Macros, progress: TodayMacroProgressUiSt
                     text =
                     stringResource(
                         R.string.today_consumed_without_target,
-                        DecimalText.formatInt(consumed.kcal, locale),
+                        DecimalText.formatLong(consumed.kcal, locale),
                         DecimalText.format(consumed.proteinG, locale),
                         DecimalText.format(consumed.fatG, locale),
                         DecimalText.format(consumed.carbsG, locale),
@@ -182,7 +188,7 @@ private fun DailyProgressCard(consumed: Macros, progress: TodayMacroProgressUiSt
                     value =
                     stringResource(
                         R.string.nutrient_progress_kcal,
-                        DecimalText.formatInt(progress.consumed.kcal, locale),
+                        DecimalText.formatLong(progress.consumed.kcal, locale),
                         DecimalText.formatInt(progress.target.kcal, locale),
                     ),
                     fraction = progress.kcalFraction,
@@ -253,7 +259,7 @@ private fun MealCard(
                 text =
                 stringResource(
                     R.string.meal_kcal,
-                    DecimalText.formatInt(meal.totals.kcal, locale),
+                    DecimalText.formatLong(meal.totals.kcal, locale),
                 ),
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -296,6 +302,48 @@ private fun TodayPreview(themeMode: ThemeMode, uiState: TodayUiState) {
             onEditMealClick = {},
             onDeleteMealClick = {},
             onRetry = {},
+        )
+    }
+}
+
+@Preview(name = "Daily progress White", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Daily progress Black", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun DailyProgressCardPreview() {
+    KcalTheme(themeMode = ThemeMode.SYSTEM) {
+        DailyProgressCard(
+            consumed = todayContentPreviewState.consumed,
+            progress = todayContentPreviewState.progress,
+            modifier = Modifier.padding(KcalSpacing.medium),
+        )
+    }
+}
+
+@Preview(name = "Progress line White", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Progress line Black", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun ProgressLinePreview() {
+    KcalTheme(themeMode = ThemeMode.SYSTEM) {
+        Column(modifier = Modifier.padding(KcalSpacing.medium)) {
+            ProgressLine(
+                label = stringResource(R.string.nutrient_protein),
+                value = stringResource(R.string.nutrient_progress_grams, "54.0", "105.0"),
+                fraction = 0.5f,
+            )
+        }
+    }
+}
+
+@Preview(name = "Meal card White", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Meal card Black", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun MealCardPreview() {
+    KcalTheme(themeMode = ThemeMode.SYSTEM) {
+        MealCard(
+            meal = todayContentPreviewState.meals.first(),
+            onEditClick = {},
+            onDeleteClick = {},
+            modifier = Modifier.padding(KcalSpacing.medium),
         )
     }
 }

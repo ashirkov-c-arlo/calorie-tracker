@@ -140,11 +140,11 @@ class ManualEntryViewModel @Inject constructor(
                         ManualEntryItemUiState(
                             key = index.toLong() + 1,
                             name = item.name,
-                            grams = item.grams?.let { DecimalText.format(it, locale) }.orEmpty(),
+                            grams = item.grams?.let { DecimalText.formatEditable(it, locale) }.orEmpty(),
                             kcal = item.macros.kcal.toString(),
-                            protein = DecimalText.format(item.macros.proteinG, locale),
-                            fat = DecimalText.format(item.macros.fatG, locale),
-                            carbs = DecimalText.format(item.macros.carbsG, locale),
+                            protein = DecimalText.formatEditable(item.macros.proteinG, locale),
+                            fat = DecimalText.formatEditable(item.macros.fatG, locale),
+                            carbs = DecimalText.formatEditable(item.macros.carbsG, locale),
                             needsReview = item.needsReview(),
                         )
                     }.toPersistentList()

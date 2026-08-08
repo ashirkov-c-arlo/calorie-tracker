@@ -1,5 +1,7 @@
 package app.kcal.feature.entry
 
+import android.content.res.Configuration
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -73,6 +75,8 @@ fun ManualEntryScreen(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    BackHandler(enabled = uiState.isSaving) {}
+    val close = { if (!uiState.isSaving) onBackClick() }
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -90,7 +94,7 @@ fun ManualEntryScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
+                    IconButton(onClick = close, enabled = !uiState.isSaving) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.action_cancel),
@@ -113,7 +117,7 @@ fun ManualEntryScreen(
             else ->
                 ManualEntryForm(
                     uiState = uiState,
-                    onBackClick = onBackClick,
+                    onBackClick = close,
                     onItemChange = onItemChange,
                     onAddItem = onAddItem,
                     onRemoveItem = onRemoveItem,
@@ -321,6 +325,48 @@ private fun ManualEntryPreview(themeMode: ThemeMode, uiState: ManualEntryUiState
     }
 }
 
+@Preview(
+    name = "Manual item card White",
+    uiMode = Configuration.UI_MODE_NIGHT_NO,
+    heightDp = 1200,
+)
+@Preview(
+    name = "Manual item card Black",
+    uiMode = Configuration.UI_MODE_NIGHT_YES,
+    heightDp = 1200,
+)
+@Composable
+private fun ManualItemCardPreview() {
+    KcalTheme(themeMode = ThemeMode.SYSTEM) {
+        ManualItemCard(
+            number = 1,
+            item = manualEntryContentPreviewState.items.first(),
+            canRemove = true,
+            enabled = true,
+            onChange = { _, _ -> },
+            onRemove = {},
+            modifier = Modifier.padding(KcalSpacing.medium),
+        )
+    }
+}
+
+@Preview(name = "Entry text field White", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Entry text field Black", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun EntryTextFieldPreview() {
+    KcalTheme(themeMode = ThemeMode.SYSTEM) {
+        EntryTextField(
+            value = "12.55",
+            label = stringResource(R.string.nutrient_protein),
+            suffix = stringResource(R.string.unit_g),
+            error = null,
+            enabled = true,
+            onValueChange = {},
+            modifier = Modifier.padding(KcalSpacing.medium),
+        )
+    }
+}
+
 @Preview(name = "Manual entry loading White")
 @Composable
 private fun ManualEntryLoadingWhitePreview() = ManualEntryPreview(ThemeMode.WHITE, ManualEntryUiState())
@@ -344,6 +390,14 @@ private fun ManualEntryErrorWhitePreview() = ManualEntryPreview(ThemeMode.WHITE,
 @Preview(name = "Manual entry error Black")
 @Composable
 private fun ManualEntryErrorBlackPreview() = ManualEntryPreview(ThemeMode.BLACK, manualEntryErrorPreviewState)
+
+@Preview(name = "Manual entry save failed White", heightDp = 1400)
+@Composable
+private fun ManualEntrySaveFailedWhitePreview() = ManualEntryPreview(ThemeMode.WHITE, manualEntrySaveFailedPreviewState)
+
+@Preview(name = "Manual entry save failed Black", heightDp = 1400)
+@Composable
+private fun ManualEntrySaveFailedBlackPreview() = ManualEntryPreview(ThemeMode.BLACK, manualEntrySaveFailedPreviewState)
 
 @Preview(name = "Manual entry content White", heightDp = 2200)
 @Composable
