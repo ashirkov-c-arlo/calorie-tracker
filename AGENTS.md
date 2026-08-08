@@ -243,6 +243,16 @@ enum class ThemeMode { SYSTEM, WHITE, BLACK }
 - The user-facing field is a **formula variant selector**. Internally,
   `EnergyEquationSex` selects one of the two validated Mifflin–St Jeor branches; it is not
   a gender-identity field. Never average the branch constants.
+- **Target weight input:** a slider whose advisory bounds are the weight interval for a body
+  mass index of 18.5–24.9 at the entered height, quantised to 0.5 kg. The bounds are shown as
+  a factual reference, never as advice, and a value outside them is never silently coerced:
+  the slider widens to keep it reachable.
+- **Weight-loss rate input:** three derived options — slow, moderate and fast — equal to
+  0.25%, 0.5% and 0.75% of current body weight per week. They are offered as soon as a
+  current weight exists, including while the target itself is unavailable, so no rate is ever
+  fabricated. The selected value is stored unchanged as the user's intent: the guardrails in
+  the calculator still apply afterwards and any difference is explained. A stored rate that
+  matches no option keeps its value and leaves the options unselected.
 - Do **not** store a second "current weight" preference. Current weight is the latest
   `WeightEntry`; changing it in Settings upserts today's entry using the injected clock
   and zone.
