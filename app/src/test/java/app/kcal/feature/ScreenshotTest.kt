@@ -8,8 +8,15 @@ import app.kcal.MainUiState
 import app.kcal.core.designsystem.KcalTheme
 import app.kcal.domain.model.ThemeMode
 import app.kcal.domain.model.UnitSystem
+import app.kcal.feature.entry.EntryScreen
+import app.kcal.feature.entry.EntryUiState
 import app.kcal.feature.entry.ManualEntryScreen
 import app.kcal.feature.entry.ManualEntryUiState
+import app.kcal.feature.entry.entryClarificationPreviewState
+import app.kcal.feature.entry.entryConfirmationPreviewState
+import app.kcal.feature.entry.entryFailurePreviewState
+import app.kcal.feature.entry.entryIdlePreviewState
+import app.kcal.feature.entry.entryParsingPreviewState
 import app.kcal.feature.entry.manualEntryContentPreviewState
 import app.kcal.feature.entry.manualEntryEmptyPreviewState
 import app.kcal.feature.entry.manualEntryErrorPreviewState
@@ -140,6 +147,51 @@ class ScreenshotTest {
         capture(ThemeMode.WHITE) { ManualEntryFixture(manualEntryValidationPreviewState) }
 
     @Test
+    fun entryIdleWhite() = capture(ThemeMode.WHITE) { EntryFixture(EntryUiState()) }
+
+    @Test
+    fun entryIdleBlack() = capture(ThemeMode.BLACK) { EntryFixture(EntryUiState()) }
+
+    @Test
+    fun entryTypedWhite() = capture(ThemeMode.WHITE) { EntryFixture(entryIdlePreviewState) }
+
+    @Test
+    fun entryParsingWhite() = capture(ThemeMode.WHITE) { EntryFixture(entryParsingPreviewState) }
+
+    @Test
+    fun entryParsingBlack() = capture(ThemeMode.BLACK) { EntryFixture(entryParsingPreviewState) }
+
+    @Test
+    fun entryFailureWhite() = capture(ThemeMode.WHITE) { EntryFixture(entryFailurePreviewState) }
+
+    @Test
+    fun entryFailureBlack() = capture(ThemeMode.BLACK) { EntryFixture(entryFailurePreviewState) }
+
+    @Test
+    @Config(qualifiers = "+ru")
+    fun entryFailureWhiteRussian() = capture(ThemeMode.WHITE) { EntryFixture(entryFailurePreviewState) }
+
+    @Test
+    @Config(qualifiers = "+h1200dp")
+    fun entryClarificationWhite() = capture(ThemeMode.WHITE) { EntryFixture(entryClarificationPreviewState) }
+
+    @Test
+    @Config(qualifiers = "+h1200dp")
+    fun entryClarificationBlack() = capture(ThemeMode.BLACK) { EntryFixture(entryClarificationPreviewState) }
+
+    @Test
+    @Config(qualifiers = "+h1600dp")
+    fun entryConfirmationWhite() = capture(ThemeMode.WHITE) { EntryFixture(entryConfirmationPreviewState) }
+
+    @Test
+    @Config(qualifiers = "+h1600dp")
+    fun entryConfirmationBlack() = capture(ThemeMode.BLACK) { EntryFixture(entryConfirmationPreviewState) }
+
+    @Test
+    @Config(qualifiers = "+ru-h1600dp")
+    fun entryConfirmationWhiteRussian() = capture(ThemeMode.WHITE) { EntryFixture(entryConfirmationPreviewState) }
+
+    @Test
     fun trendsWhite() = capture(ThemeMode.WHITE) { TrendsScreen() }
 
     @Test
@@ -256,6 +308,25 @@ class ScreenshotTest {
             onRemoveItem = {},
             onSave = {},
             onRetry = {},
+        )
+    }
+
+    @Composable
+    private fun EntryFixture(uiState: EntryUiState) {
+        EntryScreen(
+            uiState = uiState,
+            onBackClick = {},
+            onLogManually = {},
+            onTextChange = {},
+            onParse = {},
+            onClarificationAnswerChange = {},
+            onSubmitClarification = {},
+            onRetry = {},
+            onItemChange = { _, _, _ -> },
+            onAddItem = {},
+            onRemoveItem = {},
+            onDismissConfirmation = {},
+            onConfirm = {},
         )
     }
 

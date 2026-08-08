@@ -28,6 +28,7 @@ import androidx.navigation.toRoute
 import app.kcal.R
 import app.kcal.core.designsystem.KcalTheme
 import app.kcal.domain.model.ThemeMode
+import app.kcal.feature.entry.EntryRoute
 import app.kcal.feature.entry.ManualEntryRoute
 import app.kcal.feature.history.HistoryScreen
 import app.kcal.feature.settings.SettingsRoute
@@ -70,6 +71,10 @@ fun KcalNavHost(
     entryContent: @Composable (mealId: Long?, onClose: () -> Unit) -> Unit = { mealId, onClose ->
         ManualEntryRoute(mealId = mealId, onClose = onClose)
     },
+    foodTextContent: @Composable (onClose: () -> Unit, onLogManually: () -> Unit) -> Unit =
+        { onClose, onLogManually ->
+            EntryRoute(onClose = onClose, onLogManually = onLogManually)
+        },
     settingsContent: @Composable (onBackClick: () -> Unit) -> Unit = { onBackClick ->
         SettingsRoute(onBackClick = onBackClick)
     },
@@ -102,7 +107,7 @@ fun KcalNavHost(
             composable<TodayDestination> {
                 todayContent(
                     { navController.navigate(SettingsDestination) },
-                    { navController.navigate(ManualEntryDestination) },
+                    { navController.navigate(EntryDestination) },
                     { mealId -> navController.navigate(EditMealDestination(mealId)) },
                 )
             }
@@ -110,6 +115,16 @@ fun KcalNavHost(
             composable<HistoryDestination> { HistoryScreen() }
             composable<SettingsDestination> {
                 settingsContent { navController.popBackStack() }
+            }
+            composable<EntryDestination> {
+                foodTextContent(
+                    { navController.popBackStack() },
+                    {
+                        navController.navigate(ManualEntryDestination) {
+                            popUpTo(EntryDestination) { inclusive = true }
+                        }
+                    },
+                )
             }
             composable<ManualEntryDestination> {
                 entryContent(null) { navController.popBackStack() }
