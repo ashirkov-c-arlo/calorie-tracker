@@ -19,7 +19,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-class SaveManualMealTest {
+class SaveMealTest {
 
     private val instant = Instant.parse("2026-03-15T00:30:00Z")
 
@@ -87,7 +87,7 @@ class SaveManualMealTest {
         zoneId: ZoneId = ZoneId.of("UTC"),
         profileRepository: FakeProfileRepository =
             FakeProfileRepository(UserPreferences(profile = completeProfile())),
-    ): SaveManualMeal = SaveManualMeal(
+    ): SaveMeal = SaveMeal(
         mealRepository = mealRepository,
         profileRepository = profileRepository,
         calculateDailyTargets = CalculateDailyTargets(),

@@ -18,14 +18,23 @@ sealed interface SaveMealResult {
 }
 
 /** Creates or edits a meal only after hard validation and explicit user Save. */
-class SaveManualMeal(
+class SaveMeal(
     private val mealRepository: MealRepository,
     private val profileRepository: ProfileRepository,
     private val calculateDailyTargets: CalculateDailyTargets,
     private val validateMeal: ValidateMeal,
     private val timeProvider: TimeProvider,
 ) {
-    suspend operator fun invoke(mealId: Long?, items: List<FoodItem>): SaveMealResult {
+    /**
+     * [source] and [rawUserInput] describe how a *new* meal was produced. Editing keeps the
+     * origin of the stored meal, because the user only changed its numbers.
+     */
+    suspend operator fun invoke(
+        mealId: Long?,
+        items: List<FoodItem>,
+        source: EntrySource = EntrySource.MANUAL,
+        rawUserInput: String? = null,
+    ): SaveMealResult {
         val normalizedItems = items.map { it.copy(name = it.name.trim()) }
         val validation = validateMeal(normalizedItems)
         if (validation is MealValidationResult.Invalid) return SaveMealResult.Invalid(validation.errors)
@@ -40,8 +49,8 @@ class SaveManualMeal(
             localDate = today,
             at = instant,
             items = normalizedItems,
-            rawUserInput = null,
-            source = EntrySource.MANUAL,
+            rawUserInput = rawUserInput?.takeIf { it.isNotBlank() },
+            source = source,
         )
         val targetIfMissing = if (meal.localDate == today) currentTarget(today) else null
         return SaveMealResult.Saved(mealRepository.save(meal, targetIfMissing))

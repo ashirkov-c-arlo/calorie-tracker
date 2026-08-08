@@ -1,6 +1,5 @@
 package app.kcal.feature.entry
 
-import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,30 +8,24 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -42,6 +35,7 @@ import app.kcal.core.designsystem.KcalTheme
 import app.kcal.core.ui.ErrorScreen
 import app.kcal.core.ui.LoadingScreen
 import app.kcal.domain.model.ThemeMode
+import app.kcal.feature.entry.components.MealItemCard
 
 @Composable
 fun ManualEntryRoute(mealId: Long?, onClose: () -> Unit, viewModel: ManualEntryViewModel = hiltViewModel()) {
@@ -68,7 +62,7 @@ fun ManualEntryRoute(mealId: Long?, onClose: () -> Unit, viewModel: ManualEntryV
 fun ManualEntryScreen(
     uiState: ManualEntryUiState,
     onBackClick: () -> Unit,
-    onItemChange: (Long, ManualEntryField, String) -> Unit,
+    onItemChange: (Long, MealItemField, String) -> Unit,
     onAddItem: () -> Unit,
     onRemoveItem: (Long) -> Unit,
     onSave: () -> Unit,
@@ -132,7 +126,7 @@ fun ManualEntryScreen(
 private fun ManualEntryForm(
     uiState: ManualEntryUiState,
     onBackClick: () -> Unit,
-    onItemChange: (Long, ManualEntryField, String) -> Unit,
+    onItemChange: (Long, MealItemField, String) -> Unit,
     onAddItem: () -> Unit,
     onRemoveItem: (Long) -> Unit,
     onSave: () -> Unit,
@@ -147,7 +141,7 @@ private fun ManualEntryForm(
         verticalArrangement = Arrangement.spacedBy(KcalSpacing.medium),
     ) {
         uiState.items.forEachIndexed { index, item ->
-            ManualItemCard(
+            MealItemCard(
                 number = index + 1,
                 item = item,
                 canRemove = uiState.items.size > 1 && !uiState.isSaving,
@@ -186,131 +180,6 @@ private fun ManualEntryForm(
 }
 
 @Composable
-private fun ManualItemCard(
-    number: Int,
-    item: ManualEntryItemUiState,
-    canRemove: Boolean,
-    enabled: Boolean,
-    onChange: (ManualEntryField, String) -> Unit,
-    onRemove: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    OutlinedCard(modifier = modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(KcalSpacing.medium),
-            verticalArrangement = Arrangement.spacedBy(KcalSpacing.small),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = stringResource(R.string.manual_entry_item_number, number),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                IconButton(onClick = onRemove, enabled = canRemove) {
-                    Icon(
-                        imageVector = Icons.Filled.Delete,
-                        contentDescription = stringResource(R.string.action_remove_item),
-                    )
-                }
-            }
-            EntryTextField(
-                value = item.name,
-                label = stringResource(R.string.field_food_name),
-                error = item.errors.name,
-                enabled = enabled,
-                onValueChange = { onChange(ManualEntryField.NAME, it) },
-            )
-            EntryTextField(
-                value = item.grams,
-                label = stringResource(R.string.field_food_grams_optional),
-                suffix = stringResource(R.string.unit_g),
-                error = item.errors.grams,
-                enabled = enabled,
-                keyboardType = KeyboardType.Decimal,
-                onValueChange = { onChange(ManualEntryField.GRAMS, it) },
-            )
-            EntryTextField(
-                value = item.kcal,
-                label = stringResource(R.string.nutrient_calories),
-                suffix = stringResource(R.string.unit_kcal),
-                error = item.errors.kcal,
-                enabled = enabled,
-                keyboardType = KeyboardType.Number,
-                onValueChange = { onChange(ManualEntryField.KCAL, it) },
-            )
-            EntryTextField(
-                value = item.protein,
-                label = stringResource(R.string.nutrient_protein),
-                suffix = stringResource(R.string.unit_g),
-                error = item.errors.protein,
-                enabled = enabled,
-                keyboardType = KeyboardType.Decimal,
-                onValueChange = { onChange(ManualEntryField.PROTEIN, it) },
-            )
-            EntryTextField(
-                value = item.fat,
-                label = stringResource(R.string.nutrient_fat),
-                suffix = stringResource(R.string.unit_g),
-                error = item.errors.fat,
-                enabled = enabled,
-                keyboardType = KeyboardType.Decimal,
-                onValueChange = { onChange(ManualEntryField.FAT, it) },
-            )
-            EntryTextField(
-                value = item.carbs,
-                label = stringResource(R.string.nutrient_carbs),
-                suffix = stringResource(R.string.unit_g),
-                error = item.errors.carbs,
-                enabled = enabled,
-                keyboardType = KeyboardType.Decimal,
-                onValueChange = { onChange(ManualEntryField.CARBS, it) },
-            )
-            if (item.needsReview) {
-                Text(
-                    text = stringResource(R.string.manual_entry_review_warning),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun EntryTextField(
-    value: String,
-    label: String,
-    error: ManualEntryFieldError?,
-    enabled: Boolean,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    suffix: String? = null,
-    keyboardType: KeyboardType = KeyboardType.Text,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth(),
-        enabled = enabled,
-        label = { Text(text = label) },
-        suffix = suffix?.let { { Text(text = it) } },
-        isError = error != null,
-        supportingText = error?.let { { Text(text = stringResource(it.messageRes())) } },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-    )
-}
-
-private fun ManualEntryFieldError.messageRes(): Int = when (this) {
-    ManualEntryFieldError.REQUIRED -> R.string.error_required
-    ManualEntryFieldError.INVALID_NUMBER -> R.string.error_invalid_number
-    ManualEntryFieldError.NEGATIVE -> R.string.error_non_negative
-}
-
-@Composable
 private fun ManualEntryPreview(themeMode: ThemeMode, uiState: ManualEntryUiState) {
     KcalTheme(themeMode = themeMode) {
         ManualEntryScreen(
@@ -321,48 +190,6 @@ private fun ManualEntryPreview(themeMode: ThemeMode, uiState: ManualEntryUiState
             onRemoveItem = {},
             onSave = {},
             onRetry = {},
-        )
-    }
-}
-
-@Preview(
-    name = "Manual item card White",
-    uiMode = Configuration.UI_MODE_NIGHT_NO,
-    heightDp = 1200,
-)
-@Preview(
-    name = "Manual item card Black",
-    uiMode = Configuration.UI_MODE_NIGHT_YES,
-    heightDp = 1200,
-)
-@Composable
-private fun ManualItemCardPreview() {
-    KcalTheme(themeMode = ThemeMode.SYSTEM) {
-        ManualItemCard(
-            number = 1,
-            item = manualEntryContentPreviewState.items.first(),
-            canRemove = true,
-            enabled = true,
-            onChange = { _, _ -> },
-            onRemove = {},
-            modifier = Modifier.padding(KcalSpacing.medium),
-        )
-    }
-}
-
-@Preview(name = "Entry text field White", uiMode = Configuration.UI_MODE_NIGHT_NO)
-@Preview(name = "Entry text field Black", uiMode = Configuration.UI_MODE_NIGHT_YES)
-@Composable
-private fun EntryTextFieldPreview() {
-    KcalTheme(themeMode = ThemeMode.SYSTEM) {
-        EntryTextField(
-            value = "12.55",
-            label = stringResource(R.string.nutrient_protein),
-            suffix = stringResource(R.string.unit_g),
-            error = null,
-            enabled = true,
-            onValueChange = {},
-            modifier = Modifier.padding(KcalSpacing.medium),
         )
     }
 }

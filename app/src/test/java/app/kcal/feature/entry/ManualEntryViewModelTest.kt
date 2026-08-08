@@ -4,7 +4,7 @@ import app.kcal.core.common.AppLocaleProvider
 import app.kcal.core.common.TimeProvider
 import app.kcal.domain.model.UserPreferences
 import app.kcal.domain.usecase.CalculateDailyTargets
-import app.kcal.domain.usecase.SaveManualMeal
+import app.kcal.domain.usecase.SaveMeal
 import app.kcal.domain.usecase.ValidateMeal
 import app.kcal.testing.FakeMealRepository
 import app.kcal.testing.FakeProfileRepository
@@ -68,15 +68,15 @@ class ManualEntryViewModelTest {
         val viewModel = viewModel(repository)
         viewModel.load(null)
         val key = viewModel.uiState.value.items.single().key
-        viewModel.onItemChange(key, ManualEntryField.PROTEIN, "-1")
+        viewModel.onItemChange(key, MealItemField.PROTEIN, "-1")
 
         viewModel.onSave()
         runCurrent()
 
         val errors = viewModel.uiState.value.items.single().errors
-        assertEquals(ManualEntryFieldError.REQUIRED, errors.name)
-        assertEquals(ManualEntryFieldError.REQUIRED, errors.kcal)
-        assertEquals(ManualEntryFieldError.NEGATIVE, errors.protein)
+        assertEquals(MealItemFieldError.REQUIRED, errors.name)
+        assertEquals(MealItemFieldError.REQUIRED, errors.kcal)
+        assertEquals(MealItemFieldError.NEGATIVE, errors.protein)
         assertTrue(repository.meals.value.isEmpty())
     }
 
@@ -147,7 +147,7 @@ class ManualEntryViewModelTest {
         assertEquals("125,5", item.grams)
         assertEquals("4,5", item.protein)
 
-        viewModel.onItemChange(item.key, ManualEntryField.NAME, "Brown rice")
+        viewModel.onItemChange(item.key, MealItemField.NAME, "Brown rice")
         viewModel.onSave()
         runCurrent()
 
@@ -176,7 +176,7 @@ class ManualEntryViewModelTest {
         assertEquals("12,55", loaded.protein)
         assertEquals("0,04", loaded.fat)
 
-        viewModel.onItemChange(loaded.key, ManualEntryField.NAME, "Renamed")
+        viewModel.onItemChange(loaded.key, MealItemField.NAME, "Renamed")
         viewModel.onSave()
         runCurrent()
 
@@ -226,12 +226,12 @@ class ManualEntryViewModelTest {
         kcal: String = "300",
         protein: String = "10.0",
     ) {
-        viewModel.onItemChange(key, ManualEntryField.NAME, "Oatmeal")
-        viewModel.onItemChange(key, ManualEntryField.GRAMS, grams)
-        viewModel.onItemChange(key, ManualEntryField.KCAL, kcal)
-        viewModel.onItemChange(key, ManualEntryField.PROTEIN, protein)
-        viewModel.onItemChange(key, ManualEntryField.FAT, "6.0")
-        viewModel.onItemChange(key, ManualEntryField.CARBS, "50.0")
+        viewModel.onItemChange(key, MealItemField.NAME, "Oatmeal")
+        viewModel.onItemChange(key, MealItemField.GRAMS, grams)
+        viewModel.onItemChange(key, MealItemField.KCAL, kcal)
+        viewModel.onItemChange(key, MealItemField.PROTEIN, protein)
+        viewModel.onItemChange(key, MealItemField.FAT, "6.0")
+        viewModel.onItemChange(key, MealItemField.CARBS, "50.0")
     }
 
     private fun viewModel(mealRepository: FakeMealRepository, locale: Locale = Locale.US): ManualEntryViewModel {
@@ -244,8 +244,8 @@ class ManualEntryViewModelTest {
             )
         return ManualEntryViewModel(
             mealRepository = mealRepository,
-            saveManualMeal =
-            SaveManualMeal(
+            saveMeal =
+            SaveMeal(
                 mealRepository = mealRepository,
                 profileRepository = profileRepository,
                 calculateDailyTargets = CalculateDailyTargets(),
