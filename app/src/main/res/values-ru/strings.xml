@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_today">Сегодня</string>
+    <string name="nav_trends">Динамика</string>
+    <string name="nav_history">История</string>
+
+    <string name="today_title">Сегодня</string>
+    <string name="trends_title">Динамика</string>
+    <string name="history_title">История</string>
+    <string name="settings_title">Настройки</string>
+    <string name="profile_setup_title">Ваш профиль</string>
+
+    <string name="settings_open_content_description">Открыть настройки</string>
+    <string name="navigate_back_content_description">Назад</string>
+
+    <string name="loading">Загрузка…</string>
+
+    <string name="placeholder_today">Здесь появится прогресс по калориям и макронутриентам вместе со списком приёмов пищи.</string>
+    <string name="placeholder_trends">Здесь появятся точки веса и скользящее среднее за 7 дней.</string>
+    <string name="placeholder_history">Здесь появятся дни и недели ISO с сохранёнными для них целями.</string>
+
+    <string name="profile_intro">Введите данные один раз. Все поля обязательны, позже их можно изменить в настройках.</string>
+    <string name="profile_disclaimer">Это оценка для в целом здоровых взрослых от 18 лет. Она не подходит при беременности и кормлении, расстройствах пищевого поведения, лечебных диетах и заболеваниях, например почек или печени.</string>
+
+    <string name="field_current_weight">Текущий вес</string>
+    <string name="field_height">Рост</string>
+    <string name="field_height_feet">Рост, футы</string>
+    <string name="field_height_inches">Рост, дюймы</string>
+    <string name="field_age">Возраст, лет</string>
+    <string name="field_target_weight">Целевой вес</string>
+    <string name="field_loss_rate">Скорость снижения веса</string>
+
+    <string name="field_formula_variant">Вариант формулы</string>
+    <string name="field_formula_variant_hint">Выбирает проверенные константы формулы Миффлина–Сан Жеора. Это не поле гендерной идентичности.</string>
+    <string name="formula_variant_female">Женский вариант</string>
+    <string name="formula_variant_male">Мужской вариант</string>
+
+    <string name="field_activity">Привычная активность</string>
+    <string name="activity_sedentary">В основном сидя, почти без намеренной активности</string>
+    <string name="activity_light">Легкая активность примерно 1–3 дня в неделю</string>
+    <string name="activity_moderate">Умеренная активность примерно 3–5 дней в неделю</string>
+    <string name="activity_high">Тяжелая активность почти каждый день или физическая работа</string>
+
+    <string name="unit_kg">кг</string>
+    <string name="unit_lb">фунты</string>
+    <string name="unit_cm">см</string>
+    <string name="unit_ft">футы</string>
+    <string name="unit_in">дюймы</string>
+    <string name="unit_kg_per_week">кг / неделя</string>
+    <string name="unit_lb_per_week">фунты / неделя</string>
+
+    <string name="error_required">Обязательное поле</string>
+    <string name="error_invalid_number">Введите число</string>
+    <string name="error_save_failed">Не удалось сохранить цель. Профиль сохранен, цель будет пересчитана при следующем запуске.</string>
+    <string name="error_out_of_range">Значение вне допустимого диапазона</string>
+
+    <string name="action_save">Сохранить</string>
+
+    <string name="target_title">Расчетная цель на день</string>
+    <string name="target_kcal">%1$s ккал</string>
+    <string name="target_macros">Белки %1$s г · Жиры %2$s г · Углеводы %3$s г</string>
+    <string name="target_rate_effective">Расчетный темп: %1$s в неделю</string>
+    <string name="target_rate_requested">Вы запросили %1$s в неделю</string>
+
+    <string name="warning_rate_limited">Темп ограничен до 1 кг в неделю и 1 процента массы тела.</string>
+    <string name="warning_deficit_capped">Дефицит ограничен 20 процентами суточного расхода энергии и 750 ккал.</string>
+    <string name="warning_intake_floor">Цель удерживается на минимальном потреблении для выбранного варианта формулы.</string>
+    <string name="warning_target_reached">Текущий вес уже достиг целевого, поэтому цель — поддержание веса.</string>
+
+    <string name="unavailable_missing_inputs">Заполните все поля, чтобы увидеть оценку.</string>
+    <string name="unavailable_age_below_minimum">Оценка доступна только с 18 лет.</string>
+    <string name="unavailable_invalid_measurements">Проверьте введенные измерения.</string>
+    <string name="unavailable_non_positive_energy">С такими значениями оценку получить нельзя.</string>
+
+    <string name="settings_section_profile">Профиль</string>
+    <string name="settings_section_appearance">Язык и тема</string>
+
+    <string name="field_unit_system">Единицы</string>
+    <string name="unit_system_metric">Метрические (кг, см)</string>
+    <string name="unit_system_imperial">Имперские (фунты, футы/дюймы)</string>
+
+    <string name="field_language">Язык интерфейса</string>
+    <string name="language_system">Как в системе</string>
+    <string name="language_english">Английский</string>
+    <string name="language_russian">Русский</string>
+
+    <string name="field_theme">Тема</string>
+    <string name="theme_system">Как в системе</string>
+    <string name="theme_white">Белая</string>
+    <string name="theme_black">Черная</string>
+</resources>
