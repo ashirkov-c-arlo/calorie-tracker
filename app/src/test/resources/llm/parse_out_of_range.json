@@ -1,0 +1,19 @@
+{
+  "type": "success",
+  "items": [
+    {
+      "name": "Family-size pizza",
+      "grams": 900.0,
+      "kcal": 99999,
+      "protein_g": 120.0,
+      "fat_g": 210.0,
+      "carbs_g": 480.0,
+      "confidence": 0.42
+    }
+  ],
+  "note": "Please double-check this estimate.",
+  "usage": {
+    "input_tokens": 260,
+    "output_tokens": 88
+  }
+}

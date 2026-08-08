@@ -1,0 +1,28 @@
+{
+  "type": "success",
+  "items": [
+    {
+      "name": "Chicken breast",
+      "grams": 180.0,
+      "kcal": 297,
+      "protein_g": 55.8,
+      "fat_g": 6.5,
+      "carbs_g": 0.0,
+      "confidence": 0.91
+    },
+    {
+      "name": "Boiled rice",
+      "grams": 220.0,
+      "kcal": 286,
+      "protein_g": 5.9,
+      "fat_g": 0.7,
+      "carbs_g": 62.9,
+      "confidence": 0.84
+    }
+  ],
+  "note": null,
+  "usage": {
+    "input_tokens": 420,
+    "output_tokens": 96
+  }
+}

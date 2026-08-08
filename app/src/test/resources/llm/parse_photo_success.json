@@ -1,0 +1,28 @@
+{
+  "type": "success",
+  "items": [
+    {
+      "name": "Grilled salmon",
+      "grams": 160.0,
+      "kcal": 330,
+      "protein_g": 33.6,
+      "fat_g": 21.0,
+      "carbs_g": 0.0,
+      "confidence": 0.68
+    },
+    {
+      "name": "Steamed broccoli",
+      "grams": 120.0,
+      "kcal": 41,
+      "protein_g": 3.4,
+      "fat_g": 0.5,
+      "carbs_g": 8.2,
+      "confidence": 0.71
+    }
+  ],
+  "note": "Portion sizes were estimated from the plate.",
+  "usage": {
+    "input_tokens": 1420,
+    "output_tokens": 132
+  }
+}

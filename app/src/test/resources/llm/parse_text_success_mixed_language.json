@@ -1,0 +1,28 @@
+{
+  "type": "success",
+  "items": [
+    {
+      "name": "Buckwheat porridge",
+      "grams": 250.0,
+      "kcal": 330,
+      "protein_g": 12.5,
+      "fat_g": 3.2,
+      "carbs_g": 62.5,
+      "confidence": 0.77
+    },
+    {
+      "name": "Cottage cheese, 5%",
+      "grams": 150.0,
+      "kcal": 180,
+      "protein_g": 25.5,
+      "fat_g": 7.5,
+      "carbs_g": 4.5,
+      "confidence": 0.73
+    }
+  ],
+  "note": "Item names follow the interface language, not the input language.",
+  "usage": {
+    "input_tokens": 401,
+    "output_tokens": 118
+  }
+}

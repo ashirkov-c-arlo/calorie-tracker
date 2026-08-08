@@ -1,0 +1,28 @@
+{
+  "type": "success",
+  "items": [
+    {
+      "name": "Омлет из трёх яиц",
+      "grams": 180.0,
+      "kcal": 297,
+      "protein_g": 19.8,
+      "fat_g": 22.5,
+      "carbs_g": 1.2,
+      "confidence": 0.82
+    },
+    {
+      "name": "Кофе с молоком",
+      "grams": null,
+      "kcal": 63,
+      "protein_g": 3.3,
+      "fat_g": 3.4,
+      "carbs_g": 4.8,
+      "confidence": 0.61
+    }
+  ],
+  "note": "Вес порций оценён по типичной подаче.",
+  "usage": {
+    "input_tokens": 388,
+    "output_tokens": 104
+  }
+}
