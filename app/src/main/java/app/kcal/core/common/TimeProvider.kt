@@ -13,5 +13,7 @@ import javax.inject.Inject
 class TimeProvider @Inject constructor(private val clock: Clock, private val zoneId: ZoneId) {
     fun now(): Instant = clock.instant()
 
-    fun today(): LocalDate = clock.instant().atZone(zoneId).toLocalDate()
+    fun localDateAt(instant: Instant): LocalDate = instant.atZone(zoneId).toLocalDate()
+
+    fun today(): LocalDate = localDateAt(now())
 }

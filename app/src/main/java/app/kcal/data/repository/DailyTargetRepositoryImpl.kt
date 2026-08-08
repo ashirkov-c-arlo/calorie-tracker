@@ -5,10 +5,15 @@ import app.kcal.data.db.DailyTargetSnapshotEntity
 import app.kcal.domain.model.DailyTargetSnapshot
 import app.kcal.domain.model.Macros
 import app.kcal.domain.repository.DailyTargetRepository
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 import javax.inject.Inject
 
 class DailyTargetRepositoryImpl @Inject constructor(private val dao: DailyTargetSnapshotDao) : DailyTargetRepository {
+
+    override fun observe(localDate: LocalDate): Flow<DailyTargetSnapshot?> =
+        dao.observeByDate(localDate.epochDayInt()).map { it?.toDomain() }
 
     override suspend fun find(localDate: LocalDate): DailyTargetSnapshot? =
         dao.findByDate(localDate.epochDayInt())?.toDomain()

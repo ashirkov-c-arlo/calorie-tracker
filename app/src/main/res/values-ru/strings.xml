@@ -9,15 +9,40 @@
     <string name="history_title">История</string>
     <string name="settings_title">Настройки</string>
     <string name="profile_setup_title">Ваш профиль</string>
+    <string name="manual_entry_add_title">Добавить приём пищи</string>
+    <string name="manual_entry_edit_title">Изменить приём пищи</string>
 
     <string name="settings_open_content_description">Открыть настройки</string>
+    <string name="today_add_meal_content_description">Добавить приём пищи</string>
+    <string name="meal_edit_content_description">Изменить приём пищи</string>
+    <string name="meal_delete_content_description">Удалить приём пищи</string>
     <string name="navigate_back_content_description">Назад</string>
 
     <string name="loading">Загрузка…</string>
 
-    <string name="placeholder_today">Здесь появится прогресс по калориям и макронутриентам вместе со списком приёмов пищи.</string>
     <string name="placeholder_trends">Здесь появятся точки веса и скользящее среднее за 7 дней.</string>
     <string name="placeholder_history">Здесь появятся дни и недели ISO с сохранёнными для них целями.</string>
+
+    <string name="today_progress_title">Прогресс за день</string>
+    <string name="today_empty">Приёмов пищи пока нет. Добавьте первый.</string>
+    <string name="today_load_failed">Не удалось загрузить дневник за сегодня из локального хранилища.</string>
+    <string name="today_target_unavailable">Цель на день недоступна. Приёмы пищи всё равно можно записывать.</string>
+    <string name="today_consumed_without_target">%1$s ккал · Белки %2$s г · Жиры %3$s г · Углеводы %4$s г</string>
+    <string name="nutrient_calories">Калории</string>
+    <string name="nutrient_protein">Белки</string>
+    <string name="nutrient_fat">Жиры</string>
+    <string name="nutrient_carbs">Углеводы</string>
+    <string name="nutrient_progress_kcal">%1$s / %2$s ккал</string>
+    <string name="nutrient_progress_grams">%1$s / %2$s г</string>
+    <string name="meal_kcal">%1$s ккал</string>
+    <string name="meal_macros">Белки %1$s г · Жиры %2$s г · Углеводы %3$s г</string>
+
+    <string name="manual_entry_item_number">Продукт %1$d</string>
+    <string name="field_food_name">Название продукта</string>
+    <string name="field_food_grams_optional">Масса (необязательно)</string>
+    <string name="manual_entry_review_warning">Значение выходит за обычный диапазон проверки. Проверьте его перед сохранением.</string>
+    <string name="manual_entry_load_failed">Не удалось загрузить этот приём пищи из локального хранилища.</string>
+    <string name="manual_entry_save_failed">Не удалось сохранить приём пищи. Проверьте значения и повторите попытку.</string>
 
     <string name="profile_intro">Введите данные один раз. Все поля обязательны, позже их можно изменить в настройках.</string>
     <string name="profile_disclaimer">Это оценка для в целом здоровых взрослых от 18 лет. Она не подходит при беременности и кормлении, расстройствах пищевого поведения, лечебных диетах и заболеваниях, например почек или печени.</string>
@@ -56,14 +81,20 @@
     <string name="unit_in">дюймы</string>
     <string name="unit_kg_per_week">кг / неделя</string>
     <string name="unit_lb_per_week">фунты / неделя</string>
+    <string name="unit_g">г</string>
+    <string name="unit_kcal">ккал</string>
 
     <string name="error_required">Обязательное поле</string>
     <string name="error_invalid_number">Введите число</string>
     <string name="error_save_failed">Не удалось сохранить изменения. Попробуйте снова.</string>
     <string name="error_out_of_range">Значение вне допустимого диапазона</string>
+    <string name="error_non_negative">Введите ноль или положительное число</string>
 
     <string name="action_save">Сохранить</string>
     <string name="action_retry">Повторить</string>
+    <string name="action_cancel">Отмена</string>
+    <string name="action_add_item">Добавить продукт</string>
+    <string name="action_remove_item">Удалить продукт</string>
 
     <string name="startup_failed">Локальное хранилище недоступно, поэтому дневную цель не удалось подготовить.</string>
 

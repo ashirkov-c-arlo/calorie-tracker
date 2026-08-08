@@ -1,29 +1,79 @@
 package app.kcal.feature.today
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Surface
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.kcal.R
+import app.kcal.core.common.DecimalText
+import app.kcal.core.designsystem.KcalSpacing
 import app.kcal.core.designsystem.KcalTheme
-import app.kcal.core.ui.PlaceholderBody
+import app.kcal.core.ui.ErrorScreen
+import app.kcal.core.ui.LoadingScreen
+import app.kcal.core.ui.currentLocale
+import app.kcal.domain.model.Macros
 import app.kcal.domain.model.ThemeMode
+
+@Composable
+fun TodayRoute(
+    onSettingsClick: () -> Unit,
+    onAddMealClick: () -> Unit,
+    onEditMealClick: (Long) -> Unit,
+    viewModel: TodayViewModel = hiltViewModel(),
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    LaunchedEffect(viewModel) { viewModel.onVisible() }
+    TodayScreen(
+        uiState = uiState,
+        onSettingsClick = onSettingsClick,
+        onAddMealClick = onAddMealClick,
+        onEditMealClick = onEditMealClick,
+        onDeleteMealClick = viewModel::onDeleteMeal,
+        onRetry = viewModel::onRetry,
+    )
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TodayScreen(onSettingsClick: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(modifier = modifier.fillMaxSize()) {
-        Column {
+fun TodayScreen(
+    uiState: TodayUiState,
+    onSettingsClick: () -> Unit,
+    onAddMealClick: () -> Unit,
+    onEditMealClick: (Long) -> Unit,
+    onDeleteMealClick: (Long) -> Unit,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        topBar = {
             TopAppBar(
                 title = { Text(text = stringResource(R.string.today_title)) },
                 actions = {
@@ -35,23 +85,257 @@ fun TodayScreen(onSettingsClick: () -> Unit, modifier: Modifier = Modifier) {
                     }
                 },
             )
-            PlaceholderBody(text = stringResource(R.string.placeholder_today))
+        },
+        floatingActionButton = {
+            if (!uiState.isLoading && !uiState.hasError) {
+                FloatingActionButton(onClick = onAddMealClick) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = stringResource(R.string.today_add_meal_content_description),
+                    )
+                }
+            }
+        },
+    ) { contentPadding ->
+        when {
+            uiState.isLoading -> LoadingScreen(modifier = Modifier.padding(contentPadding))
+
+            uiState.hasError ->
+                ErrorScreen(
+                    message = stringResource(R.string.today_load_failed),
+                    onRetry = onRetry,
+                    modifier = Modifier.padding(contentPadding),
+                )
+
+            else ->
+                TodayContent(
+                    uiState = uiState,
+                    onEditMealClick = onEditMealClick,
+                    onDeleteMealClick = onDeleteMealClick,
+                    modifier = Modifier.padding(contentPadding),
+                )
         }
     }
 }
 
-@Preview(name = "Today White")
 @Composable
-private fun TodayScreenWhitePreview() {
-    KcalTheme(themeMode = ThemeMode.WHITE) {
-        TodayScreen(onSettingsClick = {})
+private fun TodayContent(
+    uiState: TodayUiState,
+    onEditMealClick: (Long) -> Unit,
+    onDeleteMealClick: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(KcalSpacing.medium),
+        verticalArrangement = Arrangement.spacedBy(KcalSpacing.medium),
+    ) {
+        item { DailyProgressCard(consumed = uiState.consumed, progress = uiState.progress) }
+        if (uiState.meals.isEmpty()) {
+            item {
+                Text(
+                    text = stringResource(R.string.today_empty),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+        } else {
+            items(items = uiState.meals, key = TodayMealUiState::id) { meal ->
+                MealCard(
+                    meal = meal,
+                    onEditClick = { onEditMealClick(meal.id) },
+                    onDeleteClick = { onDeleteMealClick(meal.id) },
+                )
+            }
+        }
     }
 }
 
-@Preview(name = "Today Black")
 @Composable
-private fun TodayScreenBlackPreview() {
-    KcalTheme(themeMode = ThemeMode.BLACK) {
-        TodayScreen(onSettingsClick = {})
+private fun DailyProgressCard(consumed: Macros, progress: TodayMacroProgressUiState?, modifier: Modifier = Modifier) {
+    val locale = currentLocale()
+    OutlinedCard(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(KcalSpacing.medium),
+            verticalArrangement = Arrangement.spacedBy(KcalSpacing.small),
+        ) {
+            Text(text = stringResource(R.string.today_progress_title), style = MaterialTheme.typography.titleMedium)
+            if (progress == null) {
+                Text(
+                    text =
+                    stringResource(
+                        R.string.today_consumed_without_target,
+                        DecimalText.formatInt(consumed.kcal, locale),
+                        DecimalText.format(consumed.proteinG, locale),
+                        DecimalText.format(consumed.fatG, locale),
+                        DecimalText.format(consumed.carbsG, locale),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = stringResource(R.string.today_target_unavailable),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                ProgressLine(
+                    label = stringResource(R.string.nutrient_calories),
+                    value =
+                    stringResource(
+                        R.string.nutrient_progress_kcal,
+                        DecimalText.formatInt(progress.consumed.kcal, locale),
+                        DecimalText.formatInt(progress.target.kcal, locale),
+                    ),
+                    fraction = progress.kcalFraction,
+                )
+                ProgressLine(
+                    label = stringResource(R.string.nutrient_protein),
+                    value =
+                    stringResource(
+                        R.string.nutrient_progress_grams,
+                        DecimalText.format(progress.consumed.proteinG, locale),
+                        DecimalText.format(progress.target.proteinG, locale),
+                    ),
+                    fraction = progress.proteinFraction,
+                )
+                ProgressLine(
+                    label = stringResource(R.string.nutrient_fat),
+                    value =
+                    stringResource(
+                        R.string.nutrient_progress_grams,
+                        DecimalText.format(progress.consumed.fatG, locale),
+                        DecimalText.format(progress.target.fatG, locale),
+                    ),
+                    fraction = progress.fatFraction,
+                )
+                ProgressLine(
+                    label = stringResource(R.string.nutrient_carbs),
+                    value =
+                    stringResource(
+                        R.string.nutrient_progress_grams,
+                        DecimalText.format(progress.consumed.carbsG, locale),
+                        DecimalText.format(progress.target.carbsG, locale),
+                    ),
+                    fraction = progress.carbsFraction,
+                )
+            }
+        }
     }
 }
+
+@Composable
+private fun ProgressLine(label: String, value: String, fraction: Float) {
+    Column(verticalArrangement = Arrangement.spacedBy(KcalSpacing.extraSmall)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(text = label, style = MaterialTheme.typography.bodyMedium)
+            Text(text = value, style = MaterialTheme.typography.bodyMedium)
+        }
+        LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
+private fun MealCard(
+    meal: TodayMealUiState,
+    onEditClick: () -> Unit,
+    onDeleteClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val locale = currentLocale()
+    OutlinedCard(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(KcalSpacing.medium),
+            verticalArrangement = Arrangement.spacedBy(KcalSpacing.extraSmall),
+        ) {
+            meal.itemNames.forEach { name ->
+                Text(text = name, style = MaterialTheme.typography.titleSmall)
+            }
+            Text(
+                text =
+                stringResource(
+                    R.string.meal_kcal,
+                    DecimalText.formatInt(meal.totals.kcal, locale),
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text =
+                stringResource(
+                    R.string.meal_macros,
+                    DecimalText.format(meal.totals.proteinG, locale),
+                    DecimalText.format(meal.totals.fatG, locale),
+                    DecimalText.format(meal.totals.carbsG, locale),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                IconButton(onClick = onEditClick) {
+                    Icon(
+                        imageVector = Icons.Filled.Edit,
+                        contentDescription = stringResource(R.string.meal_edit_content_description),
+                    )
+                }
+                IconButton(onClick = onDeleteClick) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = stringResource(R.string.meal_delete_content_description),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TodayPreview(themeMode: ThemeMode, uiState: TodayUiState) {
+    KcalTheme(themeMode = themeMode) {
+        TodayScreen(
+            uiState = uiState,
+            onSettingsClick = {},
+            onAddMealClick = {},
+            onEditMealClick = {},
+            onDeleteMealClick = {},
+            onRetry = {},
+        )
+    }
+}
+
+@Preview(name = "Today loading White")
+@Composable
+private fun TodayLoadingWhitePreview() = TodayPreview(ThemeMode.WHITE, TodayUiState())
+
+@Preview(name = "Today loading Black")
+@Composable
+private fun TodayLoadingBlackPreview() = TodayPreview(ThemeMode.BLACK, TodayUiState())
+
+@Preview(name = "Today empty White")
+@Composable
+private fun TodayEmptyWhitePreview() = TodayPreview(ThemeMode.WHITE, todayEmptyPreviewState)
+
+@Preview(name = "Today empty Black")
+@Composable
+private fun TodayEmptyBlackPreview() = TodayPreview(ThemeMode.BLACK, todayEmptyPreviewState)
+
+@Preview(name = "Today no target White")
+@Composable
+private fun TodayNoTargetWhitePreview() = TodayPreview(ThemeMode.WHITE, todayNoTargetPreviewState)
+
+@Preview(name = "Today no target Black")
+@Composable
+private fun TodayNoTargetBlackPreview() = TodayPreview(ThemeMode.BLACK, todayNoTargetPreviewState)
+
+@Preview(name = "Today error White")
+@Composable
+private fun TodayErrorWhitePreview() = TodayPreview(ThemeMode.WHITE, todayErrorPreviewState)
+
+@Preview(name = "Today error Black")
+@Composable
+private fun TodayErrorBlackPreview() = TodayPreview(ThemeMode.BLACK, todayErrorPreviewState)
+
+@Preview(name = "Today content White")
+@Composable
+private fun TodayContentWhitePreview() = TodayPreview(ThemeMode.WHITE, todayContentPreviewState)
+
+@Preview(name = "Today content Black")
+@Composable
+private fun TodayContentBlackPreview() = TodayPreview(ThemeMode.BLACK, todayContentPreviewState)

@@ -24,12 +24,16 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import app.kcal.R
 import app.kcal.core.designsystem.KcalTheme
 import app.kcal.domain.model.ThemeMode
+import app.kcal.feature.entry.ManualEntryRoute
 import app.kcal.feature.history.HistoryScreen
 import app.kcal.feature.settings.SettingsRoute
+import app.kcal.feature.today.TodayRoute
 import app.kcal.feature.today.TodayScreen
+import app.kcal.feature.today.todayContentPreviewState
 import app.kcal.feature.trends.TrendsScreen
 import kotlin.reflect.KClass
 
@@ -52,6 +56,20 @@ enum class TopLevelDestination(
 fun KcalNavHost(
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
+    todayContent: @Composable (
+        onSettingsClick: () -> Unit,
+        onAddMealClick: () -> Unit,
+        onEditMealClick: (Long) -> Unit,
+    ) -> Unit = { onSettingsClick, onAddMealClick, onEditMealClick ->
+        TodayRoute(
+            onSettingsClick = onSettingsClick,
+            onAddMealClick = onAddMealClick,
+            onEditMealClick = onEditMealClick,
+        )
+    },
+    entryContent: @Composable (mealId: Long?, onClose: () -> Unit) -> Unit = { mealId, onClose ->
+        ManualEntryRoute(mealId = mealId, onClose = onClose)
+    },
     settingsContent: @Composable (onBackClick: () -> Unit) -> Unit = { onBackClick ->
         SettingsRoute(onBackClick = onBackClick)
     },
@@ -82,12 +100,23 @@ fun KcalNavHost(
             modifier = Modifier.padding(innerPadding),
         ) {
             composable<TodayDestination> {
-                TodayScreen(onSettingsClick = { navController.navigate(SettingsDestination) })
+                todayContent(
+                    { navController.navigate(SettingsDestination) },
+                    { navController.navigate(ManualEntryDestination) },
+                    { mealId -> navController.navigate(EditMealDestination(mealId)) },
+                )
             }
             composable<TrendsDestination> { TrendsScreen() }
             composable<HistoryDestination> { HistoryScreen() }
             composable<SettingsDestination> {
                 settingsContent { navController.popBackStack() }
+            }
+            composable<ManualEntryDestination> {
+                entryContent(null) { navController.popBackStack() }
+            }
+            composable<EditMealDestination> { backStackEntry ->
+                val destination = backStackEntry.toRoute<EditMealDestination>()
+                entryContent(destination.mealId) { navController.popBackStack() }
             }
         }
     }
@@ -111,11 +140,27 @@ private fun KcalBottomBar(currentDestination: NavDestination?, onSelect: (TopLev
 private fun NavDestination?.isTopLevel(): Boolean =
     this != null && TopLevelDestination.entries.any { hasRoute(it.routeClass) }
 
+@Composable
+private fun PreviewNavHost() {
+    KcalNavHost(
+        todayContent = { onSettingsClick, onAddMealClick, onEditMealClick ->
+            TodayScreen(
+                uiState = todayContentPreviewState,
+                onSettingsClick = onSettingsClick,
+                onAddMealClick = onAddMealClick,
+                onEditMealClick = onEditMealClick,
+                onDeleteMealClick = {},
+                onRetry = {},
+            )
+        },
+    )
+}
+
 @Preview(name = "Navigation White")
 @Composable
 private fun KcalNavHostWhitePreview() {
     KcalTheme(themeMode = ThemeMode.WHITE) {
-        KcalNavHost()
+        PreviewNavHost()
     }
 }
 
@@ -123,6 +168,6 @@ private fun KcalNavHostWhitePreview() {
 @Composable
 private fun KcalNavHostBlackPreview() {
     KcalTheme(themeMode = ThemeMode.BLACK) {
-        KcalNavHost()
+        PreviewNavHost()
     }
 }

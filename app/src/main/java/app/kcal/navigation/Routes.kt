@@ -17,3 +17,9 @@ data object HistoryDestination
 
 @Serializable
 data object SettingsDestination
+
+@Serializable
+data object ManualEntryDestination
+
+@Serializable
+data class EditMealDestination(val mealId: Long)

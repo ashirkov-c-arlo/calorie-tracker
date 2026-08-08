@@ -2,7 +2,9 @@ package app.kcal.testing
 
 import app.kcal.domain.model.DailyTargetSnapshot
 import app.kcal.domain.repository.DailyTargetRepository
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 import java.io.IOException
 import java.time.LocalDate
 
@@ -15,6 +17,8 @@ class FakeDailyTargetRepository(private var failOnWrite: Boolean = false) : Dail
     fun failNextWrites(fail: Boolean) {
         failOnWrite = fail
     }
+
+    override fun observe(localDate: LocalDate): Flow<DailyTargetSnapshot?> = snapshots.map { it[localDate] }
 
     override suspend fun find(localDate: LocalDate): DailyTargetSnapshot? = snapshots.value[localDate]
 
