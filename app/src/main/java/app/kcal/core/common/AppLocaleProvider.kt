@@ -10,3 +10,11 @@ import java.util.Locale
 fun interface AppLocaleProvider {
     fun current(): Locale
 }
+
+/**
+ * Resources, the locale config, and the proxy contract support Russian and English only, so
+ * every other system language resolves to English for both formatting and `Accept-Language`.
+ */
+fun interfaceLocale(locale: Locale): Locale = if (locale.language == RUSSIAN.language) RUSSIAN else Locale.ENGLISH
+
+private val RUSSIAN: Locale = Locale.forLanguageTag("ru")

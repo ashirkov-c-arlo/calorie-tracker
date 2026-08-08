@@ -4,9 +4,11 @@ import app.kcal.domain.usecase.ValidateMeal
 import app.kcal.domain.usecase.needsReview
 import app.kcal.llm.FailureReason
 import app.kcal.llm.ParseResult
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -68,8 +70,33 @@ class ParseResponseMappingTest {
     }
 
     @Test
-    fun `a missing required field is a hard invalid response`() {
-        assertEquals(FailureReason.INVALID_RESPONSE, (parse("parse_invalid_schema.json") as ParseResult.Failure).reason)
+    fun `a missing required field never deserializes into a plausible value`() {
+        assertFailsWith<SerializationException> { decode(readFixture("parse_invalid_schema.json")) }
+    }
+
+    @Test
+    fun `an absent grams key is rejected while an explicit null means unknown mass`() {
+        assertFailsWith<SerializationException> { decode(itemPayload(grams = null)) }
+
+        val success = parseText(itemPayload(grams = "null")) as ParseResult.Success
+        assertNull(success.items.single().grams)
+    }
+
+    @Test
+    fun `an absent note or question or code is rejected`() {
+        assertFailsWith<SerializationException> { decode(itemPayload(note = null)) }
+        assertFailsWith<SerializationException> { decode("""{"type":"clarification"}""") }
+        assertFailsWith<SerializationException> { decode("""{"type":"error"}""") }
+    }
+
+    @Test
+    fun `a present usage block must carry non-negative counts`() {
+        assertFailsWith<SerializationException> { decode(itemPayload(usage = """{"input_tokens":10}""")) }
+        assertEquals(
+            FailureReason.INVALID_RESPONSE,
+            mapped(itemPayload(usage = """{"input_tokens":10,"output_tokens":-1}""")),
+        )
+        assertTrue(parseText(itemPayload(usage = """{"input_tokens":10,"output_tokens":2}""")) is ParseResult.Success)
     }
 
     @Test
@@ -92,7 +119,7 @@ class ParseResponseMappingTest {
 
     @Test
     fun `an unknown response type or error code is unknown`() {
-        assertEquals(FailureReason.UNKNOWN, mapped("""{"type":"digest"}"""))
+        assertEquals(FailureReason.UNKNOWN, mapped("""{"type":"digest","code":"QUOTA"}"""))
         assertEquals(FailureReason.UNKNOWN, mapped("""{"type":"error","code":"TEAPOT"}"""))
         assertEquals(FailureReason.UNKNOWN, mapped("{}"))
     }
@@ -122,35 +149,34 @@ class ParseResponseMappingTest {
         assertEquals(FailureReason.UNKNOWN, mapped("""{"type":"error","code":"NO_NETWORK"}"""))
     }
 
-    @Test
-    fun `every contract status without a body maps to its documented reason`() {
-        assertEquals(FailureReason.INVALID_REQUEST, failureReasonOfStatus(400))
-        assertEquals(FailureReason.AUTH, failureReasonOfStatus(401))
-        assertEquals(FailureReason.AUTH, failureReasonOfStatus(403))
-        assertEquals(FailureReason.PAYLOAD_TOO_LARGE, failureReasonOfStatus(413))
-        assertEquals(FailureReason.CONTENT_BLOCKED, failureReasonOfStatus(422))
-        assertEquals(FailureReason.THROTTLED, failureReasonOfStatus(429))
-        assertEquals(FailureReason.UNKNOWN, failureReasonOfStatus(500))
-        assertEquals(FailureReason.UNKNOWN, failureReasonOfStatus(501))
-        assertEquals(FailureReason.INVALID_RESPONSE, failureReasonOfStatus(502))
-        assertEquals(FailureReason.UNKNOWN, failureReasonOfStatus(503))
-        assertEquals(FailureReason.TIMEOUT, failureReasonOfStatus(504))
-    }
-
     private fun itemPayload(
         name: String = "\"Oatmeal\"",
+        grams: String? = "100.0",
         kcal: String = "300",
         proteinG: String = "10.0",
         confidence: String = "0.5",
-    ): String = """
-        {"type":"success","items":[{"name":$name,"grams":100.0,"kcal":$kcal,
-        "protein_g":$proteinG,"fat_g":6.0,"carbs_g":50.0,"confidence":$confidence}],"note":null}
-    """.trimIndent()
+        note: String? = "null",
+        usage: String? = null,
+    ): String {
+        val fields =
+            listOfNotNull(
+                """"name":$name""",
+                grams?.let { """"grams":$it""" },
+                """"kcal":$kcal""",
+                """"protein_g":$proteinG""",
+                """"fat_g":6.0""",
+                """"carbs_g":50.0""",
+                """"confidence":$confidence""",
+            )
+        val tail = listOfNotNull(note?.let { """"note":$it""" }, usage?.let { """"usage":$it""" })
+        return """{"type":"success","items":[{${fields.joinToString(",")}}]${tail.joinToString("") { ",$it" }}}"""
+    }
 
     private fun mapped(payload: String): FailureReason = (parseText(payload) as ParseResult.Failure).reason
 
-    private fun parseText(payload: String): ParseResult =
-        json.decodeFromString<ParseResponseDto>(payload).toParseResult(validateMeal)
+    private fun decode(payload: String): ParseResponseDto = json.decodeFromString<ParseResponseDto>(payload)
+
+    private fun parseText(payload: String): ParseResult = decode(payload).toParseResult(validateMeal)
 
     private fun parse(fixture: String): ParseResult = parseText(readFixture(fixture))
 

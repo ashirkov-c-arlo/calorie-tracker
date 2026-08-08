@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.room.Room
 import app.kcal.core.common.AppLocaleProvider
+import app.kcal.core.common.interfaceLocale
 import app.kcal.data.db.DailyTargetSnapshotDao
 import app.kcal.data.db.KcalDatabase
 import app.kcal.data.db.MealEntryDao
@@ -63,7 +64,7 @@ object DataModule {
     fun provideZoneId(): ZoneId = ZoneId.systemDefault()
 
     @Provides
-    fun provideAppLocaleProvider(): AppLocaleProvider = AppLocaleProvider { Locale.getDefault() }
+    fun provideAppLocaleProvider(): AppLocaleProvider = AppLocaleProvider { interfaceLocale(Locale.getDefault()) }
 }
 
 @Module

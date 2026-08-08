@@ -14,6 +14,7 @@ import app.kcal.feature.entry.ManualEntryScreen
 import app.kcal.feature.entry.ManualEntryUiState
 import app.kcal.feature.entry.entryClarificationPreviewState
 import app.kcal.feature.entry.entryConfirmationPreviewState
+import app.kcal.feature.entry.entryConfirmationRussianPreviewState
 import app.kcal.feature.entry.entryFailurePreviewState
 import app.kcal.feature.entry.entryIdlePreviewState
 import app.kcal.feature.entry.entryParsingPreviewState
@@ -189,7 +190,8 @@ class ScreenshotTest {
 
     @Test
     @Config(qualifiers = "+ru-h1600dp")
-    fun entryConfirmationWhiteRussian() = capture(ThemeMode.WHITE) { EntryFixture(entryConfirmationPreviewState) }
+    fun entryConfirmationWhiteRussian() =
+        capture(ThemeMode.WHITE) { EntryFixture(entryConfirmationRussianPreviewState) }
 
     @Test
     fun trendsWhite() = capture(ThemeMode.WHITE) { TrendsScreen() }

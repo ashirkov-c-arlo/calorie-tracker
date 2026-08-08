@@ -71,6 +71,15 @@ class NutritionProxyClientTest {
     }
 
     @Test
+    fun `an unsupported interface language still sends a contract language`() = runTest {
+        val client = client(locale = Locale.FRENCH) { respondJson(fixture("parse_text_success.json")) }
+
+        client.parse(UserInput.Text("omelette aux trois oeufs"))
+
+        assertEquals("en", requests.single().headers[HttpHeaders.AcceptLanguage])
+    }
+
+    @Test
     fun `a contract error body wins over the status code`() = runTest {
         val client = client { respondJson("""{"type":"error","code":"QUOTA"}""", HttpStatusCode.TooManyRequests) }
 
@@ -78,32 +87,35 @@ class NutritionProxyClientTest {
     }
 
     @Test
-    fun `a gateway failure without a contract body falls back to its status`() = runTest {
+    fun `a gateway failure without a contract body is unknown, not guessed from the status`() = runTest {
         val client = client { respondError(HttpStatusCode.GatewayTimeout, "<html>gateway timeout</html>") }
 
-        assertEquals(FailureReason.TIMEOUT, failure(client))
+        assertEquals(FailureReason.UNKNOWN, failure(client))
     }
 
     @Test
-    fun `documented statuses map without a body`() = runTest {
-        val expected =
+    fun `only an error envelope with a known code is trusted`() = runTest {
+        val cases =
             mapOf(
-                HttpStatusCode.BadRequest to FailureReason.INVALID_REQUEST,
-                HttpStatusCode.Unauthorized to FailureReason.AUTH,
-                HttpStatusCode.Forbidden to FailureReason.AUTH,
-                HttpStatusCode.PayloadTooLarge to FailureReason.PAYLOAD_TOO_LARGE,
-                HttpStatusCode.UnprocessableEntity to FailureReason.CONTENT_BLOCKED,
-                HttpStatusCode.TooManyRequests to FailureReason.THROTTLED,
-                HttpStatusCode.InternalServerError to FailureReason.UNKNOWN,
-                HttpStatusCode.NotImplemented to FailureReason.UNKNOWN,
-                HttpStatusCode.BadGateway to FailureReason.INVALID_RESPONSE,
-                HttpStatusCode.ServiceUnavailable to FailureReason.UNKNOWN,
+                """{"type":"error","code":"THROTTLED"}""" to FailureReason.THROTTLED,
+                """{"type":"error","code":"TEAPOT"}""" to FailureReason.UNKNOWN,
+                """{"type":"error","code":"NO_NETWORK"}""" to FailureReason.UNKNOWN,
+                """{"type":"digest","code":"QUOTA"}""" to FailureReason.UNKNOWN,
+                """{"type":"error"}""" to FailureReason.UNKNOWN,
             )
 
-        expected.forEach { (status, reason) ->
-            val client = client { respondError(status, "not json") }
-            assertEquals(reason, failure(client), "status $status")
+        cases.forEach { (payload, reason) ->
+            val client = client { respondJson(payload, HttpStatusCode.TooManyRequests) }
+            assertEquals(reason, failure(client), payload)
         }
+    }
+
+    @Test
+    fun `a success envelope on a failed status is never trusted`() = runTest {
+        val client =
+            client { respondJson(fixture("parse_text_success.json"), HttpStatusCode.ServiceUnavailable) }
+
+        assertEquals(FailureReason.UNKNOWN, failure(client))
     }
 
     @Test

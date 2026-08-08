@@ -171,6 +171,56 @@ class EntryViewModelTest {
     }
 
     @Test
+    fun `editing the description drops the pending clarification`() = runTest {
+        val parser =
+            ScriptedParser(
+                ParseResult.NeedsClarification("How large was the serving?"),
+                ParseResult.Success(listOf(foodItem()), null),
+            )
+        val viewModel = viewModel(parser)
+        viewModel.onTextChange("chicken with rice")
+        viewModel.onParse()
+        runCurrent()
+        viewModel.onClarificationAnswerChange("about 250 g")
+
+        viewModel.onTextChange("chicken with buckwheat")
+
+        assertNull(viewModel.uiState.value.clarificationQuestion)
+        assertEquals("", viewModel.uiState.value.clarificationAnswer)
+
+        viewModel.onSubmitClarification()
+        runCurrent()
+        assertEquals(1, parser.inputs.size)
+
+        viewModel.onParse()
+        runCurrent()
+        assertEquals(UserInput.Text("chicken with buckwheat"), parser.inputs.last())
+    }
+
+    @Test
+    fun `retry after editing the description resends only the new text`() = runTest {
+        val parser =
+            ScriptedParser(
+                ParseResult.NeedsClarification("How much?"),
+                ParseResult.Failure(FailureReason.TIMEOUT),
+                ParseResult.Success(listOf(foodItem()), null),
+            )
+        val viewModel = viewModel(parser)
+        viewModel.onTextChange("rice")
+        viewModel.onParse()
+        runCurrent()
+        viewModel.onClarificationAnswerChange("250 g")
+        viewModel.onTextChange("rice and chicken")
+        viewModel.onParse()
+        runCurrent()
+
+        viewModel.onRetry()
+        runCurrent()
+
+        assertEquals(UserInput.Text("rice and chicken"), parser.inputs.last())
+    }
+
+    @Test
     fun `an unanswered clarification is not resubmitted`() = runTest {
         val parser = ScriptedParser(ParseResult.NeedsClarification("How much?"))
         val viewModel = viewModel(parser)

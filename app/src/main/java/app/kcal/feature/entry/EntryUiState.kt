@@ -69,3 +69,35 @@ internal val entryConfirmationPreviewState = entryIdlePreviewState.copy(
         ),
     ),
 )
+
+/**
+ * What the Russian interface really shows: proxy text in Russian and decimals formatted with
+ * the locale separator.
+ */
+internal val entryConfirmationRussianPreviewState = entryConfirmationPreviewState.copy(
+    note = "Вес порций оценён по типичной подаче.",
+    items =
+    persistentListOf(
+        MealItemUiState(
+            key = 1,
+            name = "Омлет из трёх яиц",
+            grams = "180",
+            kcal = "297",
+            protein = "19,8",
+            fat = "22,5",
+            carbs = "1,2",
+            confidence = 0.82f,
+        ),
+        MealItemUiState(
+            key = 2,
+            name = "Кофе с молоком",
+            grams = "200",
+            kcal = "63",
+            protein = "3,3",
+            fat = "3,4",
+            carbs = "4,8",
+            confidence = 0.74f,
+            needsReview = true,
+        ),
+    ),
+)

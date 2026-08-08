@@ -41,8 +41,25 @@ class EntryViewModel @Inject constructor(
 
     private var nextItemKey = FIRST_ITEM_KEY
 
+    /** What Retry resends: the contract requires the exact previous request, nothing rebuilt. */
+    private var lastInput: UserInput? = null
+
+    /**
+     * A question belongs to the text it was asked about, so editing the description drops the
+     * pending clarification instead of letting it be attached to a different meal.
+     */
     fun onTextChange(text: String) {
-        _uiState.value = _uiState.value.copy(text = text, textMissing = false, failure = null)
+        val state = _uiState.value
+        if (state.text == text) return
+        lastInput = null
+        _uiState.value =
+            state.copy(
+                text = text,
+                textMissing = false,
+                failure = null,
+                clarificationQuestion = null,
+                clarificationAnswer = "",
+            )
     }
 
     fun onClarificationAnswerChange(answer: String) {
@@ -73,9 +90,8 @@ class EntryViewModel @Inject constructor(
     }
 
     fun onRetry() {
-        val state = _uiState.value
-        val question = state.clarificationQuestion
-        if (question != null && state.clarificationAnswer.isNotBlank()) onSubmitClarification() else onParse()
+        if (!_uiState.value.canSubmit) return
+        lastInput?.let(::parse) ?: onParse()
     }
 
     fun onItemChange(key: Long, field: MealItemField, value: String) {
@@ -141,6 +157,7 @@ class EntryViewModel @Inject constructor(
     }
 
     private fun parse(input: UserInput) {
+        lastInput = input
         _uiState.value = _uiState.value.copy(isParsing = true, failure = null, textMissing = false)
         viewModelScope.launch {
             val result =

@@ -1,6 +1,7 @@
 package app.kcal.llm.remote
 
 import app.kcal.core.common.AppLocaleProvider
+import app.kcal.core.common.interfaceLocale
 import app.kcal.domain.usecase.ValidateMeal
 import app.kcal.llm.FailureReason
 import app.kcal.llm.NutritionParser
@@ -55,7 +56,7 @@ class NutritionProxyClient @Inject constructor(
                 httpClient.post("${config.baseUrl.trimEnd('/')}$PARSE_PATH") {
                     contentType(ContentType.Application.Json)
                     accept(ContentType.Application.Json)
-                    header(HttpHeaders.AcceptLanguage, localeProvider.current().language)
+                    header(HttpHeaders.AcceptLanguage, interfaceLocale(localeProvider.current()).language)
                     header(API_KEY_HEADER, config.apiKey)
                     setBody(input.toRequestDto())
                 }
@@ -63,8 +64,12 @@ class NutritionProxyClient @Inject constructor(
             if (response.status.isSuccess()) {
                 body?.toParseResult(validateMeal) ?: ParseResult.Failure(FailureReason.INVALID_RESPONSE)
             } else {
-                // The contract code wins; a gateway response without one falls back to its status.
-                ParseResult.Failure(failureReasonOfCode(body?.code) ?: failureReasonOfStatus(response.status.value))
+                // Contract §6: only an error envelope with a known code is trusted. An unknown
+                // code, another envelope, or a gateway body that is not contract JSON is UNKNOWN.
+                ParseResult.Failure(
+                    (body as? ParseResponseDto.Error)?.let { failureReasonOfCode(it.code) }
+                        ?: FailureReason.UNKNOWN,
+                )
             }
         } catch (cancellation: CancellationException) {
             throw cancellation
