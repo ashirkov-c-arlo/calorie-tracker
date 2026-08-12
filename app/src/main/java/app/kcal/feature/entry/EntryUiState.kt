@@ -7,7 +7,8 @@ import kotlinx.collections.immutable.persistentListOf
 /**
  * Text entry and the confirmation that follows a parse. [items] is only filled once the parser
  * succeeded, and [isConfirming] is what shows the editable sheet: nothing is persisted before
- * the user confirms it there.
+ * the user confirms it there. [photoPath] points at a cache file that lives only as long as this
+ * flow needs it and is never stored with the meal.
  */
 data class EntryUiState(
     val text: String = "",
@@ -21,9 +22,12 @@ data class EntryUiState(
     val items: PersistentList<MealItemUiState> = persistentListOf(),
     val isSaving: Boolean = false,
     val saveFailed: Boolean = false,
+    val photoPath: String? = null,
+    val isAttachingPhoto: Boolean = false,
+    val photoFailed: Boolean = false,
 ) {
     val canSubmit: Boolean
-        get() = !isParsing && !isSaving
+        get() = !isParsing && !isSaving && !isAttachingPhoto
 }
 
 sealed interface EntryEvent {
@@ -35,6 +39,13 @@ internal val entryIdlePreviewState = EntryUiState(text = "омлет из трё
 internal val entryParsingPreviewState = entryIdlePreviewState.copy(isParsing = true)
 
 internal val entryFailurePreviewState = entryIdlePreviewState.copy(failure = FailureReason.NO_NETWORK)
+
+internal val entryPhotoAttachedPreviewState =
+    entryIdlePreviewState.copy(text = "это на тарелке", photoPath = "/cache/entry-photos/meal.jpg")
+
+internal val entryPhotoPreparingPreviewState = entryIdlePreviewState.copy(isAttachingPhoto = true)
+
+internal val entryPhotoFailedPreviewState = entryIdlePreviewState.copy(photoFailed = true)
 
 internal val entryClarificationPreviewState = entryIdlePreviewState.copy(
     clarificationQuestion = "Approximately how large was the serving?",

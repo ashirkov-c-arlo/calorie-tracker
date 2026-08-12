@@ -1,6 +1,11 @@
 package app.kcal
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.kcal.core.common.DispatcherProvider
 import app.kcal.core.common.TimeProvider
+import app.kcal.core.common.TransientPhotoStore
 import app.kcal.domain.model.AppLanguage
 import app.kcal.domain.model.DailyTargetSnapshot
 import app.kcal.domain.model.StoredProfile
@@ -27,11 +32,14 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import java.io.File
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
@@ -39,12 +47,15 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(AndroidJUnit4::class)
 class MainViewModelTest {
 
     private val today = LocalDate.of(2026, 3, 15)
     private val clock = MutableClock(Instant.parse("2026-03-15T09:00:00Z"))
     private val timeProvider = TimeProvider(clock = clock, zoneId = ZoneId.of("UTC"))
     private val dailyTargetRepository = FakeDailyTargetRepository()
+    private val context = ApplicationProvider.getApplicationContext<Context>()
+    private val photoStore = TransientPhotoStore(context, DispatcherProvider(UnconfinedTestDispatcher()))
 
     @Before
     fun setUp() {
@@ -275,7 +286,18 @@ class MainViewModelTest {
             repository,
             ApplyTodayTarget(targets, CalculateDailyTargets()),
             timeProvider,
+            photoStore,
         )
+
+    @Test
+    fun `a meal photo left behind by a crash is deleted on the next start`() = runTest {
+        val photoDirectory = File(context.cacheDir, "entry-photos").apply { mkdirs() }
+        val leftover = File(photoDirectory, "crash-leftover.jpg").apply { writeText("stale") }
+
+        viewModel(FakeProfileRepository(UserPreferences(profile = completeProfile())))
+
+        assertFalse(leftover.exists())
+    }
 
     private class MutableClock(var current: Instant) : Clock() {
         override fun getZone(): ZoneId = ZoneId.of("UTC")

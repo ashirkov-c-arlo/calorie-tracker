@@ -1,6 +1,11 @@
 package app.kcal.feature.entry
 
+import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,8 +35,12 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -43,6 +52,10 @@ import app.kcal.domain.model.ThemeMode
 import app.kcal.feature.entry.components.MealItemCard
 import app.kcal.llm.FailureReason
 
+/**
+ * Owns the photo pickers, because launchers need an activity result registry that a preview and
+ * a stateless screen do not have.
+ */
 @Composable
 fun EntryRoute(onClose: () -> Unit, onLogManually: () -> Unit, viewModel: EntryViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -51,6 +64,21 @@ fun EntryRoute(onClose: () -> Unit, onLogManually: () -> Unit, viewModel: EntryV
             if (event == EntryEvent.Saved) onClose()
         }
     }
+    var captureTarget by remember { mutableStateOf<Uri?>(null) }
+    val takePicture =
+        rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { captured ->
+            val target = captureTarget
+            captureTarget = null
+            // A cancelled capture is left alone: the next upload or the closing flow deletes it.
+            if (captured && target != null) viewModel.onPhotoPicked(target)
+        }
+    val pickPhoto =
+        rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { picked ->
+            picked?.let(viewModel::onPhotoPicked)
+        }
+    val context = LocalContext.current
+    val canTakePhoto =
+        remember(context) { context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY) }
     EntryScreen(
         uiState = uiState,
         onBackClick = onClose,
@@ -65,6 +93,16 @@ fun EntryRoute(onClose: () -> Unit, onLogManually: () -> Unit, viewModel: EntryV
         onRemoveItem = viewModel::onRemoveItem,
         onDismissConfirmation = viewModel::onDismissConfirmation,
         onConfirm = viewModel::onConfirm,
+        canTakePhoto = canTakePhoto,
+        onPickPhoto = {
+            pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        },
+        onTakePhoto = {
+            val target = viewModel.newCaptureUri()
+            captureTarget = target
+            takePicture.launch(target)
+        },
+        onRemovePhoto = viewModel::onRemovePhoto,
     )
 }
 
@@ -85,8 +123,12 @@ fun EntryScreen(
     onDismissConfirmation: () -> Unit,
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier,
+    canTakePhoto: Boolean = true,
+    onPickPhoto: () -> Unit = {},
+    onTakePhoto: () -> Unit = {},
+    onRemovePhoto: () -> Unit = {},
 ) {
-    val busy = uiState.isParsing || uiState.isSaving
+    val busy = uiState.isParsing || uiState.isSaving || uiState.isAttachingPhoto
     BackHandler(enabled = busy) {}
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -129,6 +171,14 @@ fun EntryScreen(
                 },
                 isError = uiState.textMissing,
                 minLines = 3,
+            )
+            PhotoSection(
+                uiState = uiState,
+                enabled = !busy,
+                canTakePhoto = canTakePhoto,
+                onPickPhoto = onPickPhoto,
+                onTakePhoto = onTakePhoto,
+                onRemovePhoto = onRemovePhoto,
             )
             if (uiState.clarificationQuestion != null) {
                 ClarificationCard(
@@ -175,6 +225,70 @@ fun EntryScreen(
                 onRemoveItem = onRemoveItem,
                 onCancel = onDismissConfirmation,
                 onConfirm = onConfirm,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PhotoSection(
+    uiState: EntryUiState,
+    enabled: Boolean,
+    canTakePhoto: Boolean,
+    onPickPhoto: () -> Unit,
+    onTakePhoto: () -> Unit,
+    onRemovePhoto: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(KcalSpacing.small)) {
+        when {
+            uiState.isAttachingPhoto ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(KcalSpacing.small),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator()
+                    Text(text = stringResource(R.string.entry_photo_preparing))
+                }
+
+            uiState.photoPath != null ->
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.padding(start = KcalSpacing.medium),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.entry_photo_attached),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = onRemovePhoto, enabled = enabled) {
+                            Text(text = stringResource(R.string.entry_photo_remove))
+                        }
+                    }
+                }
+
+            else ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(KcalSpacing.small),
+                ) {
+                    OutlinedButton(onClick = onPickPhoto, enabled = enabled, modifier = Modifier.weight(1f)) {
+                        Text(text = stringResource(R.string.entry_photo_add))
+                    }
+                    if (canTakePhoto) {
+                        OutlinedButton(onClick = onTakePhoto, enabled = enabled, modifier = Modifier.weight(1f)) {
+                            Text(text = stringResource(R.string.entry_photo_take))
+                        }
+                    }
+                }
+        }
+        if (uiState.photoFailed) {
+            Text(
+                text = stringResource(R.string.entry_photo_failed),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
             )
         }
     }
@@ -354,6 +468,26 @@ private fun EntryFailureWhitePreview() = EntryPreview(ThemeMode.WHITE, entryFail
 @Preview(name = "Entry failure Black")
 @Composable
 private fun EntryFailureBlackPreview() = EntryPreview(ThemeMode.BLACK, entryFailurePreviewState)
+
+@Preview(name = "Entry photo attached White")
+@Composable
+private fun EntryPhotoAttachedWhitePreview() = EntryPreview(ThemeMode.WHITE, entryPhotoAttachedPreviewState)
+
+@Preview(name = "Entry photo attached Black")
+@Composable
+private fun EntryPhotoAttachedBlackPreview() = EntryPreview(ThemeMode.BLACK, entryPhotoAttachedPreviewState)
+
+@Preview(name = "Entry photo preparing White")
+@Composable
+private fun EntryPhotoPreparingWhitePreview() = EntryPreview(ThemeMode.WHITE, entryPhotoPreparingPreviewState)
+
+@Preview(name = "Entry photo failed White")
+@Composable
+private fun EntryPhotoFailedWhitePreview() = EntryPreview(ThemeMode.WHITE, entryPhotoFailedPreviewState)
+
+@Preview(name = "Entry photo failed Black")
+@Composable
+private fun EntryPhotoFailedBlackPreview() = EntryPreview(ThemeMode.BLACK, entryPhotoFailedPreviewState)
 
 @Preview(name = "Entry clarification White", heightDp = 1000)
 @Composable

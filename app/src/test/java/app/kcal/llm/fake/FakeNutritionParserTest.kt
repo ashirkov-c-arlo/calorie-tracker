@@ -50,6 +50,14 @@ class FakeNutritionParserTest {
     }
 
     @Test
+    fun `a photo request is parsed like text, so debug builds can exercise the photo flow`() = runTest {
+        val result = parser.parse(UserInput.TextWithPhoto("what is on the plate", "/cache/entry-photos/meal.jpg"))
+
+        assertTrue(result is ParseResult.Success)
+        assertEquals("Sample dish", result.items.single().name)
+    }
+
+    @Test
     fun `a russian interface answers in russian whatever the input language is`() = runTest {
         val russian = FakeNutritionParser(AppLocaleProvider { Locale.forLanguageTag("ru") })
 

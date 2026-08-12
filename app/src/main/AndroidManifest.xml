@@ -16,6 +16,21 @@
         android:theme="@style/Theme.Kcal"
         tools:targetApi="33">
 
+        <!--
+          Write target for `TakePicture`. No CAMERA permission is declared on purpose: the photo
+          is taken by the system camera app, and declaring the permission would only add a
+          runtime prompt this app does not need.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.photos"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

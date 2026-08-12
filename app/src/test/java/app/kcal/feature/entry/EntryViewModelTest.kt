@@ -1,7 +1,14 @@
 package app.kcal.feature.entry
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.net.Uri
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.kcal.core.common.AppLocaleProvider
+import app.kcal.core.common.DispatcherProvider
 import app.kcal.core.common.TimeProvider
+import app.kcal.core.common.TransientPhotoStore
 import app.kcal.domain.model.EntrySource
 import app.kcal.domain.model.UserPreferences
 import app.kcal.domain.usecase.CalculateDailyTargets
@@ -27,17 +34,26 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import java.io.File
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
+import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+/** Robolectric only for the transient photo cache; the flow itself needs no Android state. */
 @OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(AndroidJUnit4::class)
 class EntryViewModelTest {
+
+    private val context = ApplicationProvider.getApplicationContext<Context>()
+    private val photoStore = TransientPhotoStore(context, DispatcherProvider(UnconfinedTestDispatcher()))
 
     @Before
     fun setUp() {
@@ -376,6 +392,128 @@ class EntryViewModelTest {
         assertEquals(99999, repository.meals.value.single().items.single().macros.kcal)
     }
 
+    @Test
+    fun `an attached photo is parsed as a photo request and stored as a photo entry`() = runTest {
+        val repository = FakeMealRepository()
+        val parser = ScriptedParser(ParseResult.Success(listOf(foodItem()), null))
+        val viewModel = viewModel(parser, repository)
+        viewModel.onTextChange("what is on the plate")
+
+        viewModel.onPhotoPicked(sourceImage())
+        runCurrent()
+        val attachedPath = assertNotNull(viewModel.uiState.value.photoPath)
+        assertTrue(File(attachedPath).exists())
+
+        viewModel.onParse()
+        runCurrent()
+
+        assertEquals(UserInput.TextWithPhoto("what is on the plate", attachedPath), parser.inputs.single())
+        // Contract §8: a final success drops the photo, so the confirmation no longer offers one.
+        assertFalse(File(attachedPath).exists())
+        assertNull(viewModel.uiState.value.photoPath)
+
+        viewModel.onConfirm()
+        runCurrent()
+        val meal = repository.meals.value.single()
+        assertEquals(EntrySource.LLM_PHOTO, meal.source)
+        // The stored record keeps the description only; no path, URI, or image byte reaches it.
+        assertEquals("what is on the plate", meal.rawUserInput)
+    }
+
+    @Test
+    fun `a photo survives a clarification and a retry, and both resend the same file`() = runTest {
+        val parser =
+            ScriptedParser(
+                ParseResult.NeedsClarification("How large was the plate?"),
+                ParseResult.Failure(FailureReason.TIMEOUT),
+                ParseResult.Success(listOf(foodItem()), null),
+            )
+        val viewModel = viewModel(parser)
+        viewModel.onTextChange("what is on the plate")
+        viewModel.onPhotoPicked(sourceImage())
+        runCurrent()
+        val attachedPath = assertNotNull(viewModel.uiState.value.photoPath)
+
+        viewModel.onParse()
+        runCurrent()
+        assertTrue(File(attachedPath).exists())
+
+        viewModel.onClarificationAnswerChange("about 25 cm")
+        viewModel.onSubmitClarification()
+        runCurrent()
+        assertEquals(FailureReason.TIMEOUT, viewModel.uiState.value.failure)
+        assertTrue(File(attachedPath).exists())
+
+        viewModel.onRetry()
+        runCurrent()
+
+        assertEquals(3, parser.inputs.size)
+        parser.inputs.forEach { assertEquals(attachedPath, (it as UserInput.TextWithPhoto).temporaryPhotoPath) }
+        assertEquals("about 25 cm", parser.inputs.last().clarification?.answer)
+        assertFalse(File(attachedPath).exists())
+    }
+
+    @Test
+    fun `attaching a photo invalidates a pending clarification`() = runTest {
+        val parser = ScriptedParser(ParseResult.NeedsClarification("How large was the plate?"))
+        val viewModel = viewModel(parser)
+        viewModel.onTextChange("chicken with rice")
+        viewModel.onParse()
+        runCurrent()
+        viewModel.onClarificationAnswerChange("about 250 g")
+
+        viewModel.onPhotoPicked(sourceImage())
+        runCurrent()
+
+        assertNull(viewModel.uiState.value.clarificationQuestion)
+        assertEquals("", viewModel.uiState.value.clarificationAnswer)
+    }
+
+    @Test
+    fun `an unreadable image is reported and leaves the request text only`() = runTest {
+        val parser = ScriptedParser(ParseResult.Success(listOf(foodItem()), null))
+        val viewModel = viewModel(parser)
+        viewModel.onTextChange("chicken with rice")
+
+        viewModel.onPhotoPicked(Uri.fromFile(File(context.filesDir, "missing.jpg")))
+        runCurrent()
+
+        assertTrue(viewModel.uiState.value.photoFailed)
+        assertNull(viewModel.uiState.value.photoPath)
+
+        viewModel.onParse()
+        runCurrent()
+        assertEquals(UserInput.Text("chicken with rice"), parser.inputs.single())
+    }
+
+    @Test
+    fun `removing the photo deletes it and keeps the typed text`() = runTest {
+        val viewModel = viewModel(ScriptedParser())
+        viewModel.onTextChange("what is on the plate")
+        viewModel.onPhotoPicked(sourceImage())
+        runCurrent()
+        val attachedPath = assertNotNull(viewModel.uiState.value.photoPath)
+
+        viewModel.onRemovePhoto()
+
+        assertFalse(File(attachedPath).exists())
+        assertNull(viewModel.uiState.value.photoPath)
+        assertEquals("what is on the plate", viewModel.uiState.value.text)
+    }
+
+    @Test
+    fun `leaving the flow deletes the attached photo`() = runTest {
+        val viewModel = viewModel(ScriptedParser())
+        viewModel.onTextChange("what is on the plate")
+        viewModel.onPhotoPicked(sourceImage())
+        runCurrent()
+        val attachedPath = assertNotNull(viewModel.uiState.value.photoPath)
+
+        viewModel.onCleared()
+
+        assertFalse(File(attachedPath).exists())
+    }
+
     private class ScriptedParser(vararg results: ParseResult) : NutritionParser {
         val inputs = mutableListOf<UserInput>()
         private val scripted = results.toMutableList()
@@ -384,6 +522,14 @@ class EntryViewModelTest {
             inputs += input
             return scripted.removeFirstOrNull() ?: ParseResult.Failure(FailureReason.UNKNOWN)
         }
+    }
+
+    /** A real decodable image, so the store produces a real upload candidate. */
+    private fun sourceImage(): Uri {
+        val file = File(context.filesDir, "${UUID.randomUUID()}.jpg")
+        val bitmap = Bitmap.createBitmap(1200, 800, Bitmap.Config.ARGB_8888)
+        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+        return Uri.fromFile(file)
     }
 
     private fun viewModel(
@@ -404,6 +550,7 @@ class EntryViewModelTest {
                 timeProvider = timeProvider,
             ),
             localeProvider = AppLocaleProvider { locale },
+            photoStore = photoStore,
         )
     }
 }

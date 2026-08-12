@@ -1,6 +1,7 @@
 package app.kcal.llm.remote
 
 import app.kcal.core.common.AppLocaleProvider
+import app.kcal.core.common.DispatcherProvider
 import app.kcal.core.common.interfaceLocale
 import app.kcal.domain.usecase.ValidateMeal
 import app.kcal.llm.FailureReason
@@ -24,8 +25,11 @@ import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.serialization.ContentConvertException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
+import java.io.File
 import java.io.IOException
+import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -47,14 +51,21 @@ class NutritionProxyClient @Inject constructor(
     private val config: LlmProxyConfig,
     private val localeProvider: AppLocaleProvider,
     private val validateMeal: ValidateMeal,
+    private val dispatchers: DispatcherProvider,
 ) : NutritionParser {
 
     override suspend fun parse(input: UserInput): ParseResult {
         if (config.baseUrl.isBlank() || input.text.isBlank()) {
             return ParseResult.Failure(FailureReason.INVALID_REQUEST)
         }
-        // TODO(stage 5): transport the transient JPEG once downscaling and Base64 encoding exist.
-        if (input is UserInput.TextWithPhoto) return ParseResult.Failure(FailureReason.INVALID_REQUEST)
+        val image =
+            if (input is UserInput.TextWithPhoto) {
+                // A photo that has already been cleaned up must not turn into a text-only request:
+                // the user asked about the picture, so the request is refused instead.
+                encodeJpeg(input.temporaryPhotoPath) ?: return ParseResult.Failure(FailureReason.INVALID_REQUEST)
+            } else {
+                null
+            }
         return try {
             val response =
                 httpClient.post("${config.baseUrl.trimEnd('/')}$PARSE_PATH") {
@@ -62,7 +73,7 @@ class NutritionProxyClient @Inject constructor(
                     accept(ContentType.Application.Json)
                     header(HttpHeaders.AcceptLanguage, interfaceLocale(localeProvider.current()).language)
                     header(API_KEY_HEADER, config.apiKey)
-                    setBody(input.toRequestDto())
+                    setBody(input.toRequestDto(image))
                 }
             val body = response.contractBodyOrNull()
             if (response.status.isSuccess()) {
@@ -88,6 +99,19 @@ class NutritionProxyClient @Inject constructor(
         }
     }
 
+    /** Null when the transient file is gone or empty; the contract forbids sending an empty image. */
+    private suspend fun encodeJpeg(path: String): ImageDto? = withContext(dispatchers.io) {
+        val bytes =
+            try {
+                File(path).readBytes()
+            } catch (unreadable: IOException) {
+                return@withContext null
+            }
+        bytes
+            .takeIf { it.isNotEmpty() }
+            ?.let { ImageDto(mediaType = JPEG_MEDIA_TYPE, dataBase64 = Base64.getEncoder().encodeToString(it)) }
+    }
+
     /** Null whenever the payload is not the contract shape, whatever the status was. */
     private suspend fun HttpResponse.contractBodyOrNull(): ParseResponseDto? = try {
         body<ParseResponseDto>()
@@ -105,7 +129,8 @@ class NutritionProxyClient @Inject constructor(
     }
 }
 
-internal fun UserInput.toRequestDto(): ParseRequestDto = ParseRequestDto(
+internal fun UserInput.toRequestDto(image: ImageDto? = null): ParseRequestDto = ParseRequestDto(
     text = text,
+    image = image,
     clarification = clarification?.let { ClarificationDto(question = it.question, answer = it.answer) },
 )

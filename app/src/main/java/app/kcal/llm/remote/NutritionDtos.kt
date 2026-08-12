@@ -21,9 +21,13 @@ internal data class ParseRequestDto(
     val clarification: ClarificationDto? = null,
 )
 
+/**
+ * `media_type` carries no default: kotlinx omits default values, and the contract requires the
+ * key whenever an image is present.
+ */
 @Serializable
 internal data class ImageDto(
-    @SerialName("media_type") val mediaType: String = JPEG_MEDIA_TYPE,
+    @SerialName("media_type") val mediaType: String,
     @SerialName("data_base64") val dataBase64: String,
 )
 

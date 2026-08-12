@@ -3,6 +3,7 @@ package app.kcal
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.kcal.core.common.TimeProvider
+import app.kcal.core.common.TransientPhotoStore
 import app.kcal.domain.model.StoredProfile
 import app.kcal.domain.repository.ProfileRepository
 import app.kcal.domain.usecase.ApplyTodayTarget
@@ -27,6 +28,7 @@ class MainViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val applyTodayTarget: ApplyTodayTarget,
     private val timeProvider: TimeProvider,
+    transientPhotoStore: TransientPhotoStore,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MainUiState())
@@ -36,6 +38,9 @@ class MainViewModel @Inject constructor(
     private var startupJob: Job? = null
 
     init {
+        // Proxy contract §8: a crash or process death can leave a transient meal photo in the
+        // cache, and app start is the first moment at which no entry flow can own one.
+        transientPhotoStore.clear()
         start()
     }
 

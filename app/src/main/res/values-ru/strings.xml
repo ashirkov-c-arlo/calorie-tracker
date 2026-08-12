@@ -50,6 +50,12 @@
     <string name="entry_text_required">Сначала опишите приём пищи.</string>
     <string name="entry_parsing">Читаем ваше описание…</string>
     <string name="entry_clarification_answer_label">Ваш ответ</string>
+    <string name="entry_photo_add">Добавить фото</string>
+    <string name="entry_photo_take">Сделать фото</string>
+    <string name="entry_photo_preparing">Готовим фото…</string>
+    <string name="entry_photo_attached">Фото прикреплено. Оно нужно только для этого разбора и не сохраняется.</string>
+    <string name="entry_photo_remove">Убрать фото</string>
+    <string name="entry_photo_failed">Не удалось прочитать изображение. Выберите другое фото или продолжите только с текстом.</string>
     <string name="entry_confirm_title">Проверьте перед сохранением</string>
     <string name="entry_confirm_subtitle">Эти значения — оценка. Измените всё, что выглядит неверно.</string>
 

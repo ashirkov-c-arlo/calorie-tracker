@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.room.Room
 import app.kcal.core.common.AppLocaleProvider
+import app.kcal.core.common.DispatcherProvider
 import app.kcal.core.common.interfaceLocale
 import app.kcal.data.db.DailyTargetSnapshotDao
 import app.kcal.data.db.KcalDatabase
@@ -65,6 +66,9 @@ object DataModule {
 
     @Provides
     fun provideAppLocaleProvider(): AppLocaleProvider = AppLocaleProvider { interfaceLocale(Locale.getDefault()) }
+
+    @Provides
+    fun provideDispatcherProvider(): DispatcherProvider = DispatcherProvider()
 }
 
 @Module

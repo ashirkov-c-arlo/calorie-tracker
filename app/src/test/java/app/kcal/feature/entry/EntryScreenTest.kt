@@ -86,9 +86,64 @@ class EntryScreenTest {
         composeRule.onNodeWithText(string(R.string.action_confirm)).assertIsEnabled()
     }
 
+    @Test
+    fun `both photo sources are offered and launch their picker`() {
+        var picked = 0
+        var captured = 0
+        show(entryIdlePreviewState, onPickPhoto = { picked++ }, onTakePhoto = { captured++ })
+
+        composeRule.onNodeWithText(string(R.string.entry_photo_add)).performClick()
+        composeRule.onNodeWithText(string(R.string.entry_photo_take)).performClick()
+
+        assertEquals(1, picked)
+        assertEquals(1, captured)
+    }
+
+    @Test
+    fun `a device without a camera only offers the photo picker`() {
+        show(entryIdlePreviewState, canTakePhoto = false)
+
+        composeRule.onNodeWithText(string(R.string.entry_photo_add)).assertIsDisplayed()
+        composeRule.onNodeWithText(string(R.string.entry_photo_take)).assertDoesNotExist()
+    }
+
+    @Test
+    fun `an attached photo says it is not saved and can be removed`() {
+        var removals = 0
+        show(entryPhotoAttachedPreviewState, onRemovePhoto = { removals++ })
+
+        composeRule.onNodeWithText(string(R.string.entry_photo_attached)).assertIsDisplayed()
+        composeRule.onNodeWithText(string(R.string.entry_photo_remove)).performClick()
+
+        assertEquals(1, removals)
+    }
+
+    @Test
+    fun `preparing a photo blocks parsing until it is ready`() {
+        show(entryPhotoPreparingPreviewState)
+
+        composeRule.onNodeWithText(string(R.string.entry_photo_preparing)).assertIsDisplayed()
+        composeRule.onNodeWithText(string(R.string.action_parse)).assertIsNotEnabled()
+    }
+
+    @Test
+    fun `an unreadable image explains itself and keeps the photo actions available`() {
+        show(entryPhotoFailedPreviewState)
+
+        composeRule.onNodeWithText(string(R.string.entry_photo_failed)).assertIsDisplayed()
+        composeRule.onNodeWithText(string(R.string.entry_photo_add)).assertIsEnabled()
+    }
+
     private var state by mutableStateOf(EntryUiState())
 
-    private fun show(uiState: EntryUiState, onRetry: () -> Unit = {}) {
+    private fun show(
+        uiState: EntryUiState,
+        onRetry: () -> Unit = {},
+        canTakePhoto: Boolean = true,
+        onPickPhoto: () -> Unit = {},
+        onTakePhoto: () -> Unit = {},
+        onRemovePhoto: () -> Unit = {},
+    ) {
         state = uiState
         composeRule.setContent {
             KcalTheme(themeMode = ThemeMode.WHITE) {
@@ -106,6 +161,10 @@ class EntryScreenTest {
                     onRemoveItem = {},
                     onDismissConfirmation = {},
                     onConfirm = {},
+                    canTakePhoto = canTakePhoto,
+                    onPickPhoto = onPickPhoto,
+                    onTakePhoto = onTakePhoto,
+                    onRemovePhoto = onRemovePhoto,
                 )
             }
         }

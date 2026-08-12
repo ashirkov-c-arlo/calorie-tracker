@@ -1,8 +1,10 @@
 package app.kcal.feature.entry
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.kcal.core.common.AppLocaleProvider
+import app.kcal.core.common.TransientPhotoStore
 import app.kcal.domain.model.EntrySource
 import app.kcal.domain.usecase.SaveMeal
 import app.kcal.domain.usecase.SaveMealResult
@@ -23,14 +25,17 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Text parsing and its confirmation. The typed text survives every clarification, failure, and
- * retry, and only an explicit confirmation writes to storage.
+ * Text parsing and its confirmation, optionally about a photo of the plate. The typed text
+ * survives every clarification, failure, and retry, and only an explicit confirmation writes to
+ * storage. The photo is transient: it is uploaded, never persisted, and deleted as soon as the
+ * flow no longer needs it.
  */
 @HiltViewModel
 class EntryViewModel @Inject constructor(
     private val nutritionParser: NutritionParser,
     private val saveMeal: SaveMeal,
     private val localeProvider: AppLocaleProvider,
+    private val photoStore: TransientPhotoStore,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(EntryUiState())
@@ -43,6 +48,9 @@ class EntryViewModel @Inject constructor(
 
     /** What Retry resends: the contract requires the exact previous request, nothing rebuilt. */
     private var lastInput: UserInput? = null
+
+    /** Which source the confirmed meal records, kept because the photo is dropped on success. */
+    private var parsedSource = EntrySource.LLM_TEXT
 
     /**
      * A question belongs to the text it was asked about, so editing the description drops the
@@ -66,6 +74,42 @@ class EntryViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(clarificationAnswer = answer)
     }
 
+    /** Where the camera app writes a capture; only a content URI, so it is cheap enough to call here. */
+    fun newCaptureUri(): Uri = photoStore.newCaptureUri()
+
+    /**
+     * Turns the picked or captured image into the single upload candidate. A new photo is a new
+     * request, so any pending clarification is dropped with it.
+     */
+    fun onPhotoPicked(source: Uri) {
+        lastInput = null
+        _uiState.value =
+            _uiState.value.copy(
+                isAttachingPhoto = true,
+                photoFailed = false,
+                failure = null,
+                clarificationQuestion = null,
+                clarificationAnswer = "",
+            )
+        viewModelScope.launch {
+            val path = photoStore.prepareForUpload(source)
+            _uiState.value =
+                _uiState.value.copy(isAttachingPhoto = false, photoPath = path, photoFailed = path == null)
+        }
+    }
+
+    fun onRemovePhoto() {
+        lastInput = null
+        photoStore.clear()
+        _uiState.value =
+            _uiState.value.copy(
+                photoPath = null,
+                photoFailed = false,
+                clarificationQuestion = null,
+                clarificationAnswer = "",
+            )
+    }
+
     fun onParse() {
         val state = _uiState.value
         if (!state.canSubmit) return
@@ -73,20 +117,15 @@ class EntryViewModel @Inject constructor(
             _uiState.value = state.copy(textMissing = true)
             return
         }
-        parse(UserInput.Text(text = state.text))
+        parse(inputWith(clarification = null))
     }
 
-    /** Resubmits the original text together with the answer; the proxy keeps no session. */
+    /** Resubmits the original text and photo together with the answer; the proxy keeps no session. */
     fun onSubmitClarification() {
         val state = _uiState.value
         val question = state.clarificationQuestion ?: return
         if (!state.canSubmit || state.clarificationAnswer.isBlank()) return
-        parse(
-            UserInput.Text(
-                text = state.text,
-                clarification = ClarificationAnswer(question = question, answer = state.clarificationAnswer),
-            ),
-        )
+        parse(inputWith(ClarificationAnswer(question = question, answer = state.clarificationAnswer)))
     }
 
     fun onRetry() {
@@ -137,7 +176,7 @@ class EntryViewModel @Inject constructor(
                     saveMeal(
                         mealId = null,
                         items = foodItems,
-                        source = EntrySource.LLM_TEXT,
+                        source = parsedSource,
                         rawUserInput = state.text,
                     )
                 when (result) {
@@ -156,8 +195,22 @@ class EntryViewModel @Inject constructor(
         }
     }
 
+    private fun inputWith(clarification: ClarificationAnswer?): UserInput {
+        val state = _uiState.value
+        return if (state.photoPath == null) {
+            UserInput.Text(text = state.text, clarification = clarification)
+        } else {
+            UserInput.TextWithPhoto(
+                text = state.text,
+                temporaryPhotoPath = state.photoPath,
+                clarification = clarification,
+            )
+        }
+    }
+
     private fun parse(input: UserInput) {
         lastInput = input
+        parsedSource = if (input is UserInput.TextWithPhoto) EntrySource.LLM_PHOTO else EntrySource.LLM_TEXT
         _uiState.value =
             _uiState.value.copy(
                 isParsing = true,
@@ -178,6 +231,9 @@ class EntryViewModel @Inject constructor(
                     ParseResult.Failure(FailureReason.UNKNOWN, unexpected)
                 }
             _uiState.value = _uiState.value.applyParseResult(result)
+            // Contract §8: the photo is deleted as soon as a final answer arrives. A clarification
+            // or a failure is not final, so those keep it for the resubmission.
+            if (result is ParseResult.Success) photoStore.clear()
         }
     }
 
@@ -193,6 +249,7 @@ class EntryViewModel @Inject constructor(
                 isConfirming = true,
                 note = result.note,
                 items = items,
+                photoPath = null,
             )
         }
 
@@ -205,5 +262,10 @@ class EntryViewModel @Inject constructor(
             )
 
         is ParseResult.Failure -> copy(isParsing = false, failure = result.reason)
+    }
+
+    /** Leaving the flow, by Back, by navigation, or by a saved meal, takes the photo with it. */
+    public override fun onCleared() {
+        photoStore.clear()
     }
 }

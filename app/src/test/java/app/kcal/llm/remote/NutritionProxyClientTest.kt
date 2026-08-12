@@ -1,6 +1,7 @@
 package app.kcal.llm.remote
 
 import app.kcal.core.common.AppLocaleProvider
+import app.kcal.core.common.DispatcherProvider
 import app.kcal.domain.usecase.ValidateMeal
 import app.kcal.llm.ClarificationAnswer
 import app.kcal.llm.FailureReason
@@ -26,17 +27,22 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import org.junit.Test
+import java.io.File
 import java.io.IOException
+import java.util.Base64
 import java.util.Locale
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** Transport behaviour only; no test performs network I/O. */
+@OptIn(ExperimentalCoroutinesApi::class)
 class NutritionProxyClientTest {
 
     private val requests = mutableListOf<HttpRequestData>()
@@ -176,12 +182,48 @@ class NutritionProxyClientTest {
     }
 
     @Test
-    fun `a photo request is refused until the transient image pipeline exists`() = runTest {
+    fun `a photo request carries the transient jpeg as contract base64`() = runTest {
+        val photo = transientPhoto("pretend-jpeg-bytes")
+        val client = client { respondJson(fixture("parse_photo_success.json")) }
+
+        val result = client.parse(UserInput.TextWithPhoto("what is on the plate", photo.path))
+
+        assertTrue(result is ParseResult.Success)
+        val body = requests.single().body.toByteArray().decodeToString()
+        val expected = Base64.getEncoder().encodeToString("pretend-jpeg-bytes".toByteArray())
+        assertEquals(
+            """{"text":"what is on the plate","image":{"media_type":"image/jpeg","data_base64":"$expected"}}""",
+            body,
+        )
+    }
+
+    @Test
+    fun `a photo clarification resubmits the same image with the answer`() = runTest {
+        val photo = transientPhoto("pretend-jpeg-bytes")
+        val client = client { respondJson(fixture("parse_photo_success.json")) }
+
+        client.parse(
+            UserInput.TextWithPhoto(
+                text = "what is on the plate",
+                temporaryPhotoPath = photo.path,
+                clarification = ClarificationAnswer("How large was the plate?", "About 25 cm"),
+            ),
+        )
+
+        val body = requests.single().body.toByteArray().decodeToString()
+        assertTrue(body.contains(""""data_base64":""""), body)
+        assertTrue(body.contains(""""answer":"About 25 cm""""), body)
+    }
+
+    @Test
+    fun `a photo that is already gone is refused instead of silently sent as text`() = runTest {
         val client = client { respondJson(fixture("parse_text_success.json")) }
 
-        val result = client.parse(UserInput.TextWithPhoto("chicken with rice", "/cache/meal.jpg"))
+        val deleted = client.parse(UserInput.TextWithPhoto("chicken with rice", "/nowhere/meal.jpg"))
+        val empty = client.parse(UserInput.TextWithPhoto("chicken with rice", transientPhoto("").path))
 
-        assertEquals(FailureReason.INVALID_REQUEST, (result as ParseResult.Failure).reason)
+        assertEquals(FailureReason.INVALID_REQUEST, (deleted as ParseResult.Failure).reason)
+        assertEquals(FailureReason.INVALID_REQUEST, (empty as ParseResult.Failure).reason)
         assertTrue(requests.isEmpty())
     }
 
@@ -220,7 +262,14 @@ class NutritionProxyClientTest {
             config = LlmProxyConfig(baseUrl = baseUrl, apiKey = "test-key"),
             localeProvider = AppLocaleProvider { locale },
             validateMeal = ValidateMeal(),
+            dispatchers = DispatcherProvider(UnconfinedTestDispatcher()),
         )
+    }
+
+    /** Stands in for what the entry flow leaves in the cache; the bytes only have to be readable. */
+    private fun transientPhoto(content: String): File = File.createTempFile("transient-photo", ".jpg").apply {
+        deleteOnExit()
+        writeBytes(content.toByteArray())
     }
 
     private fun fixture(name: String): String =

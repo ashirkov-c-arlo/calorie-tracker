@@ -52,6 +52,12 @@
     <string name="entry_text_required">Describe the meal first.</string>
     <string name="entry_parsing">Reading your description…</string>
     <string name="entry_clarification_answer_label">Your answer</string>
+    <string name="entry_photo_add">Add photo</string>
+    <string name="entry_photo_take">Take photo</string>
+    <string name="entry_photo_preparing">Preparing the photo…</string>
+    <string name="entry_photo_attached">Photo attached. It is used for this reading only and is never saved.</string>
+    <string name="entry_photo_remove">Remove photo</string>
+    <string name="entry_photo_failed">That image could not be read. Pick another photo or continue with text only.</string>
     <string name="entry_confirm_title">Check before saving</string>
     <string name="entry_confirm_subtitle">These values are an estimate. Edit anything that looks wrong.</string>
 
