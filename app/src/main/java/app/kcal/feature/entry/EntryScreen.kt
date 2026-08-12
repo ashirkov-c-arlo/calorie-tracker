@@ -1,7 +1,7 @@
 package app.kcal.feature.entry
 
+import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
-import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -35,9 +35,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -64,13 +62,9 @@ fun EntryRoute(onClose: () -> Unit, onLogManually: () -> Unit, viewModel: EntryV
             if (event == EntryEvent.Saved) onClose()
         }
     }
-    var captureTarget by remember { mutableStateOf<Uri?>(null) }
     val takePicture =
         rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { captured ->
-            val target = captureTarget
-            captureTarget = null
-            // A cancelled capture is left alone: the next upload or the closing flow deletes it.
-            if (captured && target != null) viewModel.onPhotoPicked(target)
+            viewModel.onCaptureResult(captured)
         }
     val pickPhoto =
         rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { picked ->
@@ -98,9 +92,13 @@ fun EntryRoute(onClose: () -> Unit, onLogManually: () -> Unit, viewModel: EntryV
             pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         },
         onTakePhoto = {
-            val target = viewModel.newCaptureUri()
-            captureTarget = target
-            takePicture.launch(target)
+            try {
+                takePicture.launch(viewModel.onCaptureRequested().uri)
+            } catch (noCameraApp: ActivityNotFoundException) {
+                // A camera sensor does not guarantee an app that answers the capture intent, and
+                // package visibility makes resolving it unreliable.
+                viewModel.onCaptureUnavailable()
+            }
         },
         onRemovePhoto = viewModel::onRemovePhoto,
     )
@@ -480,6 +478,10 @@ private fun EntryPhotoAttachedBlackPreview() = EntryPreview(ThemeMode.BLACK, ent
 @Preview(name = "Entry photo preparing White")
 @Composable
 private fun EntryPhotoPreparingWhitePreview() = EntryPreview(ThemeMode.WHITE, entryPhotoPreparingPreviewState)
+
+@Preview(name = "Entry photo preparing Black")
+@Composable
+private fun EntryPhotoPreparingBlackPreview() = EntryPreview(ThemeMode.BLACK, entryPhotoPreparingPreviewState)
 
 @Preview(name = "Entry photo failed White")
 @Composable

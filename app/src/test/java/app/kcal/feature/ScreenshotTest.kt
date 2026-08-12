@@ -189,6 +189,9 @@ class ScreenshotTest {
     fun entryPhotoPreparingWhite() = capture(ThemeMode.WHITE) { EntryFixture(entryPhotoPreparingPreviewState) }
 
     @Test
+    fun entryPhotoPreparingBlack() = capture(ThemeMode.BLACK) { EntryFixture(entryPhotoPreparingPreviewState) }
+
+    @Test
     fun entryPhotoFailedWhite() = capture(ThemeMode.WHITE) { EntryFixture(entryPhotoFailedPreviewState) }
 
     @Test

@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.kcal.core.common.AppLocaleProvider
+import app.kcal.core.common.TransientCapture
 import app.kcal.core.common.TransientPhotoStore
 import app.kcal.domain.model.EntrySource
 import app.kcal.domain.usecase.SaveMeal
@@ -53,6 +54,12 @@ class EntryViewModel @Inject constructor(
     private var parsedSource = EntrySource.LLM_TEXT
 
     /**
+     * The capture the camera app is writing to. It is owned here rather than in the composable so
+     * that a result that arrives after the screen was recreated still finds its target.
+     */
+    private var pendingCapture: TransientCapture? = null
+
+    /**
      * A question belongs to the text it was asked about, so editing the description drops the
      * pending clarification instead of letting it be attached to a different meal.
      */
@@ -74,8 +81,30 @@ class EntryViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(clarificationAnswer = answer)
     }
 
-    /** Where the camera app writes a capture; only a content URI, so it is cheap enough to call here. */
-    fun newCaptureUri(): Uri = photoStore.newCaptureUri()
+    /**
+     * Creates the capture the camera app will write to. The value is kept here, so a result that
+     * arrives after the screen was recreated still finds its target.
+     */
+    fun onCaptureRequested(): TransientCapture {
+        // Anything still pending at this point never arrived, so it cannot be waited for.
+        discardPendingCapture()
+        val capture = photoStore.newCapture()
+        pendingCapture = capture
+        return capture
+    }
+
+    /** A capture that did not happen leaves nothing behind, whatever the camera app wrote. */
+    fun onCaptureResult(captured: Boolean) {
+        val capture = pendingCapture ?: return
+        pendingCapture = null
+        if (captured) onPhotoPicked(capture.uri) else photoStore.discard(capture)
+    }
+
+    /** No camera app could handle the request; reported like any other unusable image. */
+    fun onCaptureUnavailable() {
+        discardPendingCapture()
+        _uiState.value = _uiState.value.copy(isAttachingPhoto = false, photoFailed = true)
+    }
 
     /**
      * Turns the picked or captured image into the single upload candidate. A new photo is a new
@@ -101,6 +130,7 @@ class EntryViewModel @Inject constructor(
     fun onRemovePhoto() {
         lastInput = null
         photoStore.clear()
+        pendingCapture = null
         _uiState.value =
             _uiState.value.copy(
                 photoPath = null,
@@ -195,6 +225,11 @@ class EntryViewModel @Inject constructor(
         }
     }
 
+    private fun discardPendingCapture() {
+        pendingCapture?.let(photoStore::discard)
+        pendingCapture = null
+    }
+
     private fun inputWith(clarification: ClarificationAnswer?): UserInput {
         val state = _uiState.value
         return if (state.photoPath == null) {
@@ -266,6 +301,7 @@ class EntryViewModel @Inject constructor(
 
     /** Leaving the flow, by Back, by navigation, or by a saved meal, takes the photo with it. */
     public override fun onCleared() {
+        pendingCapture = null
         photoStore.clear()
     }
 }

@@ -15,9 +15,13 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.max
+
+/** A capture target handed to the camera app, kept together with the file it will write. */
+data class TransientCapture(val uri: Uri, val path: String)
 
 /**
  * Meal photos exist only as cache files, only while one entry flow needs them. Nothing here
@@ -41,37 +45,62 @@ class TransientPhotoStore @Inject constructor(
 ) {
 
     /**
-     * Destination for `TakePicture`. Only the content URI is built here; the file itself is
-     * created by the camera app through `FileProvider`, so this stays cheap enough to call from
-     * a click handler.
+     * Bumped by every [clear], so an encoding that was already running when the flow closed
+     * knows that its output is no longer wanted.
      */
-    fun newCaptureUri(): Uri = FileProvider.getUriForFile(context, "${context.packageName}$AUTHORITY_SUFFIX", newFile())
+    private val generation = AtomicInteger()
 
     /**
-     * Path of a freshly encoded upload candidate, or null when the source cannot be decoded.
-     * Only that one file survives the call, so a cancelled capture, a replaced photo, and stale
-     * leftovers are all gone by the time a request can use them.
+     * Destination for `TakePicture`. Only the content URI is built here; the file itself is
+     * created by the camera app through `FileProvider`, so this stays cheap enough to call from
+     * a click handler. The caller keeps the value to [discard] it when the capture does not
+     * arrive.
      */
-    suspend fun prepareForUpload(source: Uri): String? = withContext(dispatchers.io) {
-        val output = newFile()
-        val encoded =
-            try {
-                encode(source, output)
-            } catch (unreadable: IOException) {
-                false
-            } catch (revoked: SecurityException) {
-                // A picker URI can lose its grant before it is read; treated as unreadable.
-                false
-            }
-        keepOnly(output.takeIf { encoded })
-        if (encoded) output.path else null
+    fun newCapture(): TransientCapture {
+        val file = newFile()
+        return TransientCapture(
+            uri = FileProvider.getUriForFile(context, "${context.packageName}$AUTHORITY_SUFFIX", file),
+            path = file.path,
+        )
+    }
+
+    /** Removes a capture target the camera app may or may not have written to. */
+    fun discard(capture: TransientCapture) {
+        File(capture.path).delete()
     }
 
     /**
-     * Deletes every temporary photo. Used when the entry flow ends and before it starts. An
-     * encoding that happens to finish after this call is swept at the next app start.
+     * Path of a freshly encoded upload candidate, or null when the source cannot be decoded or
+     * the flow was closed while it was encoding. Only that one file survives the call, so a
+     * cancelled capture, a replaced photo, and stale leftovers are all gone by the time a
+     * request can use them.
      */
+    suspend fun prepareForUpload(source: Uri): String? {
+        val ownedGeneration = generation.get()
+        return withContext(dispatchers.io) {
+            val output = newFile()
+            val encoded =
+                try {
+                    encode(source, output)
+                } catch (unreadable: IOException) {
+                    false
+                } catch (revoked: SecurityException) {
+                    // A picker URI can lose its grant before it is read; treated as unreadable.
+                    false
+                }
+            // A flow that closed mid-encoding must not end up owning a file afterwards.
+            if (!encoded || generation.get() != ownedGeneration) {
+                output.delete()
+                return@withContext null
+            }
+            keepOnly(output)
+            output.path
+        }
+    }
+
+    /** Deletes every temporary photo, including one that is still being encoded. */
     fun clear() {
+        generation.incrementAndGet()
         keepOnly(null)
     }
 
@@ -84,9 +113,9 @@ class TransientPhotoStore @Inject constructor(
         // Sampling keeps the decode small; the exact scale below is what enforces the long edge.
         val options = BitmapFactory.Options().apply { inSampleSize = sampleSizeFor(longEdge) }
         val decoded = decode(source, options) ?: return false
-        val rotation = openStream(source)?.use(::rotationDegrees) ?: 0
+        val orientation = openStream(source)?.use(::orientationTag) ?: ExifInterface.ORIENTATION_NORMAL
         return output.outputStream().use { stream ->
-            decoded.uprightAndBounded(rotation).compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, stream)
+            decoded.uprightAndBounded(orientation).compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, stream)
         }
     }
 
@@ -96,20 +125,41 @@ class TransientPhotoStore @Inject constructor(
     private fun openStream(source: Uri): InputStream? = context.contentResolver.openInputStream(source)
 
     /** Only the orientation tag is read; everything else in the source metadata is dropped. */
-    private fun rotationDegrees(stream: InputStream): Int =
-        when (ExifInterface(stream).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
-            ExifInterface.ORIENTATION_ROTATE_90 -> 90
-            ExifInterface.ORIENTATION_ROTATE_180 -> 180
-            ExifInterface.ORIENTATION_ROTATE_270 -> 270
-            else -> 0
-        }
+    private fun orientationTag(stream: InputStream): Int =
+        ExifInterface(stream).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
 
-    private fun Bitmap.uprightAndBounded(rotation: Int): Bitmap {
+    /**
+     * Downscales and applies all eight orientations, mirrored ones included: a selfie or an
+     * imported image must reach the proxy the way the user saw it.
+     */
+    private fun Bitmap.uprightAndBounded(orientation: Int): Bitmap {
         val scale = (MAX_EDGE_PX.toFloat() / max(width, height)).coerceAtMost(1f)
-        if (scale == 1f && rotation == 0) return this
+        if (scale == 1f && orientation == ExifInterface.ORIENTATION_NORMAL) return this
         val matrix = Matrix().apply {
             postScale(scale, scale)
-            postRotate(rotation.toFloat())
+            when (orientation) {
+                ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> postScale(-1f, 1f)
+
+                ExifInterface.ORIENTATION_ROTATE_180 -> postRotate(180f)
+
+                ExifInterface.ORIENTATION_FLIP_VERTICAL -> postScale(1f, -1f)
+
+                ExifInterface.ORIENTATION_TRANSPOSE -> {
+                    postRotate(90f)
+                    postScale(-1f, 1f)
+                }
+
+                ExifInterface.ORIENTATION_ROTATE_90 -> postRotate(90f)
+
+                ExifInterface.ORIENTATION_TRANSVERSE -> {
+                    postRotate(-90f)
+                    postScale(-1f, 1f)
+                }
+
+                ExifInterface.ORIENTATION_ROTATE_270 -> postRotate(-90f)
+
+                else -> Unit
+            }
         }
         return Bitmap.createBitmap(this, 0, 0, width, height, matrix, true)
     }

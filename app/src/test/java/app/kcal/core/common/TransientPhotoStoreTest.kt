@@ -3,13 +3,22 @@ package app.kcal.core.common
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.media.ExifInterface
 import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.kcal.testing.resetFileProviderRoots
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -31,6 +40,11 @@ class TransientPhotoStoreTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val store = TransientPhotoStore(context, DispatcherProvider(UnconfinedTestDispatcher()))
     private val photoDirectory = File(context.cacheDir, "entry-photos")
+
+    @Before
+    fun setUp() {
+        resetFileProviderRoots()
+    }
 
     @Test
     fun `a large photo is downscaled to the contract long edge and re-encoded as jpeg`() = runTest {
@@ -62,6 +76,44 @@ class TransientPhotoStoreTest {
 
         assertEquals(400, decoded(output).width)
         assertEquals(800, decoded(output).height)
+    }
+
+    @Test
+    fun `every exif orientation, mirrored ones included, is applied to the pixels`() = runTest {
+        // The source marks its top-left quadrant black and its top-right quadrant grey, so each
+        // transform lands the two marks in a different pair of quadrants.
+        val expected =
+            mapOf(
+                ExifInterface.ORIENTATION_NORMAL to (Quadrant.TOP_LEFT to Quadrant.TOP_RIGHT),
+                ExifInterface.ORIENTATION_FLIP_HORIZONTAL to (Quadrant.TOP_RIGHT to Quadrant.TOP_LEFT),
+                ExifInterface.ORIENTATION_ROTATE_180 to (Quadrant.BOTTOM_RIGHT to Quadrant.BOTTOM_LEFT),
+                ExifInterface.ORIENTATION_FLIP_VERTICAL to (Quadrant.BOTTOM_LEFT to Quadrant.BOTTOM_RIGHT),
+                ExifInterface.ORIENTATION_TRANSPOSE to (Quadrant.TOP_LEFT to Quadrant.BOTTOM_LEFT),
+                ExifInterface.ORIENTATION_ROTATE_90 to (Quadrant.TOP_RIGHT to Quadrant.BOTTOM_RIGHT),
+                ExifInterface.ORIENTATION_TRANSVERSE to (Quadrant.BOTTOM_RIGHT to Quadrant.TOP_RIGHT),
+                ExifInterface.ORIENTATION_ROTATE_270 to (Quadrant.BOTTOM_LEFT to Quadrant.TOP_LEFT),
+            )
+
+        expected.forEach { (orientation, marks) ->
+            val output = File(assertNotNull(store.prepareForUpload(markedSourceImage(orientation))))
+
+            assertEquals(marks, marksOf(decoded(output)), "orientation $orientation")
+        }
+    }
+
+    @Test
+    fun `a photo that finishes encoding after the flow closed is discarded`() = runTest {
+        val encoding = StandardTestDispatcher(testScheduler)
+        val store = TransientPhotoStore(context, DispatcherProvider(encoding))
+        // UNDISPATCHED runs up to the first suspension, so the call is mid-flight when the flow
+        // closes and the encoding only finishes afterwards.
+        val pending = async(start = CoroutineStart.UNDISPATCHED) { store.prepareForUpload(sourceImage(600, 600)) }
+
+        store.clear()
+        runCurrent()
+
+        assertNull(pending.await())
+        assertTrue(photoDirectory.listFiles().orEmpty().isEmpty())
     }
 
     @Test
@@ -120,12 +172,51 @@ class TransientPhotoStoreTest {
     }
 
     @Test
-    fun `a capture uri is served by the app file provider from the photo cache`() {
-        val uri = store.newCaptureUri()
+    fun `a capture target is served by the app file provider and can be discarded`() {
+        val capture = store.newCapture()
+        val written = File(capture.path).apply { writeText("camera output") }
 
-        assertEquals("content", uri.scheme)
-        assertEquals("${context.packageName}.photos", uri.authority)
-        assertTrue(uri.path.orEmpty().endsWith(".jpg"), uri.toString())
+        assertEquals("content", capture.uri.scheme)
+        assertEquals("${context.packageName}.photos", capture.uri.authority)
+        assertTrue(capture.path.endsWith(".jpg"), capture.path)
+
+        store.discard(capture)
+
+        assertFalse(written.exists())
+    }
+
+    private enum class Quadrant { TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT }
+
+    /** Which quadrant holds the black mark and which holds the grey one. */
+    private fun marksOf(bitmap: Bitmap): Pair<Quadrant, Quadrant> {
+        val samples =
+            Quadrant.entries.associateWith { quadrant ->
+                val x = bitmap.width / 4 + if (quadrant == Quadrant.TOP_RIGHT || quadrant == Quadrant.BOTTOM_RIGHT) {
+                    bitmap.width / 2
+                } else {
+                    0
+                }
+                val y = bitmap.height / 4 + if (quadrant == Quadrant.BOTTOM_LEFT || quadrant == Quadrant.BOTTOM_RIGHT) {
+                    bitmap.height / 2
+                } else {
+                    0
+                }
+                Color.red(bitmap.getPixel(x, y))
+            }
+        val black = assertNotNull(samples.entries.minByOrNull { it.value }).key
+        val grey = assertNotNull(samples.entries.filter { it.key != black }.minByOrNull { it.value }).key
+        return black to grey
+    }
+
+    private fun markedSourceImage(orientation: Int): Uri {
+        val bitmap = Bitmap.createBitmap(MARKED_SIZE, MARKED_SIZE, Bitmap.Config.ARGB_8888)
+        val half = MARKED_SIZE / 2f
+        Canvas(bitmap).apply {
+            drawColor(Color.WHITE)
+            drawRect(0f, 0f, half, half, Paint().apply { color = Color.BLACK })
+            drawRect(half, 0f, MARKED_SIZE.toFloat(), half, Paint().apply { color = Color.GRAY })
+        }
+        return writeJpeg(bitmap, orientation, emptyMap())
     }
 
     private fun sourceImage(
@@ -133,9 +224,10 @@ class TransientPhotoStoreTest {
         height: Int,
         orientation: Int? = null,
         tags: Map<String, String> = emptyMap(),
-    ): Uri {
+    ): Uri = writeJpeg(Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888), orientation, tags)
+
+    private fun writeJpeg(bitmap: Bitmap, orientation: Int?, tags: Map<String, String>): Uri {
         val file = File(context.filesDir, "${UUID.randomUUID()}.jpg")
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
         if (orientation != null || tags.isNotEmpty()) {
             ExifInterface(file.path).apply {
@@ -148,4 +240,8 @@ class TransientPhotoStoreTest {
     }
 
     private fun decoded(file: File): Bitmap = assertNotNull(BitmapFactory.decodeFile(file.path), "not decodable")
+
+    private companion object {
+        const val MARKED_SIZE = 400
+    }
 }

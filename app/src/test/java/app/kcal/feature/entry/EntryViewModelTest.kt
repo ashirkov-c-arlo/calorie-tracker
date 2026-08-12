@@ -22,6 +22,7 @@ import app.kcal.testing.FakeMealRepository
 import app.kcal.testing.FakeProfileRepository
 import app.kcal.testing.completeProfile
 import app.kcal.testing.foodItem
+import app.kcal.testing.resetFileProviderRoots
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -57,6 +58,7 @@ class EntryViewModelTest {
 
     @Before
     fun setUp() {
+        resetFileProviderRoots()
         Dispatchers.setMain(UnconfinedTestDispatcher())
     }
 
@@ -514,6 +516,56 @@ class EntryViewModelTest {
         assertFalse(File(attachedPath).exists())
     }
 
+    @Test
+    fun `a cancelled capture leaves nothing in the cache`() = runTest {
+        val viewModel = viewModel(ScriptedParser())
+        viewModel.onTextChange("what is on the plate")
+        // What a camera app may have written before the user backed out of it.
+        val partial = File(viewModel.onCaptureRequested().path).apply { writeText("partial capture") }
+
+        viewModel.onCaptureResult(captured = false)
+
+        assertFalse(partial.exists())
+        assertNull(viewModel.uiState.value.photoPath)
+        assertFalse(viewModel.uiState.value.photoFailed)
+    }
+
+    @Test
+    fun `a repeated capture request drops the target that never arrived`() = runTest {
+        val viewModel = viewModel(ScriptedParser())
+        val abandoned = File(viewModel.onCaptureRequested().path).apply { writeText("stale") }
+
+        viewModel.onCaptureRequested()
+
+        assertFalse(abandoned.exists())
+    }
+
+    @Test
+    fun `a capture that returns after the screen was recreated is still attached`() = runTest {
+        val viewModel = viewModel(ScriptedParser())
+        viewModel.onTextChange("what is on the plate")
+        val capture = viewModel.onCaptureRequested()
+        writeImage(File(capture.path))
+
+        // The composable that launched the camera may be gone; the target is owned here.
+        viewModel.onCaptureResult(captured = true)
+        runCurrent()
+
+        assertNotNull(viewModel.uiState.value.photoPath)
+        assertFalse(viewModel.uiState.value.photoFailed)
+    }
+
+    @Test
+    fun `a missing camera app is reported instead of attaching anything`() = runTest {
+        val viewModel = viewModel(ScriptedParser())
+
+        viewModel.onCaptureUnavailable()
+
+        assertTrue(viewModel.uiState.value.photoFailed)
+        assertNull(viewModel.uiState.value.photoPath)
+        assertFalse(viewModel.uiState.value.isAttachingPhoto)
+    }
+
     private class ScriptedParser(vararg results: ParseResult) : NutritionParser {
         val inputs = mutableListOf<UserInput>()
         private val scripted = results.toMutableList()
@@ -525,11 +577,12 @@ class EntryViewModelTest {
     }
 
     /** A real decodable image, so the store produces a real upload candidate. */
-    private fun sourceImage(): Uri {
-        val file = File(context.filesDir, "${UUID.randomUUID()}.jpg")
+    private fun sourceImage(): Uri = Uri.fromFile(writeImage(File(context.filesDir, "${UUID.randomUUID()}.jpg")))
+
+    private fun writeImage(file: File): File {
         val bitmap = Bitmap.createBitmap(1200, 800, Bitmap.Config.ARGB_8888)
         file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
-        return Uri.fromFile(file)
+        return file
     }
 
     private fun viewModel(
