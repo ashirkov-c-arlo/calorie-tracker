@@ -17,13 +17,20 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
+
+/** A save whose date the editor already left, so it cannot be reported inline. */
+sealed interface TrendsEvent {
+    data class SaveFailed(val localDate: LocalDate) : TrendsEvent
+}
 
 /**
  * Weight logging and the calendar-window trend. The typed value is converted to canonical
@@ -50,6 +57,9 @@ class TrendsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(TrendsUiState())
     val uiState: StateFlow<TrendsUiState> = _uiState.asStateFlow()
+
+    private val eventChannel = Channel<TrendsEvent>(Channel.BUFFERED)
+    val events = eventChannel.receiveAsFlow()
 
     private val currentDate = MutableStateFlow(timeProvider.today())
 
@@ -120,23 +130,33 @@ class TrendsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val stored = logWeight(WeightEntry(localDate = localDate, kg = kilograms))
-                if (stored) {
+                when {
                     // The field tracks storage again, unless the editor moved on meanwhile: that
                     // draft belongs to another date, unit system or value.
-                    if (draftRevision == savedRevision) isDraftEdited = false
-                } else {
-                    _uiState.value = _uiState.value.copy(inputError = ProfileFieldError.OUT_OF_RANGE)
+                    stored -> if (draftRevision == savedRevision) isDraftEdited = false
+
+                    // A rejected or failed write belongs to the date it was made for, so it is
+                    // only reported inline while that date is still on screen.
+                    editorLeft(localDate) -> eventChannel.send(TrendsEvent.SaveFailed(localDate))
+
+                    else -> _uiState.value = _uiState.value.copy(inputError = ProfileFieldError.OUT_OF_RANGE)
                 }
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (storageFailure: Exception) {
                 // Surfaced as a retryable message; nothing about the value is logged.
-                _uiState.value = _uiState.value.copy(saveFailed = true)
+                if (editorLeft(localDate)) {
+                    eventChannel.send(TrendsEvent.SaveFailed(localDate))
+                } else {
+                    _uiState.value = _uiState.value.copy(saveFailed = true)
+                }
             } finally {
                 _uiState.value = _uiState.value.copy(isSaving = false)
             }
         }
     }
+
+    private fun editorLeft(localDate: LocalDate): Boolean = _uiState.value.editedDate != localDate
 
     private fun load() {
         loadJob?.cancel()
@@ -179,6 +199,7 @@ class TrendsViewModel @Inject constructor(
             isEditingToday = inputs.editedDate == inputs.today,
             weightInput = if (refill) storedKg.formatInput(inputs.unitSystem) else state.weightInput,
             inputError = state.inputError.takeUnless { refill },
+            saveFailed = state.saveFailed && !refill,
             points =
             buildWeightTrend(inputs.weights)
                 .map { point ->

@@ -295,6 +295,55 @@ class TrendsViewModelTest {
     }
 
     @Test
+    fun `a failed save is not blamed on the date the editor moved to`() = runTest {
+        val past = today.minusDays(3)
+        val repository = repository(past to 90.0, today to 81.0)
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = viewModel(GatedProfileRepository(repository, gate))
+        val states = collect(viewModel)
+        val events = mutableListOf<TrendsEvent>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.events.toList(events) }
+        runCurrent()
+
+        viewModel.onWeightChange("81.5")
+        viewModel.onSave()
+        runCurrent()
+
+        repository.writeFails = true
+        viewModel.onEntryClick(past)
+        runCurrent()
+        viewModel.onWeightChange("88.0")
+        gate.complete(Unit)
+        runCurrent()
+
+        // The message names the date that failed instead of appearing under the new draft.
+        assertEquals(listOf<TrendsEvent>(TrendsEvent.SaveFailed(today)), events)
+        assertFalse(states.last().saveFailed)
+        assertNull(states.last().inputError)
+        assertEquals("88.0", states.last().weightInput)
+    }
+
+    @Test
+    fun `an inline save failure is dropped when the editor changes date`() = runTest {
+        val past = today.minusDays(3)
+        val repository = repository(past to 90.0, today to 81.0)
+        repository.writeFails = true
+        val viewModel = viewModel(repository)
+        val states = collect(viewModel)
+        runCurrent()
+
+        viewModel.onWeightChange("80.4")
+        viewModel.onSave()
+        runCurrent()
+        assertTrue(states.last().saveFailed)
+
+        viewModel.onEntryClick(past)
+        runCurrent()
+
+        assertFalse(states.last().saveFailed)
+    }
+
+    @Test
     fun `repeated taps cannot overlap, so an older write cannot land last`() = runTest {
         val repository = repository()
         val viewModel = viewModel(repository)

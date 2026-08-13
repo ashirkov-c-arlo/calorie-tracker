@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -61,6 +62,35 @@ class TrendsScreenTest {
         composeRule.onNodeWithText(fullDate(target)).assertIsDisplayed()
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.trends_log_today)).assertIsDisplayed()
         composeRule.onNode(hasText(mediumDate(target))).assertIsSelected()
+    }
+
+    /** Tapping the day that is already selected must still take the user to the editor. */
+    @Test
+    fun `tapping the already selected day still brings the editor into view`() {
+        val uiState = trendsManyPointsPreviewState
+        var clicks = 0
+        composeRule.setContent {
+            KcalTheme(themeMode = ThemeMode.WHITE) {
+                TrendsScreen(
+                    uiState = uiState,
+                    onWeightChange = {},
+                    onSave = {},
+                    onEntryClick = { clicks++ },
+                    onLogTodayClick = {},
+                    onRetry = {},
+                )
+            }
+        }
+        val selected = uiState.points.last().localDate
+        assertEquals(selected, uiState.editedDate)
+        val editorHeader = composeRule.onNodeWithText(fullDate(selected))
+
+        composeRule.onNodeWithText(mediumDate(uiState.points.first().localDate)).performScrollTo()
+        editorHeader.assertIsNotDisplayed()
+        composeRule.onNodeWithText(mediumDate(selected)).performScrollTo().performClick()
+
+        assertEquals(1, clicks)
+        editorHeader.assertIsDisplayed()
     }
 
     private fun mediumDate(localDate: LocalDate): String = format(FormatStyle.MEDIUM, localDate)

@@ -28,6 +28,7 @@
     <string name="trends_entries_title">Logged weights</string>
     <string name="trends_entry_value">%1$s %2$s</string>
     <string name="trends_edit_entry_content_description">Edit this day’s weight</string>
+    <string name="trends_save_failed_for_date">Could not save the weight for %1$s.</string>
     <string name="trends_chart_title">Weight and 7-day average</string>
     <string name="trends_chart_legend">Dots are logged weights. The line averages the entries dated within the seven days up to each point, so missing days are left out instead of filled in.</string>
     <string name="trends_chart_content_description">Weight chart from %1$s to %2$s.</string>

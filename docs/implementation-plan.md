@@ -460,7 +460,8 @@ Do not interpolate missing dates and do not substitute the last seven measuremen
 - Past-entry correction, day rollover with and without a lifecycle event, and a weight changed
   elsewhere.
 - Serialized saves, and a draft started for another date while a save is in flight.
-- A real click on a history row reaching the editor.
+- A failed save reported for its own date, inline or as a snackbar naming that date.
+- Real clicks on a history row, including the already selected day, reaching the editor.
 - Rejected non-finite/non-positive weights.
 - Unit conversion.
 - Trend values and chart ViewModel states.

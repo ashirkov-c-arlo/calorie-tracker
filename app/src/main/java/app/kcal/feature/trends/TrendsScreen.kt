@@ -21,6 +21,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -28,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,6 +53,7 @@ import app.kcal.domain.model.ThemeMode
 import app.kcal.domain.model.UnitSystem
 import app.kcal.feature.profile.components.DecimalField
 import app.kcal.feature.trends.components.WeightChart
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -57,7 +61,24 @@ import java.time.format.FormatStyle
 @Composable
 fun TrendsRoute(viewModel: TrendsViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val locale = currentLocale()
+    val saveFailedTemplate = stringResource(R.string.trends_save_failed_for_date)
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.onVisible() }
+    LaunchedEffect(viewModel, saveFailedTemplate, locale) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is TrendsEvent.SaveFailed ->
+                    snackbarHostState.showSnackbar(
+                        saveFailedTemplate.format(
+                            DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
+                                .withLocale(locale)
+                                .format(event.localDate),
+                        ),
+                    )
+            }
+        }
+    }
     TrendsScreen(
         uiState = uiState,
         onWeightChange = viewModel::onWeightChange,
@@ -65,6 +86,7 @@ fun TrendsRoute(viewModel: TrendsViewModel = hiltViewModel()) {
         onEntryClick = viewModel::onEntryClick,
         onLogTodayClick = viewModel::onLogTodayClick,
         onRetry = viewModel::onRetry,
+        snackbarHostState = snackbarHostState,
     )
 }
 
@@ -78,10 +100,12 @@ fun TrendsScreen(
     onLogTodayClick: () -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = { TopAppBar(title = { Text(text = stringResource(R.string.trends_title)) }) },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
     ) { contentPadding ->
         when {
             uiState.isLoading -> LoadingScreen(modifier = Modifier.padding(contentPadding))
@@ -116,8 +140,7 @@ private fun TrendsContent(
     modifier: Modifier = Modifier,
 ) {
     val scrollState = rememberScrollState()
-    // The editor is the first card, so selecting a day far down the list has to bring it back.
-    LaunchedEffect(uiState.editedDate) { scrollState.animateScrollTo(0) }
+    val scope = rememberCoroutineScope()
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -135,7 +158,15 @@ private fun TrendsContent(
             Text(text = stringResource(R.string.trends_empty), style = MaterialTheme.typography.bodyLarge)
         } else {
             WeightSeriesCard(uiState = uiState)
-            LoggedWeightsCard(uiState = uiState, onEntryClick = onEntryClick)
+            LoggedWeightsCard(
+                uiState = uiState,
+                // The editor is the first card, so every row tap has to bring it back into view,
+                // including a tap on the day that is already selected.
+                onEntryClick = { date ->
+                    onEntryClick(date)
+                    scope.launch { scrollState.animateScrollTo(0) }
+                },
+            )
         }
     }
 }

@@ -26,6 +26,7 @@
     <string name="trends_entries_title">Записанный вес</string>
     <string name="trends_entry_value">%1$s %2$s</string>
     <string name="trends_edit_entry_content_description">Изменить вес за этот день</string>
+    <string name="trends_save_failed_for_date">Не удалось сохранить вес за %1$s.</string>
     <string name="trends_chart_title">Вес и среднее за 7 дней</string>
     <string name="trends_chart_legend">Точки — записанный вес. Линия — среднее по записям за семь дней до каждой точки, поэтому пропущенные дни не достраиваются.</string>
     <string name="trends_chart_content_description">График веса с %1$s по %2$s.</string>
