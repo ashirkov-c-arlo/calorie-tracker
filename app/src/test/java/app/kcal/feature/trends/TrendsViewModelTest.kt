@@ -5,10 +5,12 @@ import app.kcal.core.common.TimeProvider
 import app.kcal.domain.model.UnitSystem
 import app.kcal.domain.model.UserPreferences
 import app.kcal.domain.model.WeightEntry
+import app.kcal.domain.repository.ProfileRepository
 import app.kcal.domain.usecase.BuildWeightTrend
 import app.kcal.domain.usecase.LogWeight
 import app.kcal.feature.profile.ProfileFieldError
 import app.kcal.testing.FakeProfileRepository
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.toList
@@ -163,6 +165,78 @@ class TrendsViewModelTest {
     }
 
     @Test
+    fun `saving past midnight resolves the day from the clock without a lifecycle event`() = runTest {
+        val repository = repository(today to 81.0)
+        val viewModel = viewModel(repository)
+        val states = collect(viewModel)
+        runCurrent()
+
+        // The screen stayed open across midnight: no ON_RESUME, so only the clock knows.
+        clock.current = Instant.parse("2026-03-16T06:00:00Z")
+        viewModel.onWeightChange("80.6")
+        viewModel.onSave()
+        runCurrent()
+
+        val tomorrow = today.plusDays(1)
+        assertEquals(mapOf(today to 81.0, tomorrow to 80.6), repository.weightsByDate.value.toMap())
+        assertEquals(tomorrow, states.last().editedDate)
+        assertTrue(states.last().isEditingToday)
+        assertEquals("80.6", states.last().weightInput)
+    }
+
+    @Test
+    fun `selecting today's row is not offered a switch to today`() = runTest {
+        val repository = repository(today.minusDays(1) to 83.0, today to 81.0)
+        val viewModel = viewModel(repository)
+        val states = collect(viewModel)
+        runCurrent()
+
+        viewModel.onEntryClick(today)
+        runCurrent()
+
+        assertEquals(today, states.last().editedDate)
+        assertTrue(states.last().isEditingToday)
+
+        viewModel.onEntryClick(today.minusDays(1))
+        runCurrent()
+
+        assertFalse(states.last().isEditingToday)
+    }
+
+    @Test
+    fun `a draft started for another date survives a save that lands afterwards`() = runTest {
+        val past = today.minusDays(3)
+        val repository = repository(past to 90.0, today to 81.0)
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = viewModel(GatedProfileRepository(repository, gate))
+        val states = collect(viewModel)
+        runCurrent()
+
+        viewModel.onWeightChange("81.5")
+        viewModel.onSave()
+        runCurrent()
+        assertTrue(states.last().isSaving)
+
+        // The editor moves to another day while today's write is still in flight, and the new
+        // draft happens to hold the same text as the pending one.
+        viewModel.onEntryClick(past)
+        runCurrent()
+        assertEquals("90.0", states.last().weightInput)
+        viewModel.onWeightChange("81.5")
+
+        gate.complete(Unit)
+        runCurrent()
+
+        assertEquals(past, states.last().editedDate)
+        assertEquals("81.5", states.last().weightInput)
+
+        viewModel.onSave()
+        runCurrent()
+
+        assertEquals(mapOf(past to 81.5, today to 81.5), repository.weightsByDate.value.toMap())
+    }
+
+    @Test
     fun `imperial input is stored in kilograms and displayed in pounds`() = runTest {
         val repository = repository(unitSystem = UnitSystem.IMPERIAL)
         val viewModel = viewModel(repository)
@@ -280,7 +354,7 @@ class TrendsViewModelTest {
         weightsByDate.value = sortedMapOf(*entries)
     }
 
-    private fun viewModel(repository: FakeProfileRepository): TrendsViewModel = TrendsViewModel(
+    private fun viewModel(repository: ProfileRepository): TrendsViewModel = TrendsViewModel(
         profileRepository = repository,
         logWeight = LogWeight(repository),
         buildWeightTrend = BuildWeightTrend(),
@@ -300,5 +374,16 @@ class TrendsViewModelTest {
         override fun withZone(zone: ZoneId): Clock = this
 
         override fun instant(): Instant = current
+    }
+
+    /** Holds a write open, so a save can be observed while the editor keeps being used. */
+    private class GatedProfileRepository(
+        private val delegate: ProfileRepository,
+        private val gate: CompletableDeferred<Unit>,
+    ) : ProfileRepository by delegate {
+        override suspend fun logWeight(entry: WeightEntry) {
+            gate.await()
+            delegate.logWeight(entry)
+        }
     }
 }

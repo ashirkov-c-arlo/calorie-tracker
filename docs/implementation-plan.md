@@ -437,7 +437,8 @@ endpoint, quota policy, and key exist. This repository does not implement that b
   and lists every logged day, and selecting a day edits that entry, so a wrong historical
   weight can be corrected. Deleting a weight entry is not offered.
 - Keep the untouched input field synchronized with the stored value for the edited date, so a
-  change made elsewhere or a day rollover cannot be written back.
+  change made elsewhere cannot be written back, and resolve the save date from the clock while
+  the editor follows today, so a screen left open across midnight logs the new day.
 - Guard the persisted-weight invariant in `domain/usecase/LogWeight`, not in the screen.
 - Render raw weight points.
 - Implement the agreed calendar-window trend:
@@ -456,8 +457,10 @@ Do not interpolate missing dates and do not substitute the last seven measuremen
 - Calendar gaps.
 - Month/year transitions.
 - One entry per day and same-day replacement.
-- Past-entry correction, day rollover, and a weight changed elsewhere.
-- Serialized saves.
+- Past-entry correction, day rollover with and without a lifecycle event, and a weight changed
+  elsewhere.
+- Serialized saves, and a draft started for another date while a save is in flight.
+- A real click on a history row reaching the editor.
 - Rejected non-finite/non-positive weights.
 - Unit conversion.
 - Trend values and chart ViewModel states.

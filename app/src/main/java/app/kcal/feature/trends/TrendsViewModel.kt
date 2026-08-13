@@ -31,9 +31,10 @@ import javax.inject.Inject
  * one save upserts the entry of the edited date.
  *
  * The editor follows the current local date until the user picks a logged day, which is how a
- * wrong historical entry is corrected. An untouched field always mirrors what is stored for the
- * edited date, so it cannot go stale and write back an outdated weight after a change made
- * elsewhere or after midnight.
+ * wrong historical entry is corrected. In follow mode the save date is recomputed from the clock
+ * at save time, so a screen left open across midnight logs the new day rather than yesterday. An
+ * untouched field always mirrors what is stored for the edited date, so it cannot go stale and
+ * write back an outdated weight after a change made elsewhere.
  *
  * Today's target snapshot is not written here: the app shell owns target replacement and
  * reacts to the new latest weight, so a stale calculation cannot overwrite a newer target.
@@ -58,6 +59,9 @@ class TrendsViewModel @Inject constructor(
     /** True once the user typed, which is the only state in which the field is not refilled. */
     private var isDraftEdited = false
 
+    /** Bumped by every editor change, so a finished save can tell whether it saved this draft. */
+    private var draftRevision = 0
+
     private var loadJob: Job? = null
 
     init {
@@ -75,39 +79,51 @@ class TrendsViewModel @Inject constructor(
 
     /** Selects a logged day for correction; the field is refilled from its stored value. */
     fun onEntryClick(localDate: LocalDate) {
-        isDraftEdited = false
-        selectedDate.value = localDate
+        editDate(localDate)
     }
 
-    /** Returns the editor to the current local date. */
+    /** Returns the editor to the current local date and to following further day changes. */
     fun onLogTodayClick() {
-        isDraftEdited = false
-        selectedDate.value = null
+        editDate(null)
     }
 
     fun onWeightChange(text: String) {
         isDraftEdited = true
+        draftRevision++
         _uiState.value = _uiState.value.copy(weightInput = text, inputError = null, saveFailed = false)
+    }
+
+    private fun editDate(localDate: LocalDate?) {
+        isDraftEdited = false
+        draftRevision++
+        selectedDate.value = localDate
     }
 
     /** One save at a time, so an older write can never land after a newer one. */
     fun onSave() {
         val state = _uiState.value
         if (state.isSaving) return
-        val localDate = state.editedDate ?: return
+        val today = timeProvider.today()
+        currentDate.value = today
+        // Follow mode resolves the date from the clock right here: the screen may have been open
+        // across midnight, where no lifecycle event refreshes it. The visible value is what gets
+        // logged, and the previous day keeps its own entry untouched.
+        val localDate = selectedDate.value ?: today
         val kilograms = state.weightInput.toKilograms(state.unitSystem)
+        val dated = state.copy(editedDate = localDate, isEditingToday = localDate == today)
         if (kilograms == null) {
-            _uiState.value = state.copy(inputError = inputError(state), saveFailed = false)
+            _uiState.value = dated.copy(inputError = inputError(state), saveFailed = false)
             return
         }
-        _uiState.value = state.copy(inputError = null, saveFailed = false, isSaving = true)
-        val savedInput = state.weightInput
+        _uiState.value = dated.copy(inputError = null, saveFailed = false, isSaving = true)
+        val savedRevision = draftRevision
         viewModelScope.launch {
             try {
                 val stored = logWeight(WeightEntry(localDate = localDate, kg = kilograms))
                 if (stored) {
-                    // The field tracks storage again, unless the user kept typing meanwhile.
-                    if (_uiState.value.weightInput == savedInput) isDraftEdited = false
+                    // The field tracks storage again, unless the editor moved on meanwhile: that
+                    // draft belongs to another date, unit system or value.
+                    if (draftRevision == savedRevision) isDraftEdited = false
                 } else {
                     _uiState.value = _uiState.value.copy(inputError = ProfileFieldError.OUT_OF_RANGE)
                 }
@@ -135,7 +151,7 @@ class TrendsViewModel @Inject constructor(
                         currentDate,
                         selectedDate,
                     ) { weights, preferences, today, selected ->
-                        Inputs(weights, preferences.unitSystem, selected ?: today, selected == null)
+                        Inputs(weights, preferences.unitSystem, today, selected ?: today)
                     }.collect { inputs -> _uiState.value = reduce(inputs) }
                 } catch (cancellation: CancellationException) {
                     throw cancellation
@@ -160,7 +176,7 @@ class TrendsViewModel @Inject constructor(
             isLoading = false,
             unitSystem = inputs.unitSystem,
             editedDate = inputs.editedDate,
-            isEditingToday = inputs.isEditingToday,
+            isEditingToday = inputs.editedDate == inputs.today,
             weightInput = if (refill) storedKg.formatInput(inputs.unitSystem) else state.weightInput,
             inputError = state.inputError.takeUnless { refill },
             points =
@@ -198,7 +214,7 @@ class TrendsViewModel @Inject constructor(
     private data class Inputs(
         val weights: List<WeightEntry>,
         val unitSystem: UnitSystem,
+        val today: LocalDate,
         val editedDate: LocalDate,
-        val isEditingToday: Boolean,
     )
 }

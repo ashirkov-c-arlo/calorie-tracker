@@ -1,5 +1,6 @@
 package app.kcal.feature.trends
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,11 +25,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -110,10 +115,13 @@ private fun TrendsContent(
     onLogTodayClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val scrollState = rememberScrollState()
+    // The editor is the first card, so selecting a day far down the list has to bring it back.
+    LaunchedEffect(uiState.editedDate) { scrollState.animateScrollTo(0) }
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(PaddingValues(KcalSpacing.medium)),
         verticalArrangement = Arrangement.spacedBy(KcalSpacing.medium),
     ) {
@@ -223,11 +231,22 @@ private fun LoggedWeightsCard(
             Text(text = stringResource(R.string.trends_entries_title), style = MaterialTheme.typography.titleMedium)
             uiState.points.asReversed().forEachIndexed { index, point ->
                 if (index > 0) HorizontalDivider()
+                val isSelected = point.localDate == uiState.editedDate
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = KcalSpacing.minTouchTarget)
-                        .clickable(onClickLabel = editLabel) { onEntryClick(point.localDate) },
+                        .clip(MaterialTheme.shapes.small)
+                        .then(
+                            if (isSelected) {
+                                Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .clickable(onClickLabel = editLabel) { onEntryClick(point.localDate) }
+                        .semantics { selected = isSelected }
+                        .padding(horizontal = KcalSpacing.small),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(KcalSpacing.small),
                 ) {
