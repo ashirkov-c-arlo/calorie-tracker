@@ -7,7 +7,12 @@ import app.kcal.R
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 /**
  * The interface language follows the system when it is Russian or English and falls back to
@@ -34,5 +39,25 @@ class StringResourcesLocaleTest {
         assertEquals("Today", string(R.string.nav_today))
     }
 
+    /**
+     * A Russian date in `FormatStyle.MEDIUM` ends with `г.`, so messages that end with the date
+     * must not add punctuation of their own.
+     */
+    @Test
+    @Config(qualifiers = "ru")
+    fun `russian messages do not double the period a localized date ends with`() {
+        val date = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
+            .withLocale(Locale.forLanguageTag("ru"))
+            .format(LocalDate.of(2026, 3, 15))
+
+        listOf(
+            string(R.string.trends_save_failed_for_date, date),
+            string(R.string.trends_chart_content_description, date, date),
+        ).forEach { message -> assertFalse(message.contains(".."), message) }
+    }
+
     private fun string(resId: Int): String = ApplicationProvider.getApplicationContext<Context>().getString(resId)
+
+    private fun string(resId: Int, vararg args: Any): String =
+        ApplicationProvider.getApplicationContext<Context>().getString(resId, *args)
 }

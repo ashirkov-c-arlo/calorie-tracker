@@ -57,6 +57,7 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import java.util.Locale
 
 @Composable
 fun TrendsRoute(viewModel: TrendsViewModel = hiltViewModel()) {
@@ -69,13 +70,7 @@ fun TrendsRoute(viewModel: TrendsViewModel = hiltViewModel()) {
         viewModel.events.collect { event ->
             when (event) {
                 is TrendsEvent.SaveFailed ->
-                    snackbarHostState.showSnackbar(
-                        saveFailedTemplate.format(
-                            DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
-                                .withLocale(locale)
-                                .format(event.localDate),
-                        ),
-                    )
+                    snackbarHostState.showSnackbar(saveFailedMessage(saveFailedTemplate, event.localDate, locale))
             }
         }
     }
@@ -308,9 +303,20 @@ private fun fullDate(localDate: LocalDate): String {
 @Composable
 private fun mediumDate(localDate: LocalDate): String {
     val locale = currentLocale()
-    val formatter = remember(locale) { DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale) }
+    val formatter = remember(locale) { mediumDateFormatter(locale) }
     return formatter.format(localDate)
 }
+
+private fun mediumDateFormatter(locale: Locale): DateTimeFormatter =
+    DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)
+
+/**
+ * Snackbar text for a save whose date the editor already left. The date is the last part of the
+ * message, so the templates carry no punctuation that would double the one a locale's date format
+ * already ends with.
+ */
+internal fun saveFailedMessage(template: String, localDate: LocalDate, locale: Locale): String =
+    template.format(mediumDateFormatter(locale).format(localDate))
 
 private fun UnitSystem.weightUnitRes(): Int = when (this) {
     UnitSystem.METRIC -> R.string.unit_kg
