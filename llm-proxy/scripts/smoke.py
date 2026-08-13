@@ -46,6 +46,21 @@ def check(name: str, ok: bool, detail: str = "") -> None:
     print(f"{PASS if ok else FAIL}  {name}{('  ' + detail) if detail else ''}")
 
 
+def call_photo(base_url: str, api_key: str, data: str) -> tuple[int, dict | str]:
+    payload = {
+        "text": "my lunch plate",
+        "image": {"media_type": "image/jpeg", "data_base64": data},
+    }
+    status, body = call(base_url, "/v1/nutrition/parse", payload, api_key)
+    if status == 200 and isinstance(body, dict) and body.get("type") == "clarification":
+        payload["clarification"] = {
+            "question": body["question"],
+            "answer": "A regular serving, about 300 grams",
+        }
+        return call(base_url, "/v1/nutrition/parse", payload, api_key)
+    return status, body
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", required=True)
@@ -82,10 +97,7 @@ def main() -> int:
     if args.photo:
         with open(args.photo, "rb") as handle:
             data = base64.b64encode(handle.read()).decode()
-        status, body = call(args.base_url, "/v1/nutrition/parse", {
-            "text": "my lunch plate",
-            "image": {"media_type": "image/jpeg", "data_base64": data},
-        }, args.api_key)
+        status, body = call_photo(args.base_url, args.api_key, data)
         check("text + photo", status == 200 and body.get("type") == "success",
               f"{status} {json.dumps(body, ensure_ascii=False)[:160]}")
     else:
