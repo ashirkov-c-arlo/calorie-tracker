@@ -23,6 +23,9 @@ class MealRepositoryImpl @Inject constructor(private val dao: MealEntryDao) : Me
     override fun observeByDate(localDate: LocalDate): Flow<List<MealEntry>> =
         dao.observeByDate(localDate.epochDayInt()).map { meals -> meals.map(MealEntryWithItems::toDomain) }
 
+    override fun observeAll(): Flow<List<MealEntry>> =
+        dao.observeAll().map { meals -> meals.map(MealEntryWithItems::toDomain) }
+
     override suspend fun findById(id: Long): MealEntry? = dao.findById(id)?.toDomain()
 
     override suspend fun save(meal: MealEntry, targetIfMissing: DailyTargetSnapshot?): Long = dao.save(

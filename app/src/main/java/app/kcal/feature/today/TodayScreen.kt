@@ -39,6 +39,8 @@ import app.kcal.core.designsystem.KcalSpacing
 import app.kcal.core.designsystem.KcalTheme
 import app.kcal.core.ui.ErrorScreen
 import app.kcal.core.ui.LoadingScreen
+import app.kcal.core.ui.MacroProgressLines
+import app.kcal.core.ui.MacroProgressUiState
 import app.kcal.core.ui.currentLocale
 import app.kcal.domain.model.MacroTotals
 import app.kcal.domain.model.ThemeMode
@@ -153,11 +155,7 @@ private fun TodayContent(
 }
 
 @Composable
-private fun DailyProgressCard(
-    consumed: MacroTotals,
-    progress: TodayMacroProgressUiState?,
-    modifier: Modifier = Modifier,
-) {
+private fun DailyProgressCard(consumed: MacroTotals, progress: MacroProgressUiState?, modifier: Modifier = Modifier) {
     val locale = currentLocale()
     OutlinedCard(modifier = modifier.fillMaxWidth()) {
         Column(
@@ -169,7 +167,7 @@ private fun DailyProgressCard(
                 Text(
                     text =
                     stringResource(
-                        R.string.today_consumed_without_target,
+                        R.string.consumed_summary,
                         DecimalText.formatLong(consumed.kcal, locale),
                         DecimalText.format(consumed.proteinG, locale),
                         DecimalText.format(consumed.fatG, locale),
@@ -183,59 +181,9 @@ private fun DailyProgressCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
-                ProgressLine(
-                    label = stringResource(R.string.nutrient_calories),
-                    value =
-                    stringResource(
-                        R.string.nutrient_progress_kcal,
-                        DecimalText.formatLong(progress.consumed.kcal, locale),
-                        DecimalText.formatInt(progress.target.kcal, locale),
-                    ),
-                    fraction = progress.kcalFraction,
-                )
-                ProgressLine(
-                    label = stringResource(R.string.nutrient_protein),
-                    value =
-                    stringResource(
-                        R.string.nutrient_progress_grams,
-                        DecimalText.format(progress.consumed.proteinG, locale),
-                        DecimalText.format(progress.target.proteinG, locale),
-                    ),
-                    fraction = progress.proteinFraction,
-                )
-                ProgressLine(
-                    label = stringResource(R.string.nutrient_fat),
-                    value =
-                    stringResource(
-                        R.string.nutrient_progress_grams,
-                        DecimalText.format(progress.consumed.fatG, locale),
-                        DecimalText.format(progress.target.fatG, locale),
-                    ),
-                    fraction = progress.fatFraction,
-                )
-                ProgressLine(
-                    label = stringResource(R.string.nutrient_carbs),
-                    value =
-                    stringResource(
-                        R.string.nutrient_progress_grams,
-                        DecimalText.format(progress.consumed.carbsG, locale),
-                        DecimalText.format(progress.target.carbsG, locale),
-                    ),
-                    fraction = progress.carbsFraction,
-                )
+                MacroProgressLines(progress = progress)
             }
         }
-    }
-}
-
-@Composable
-private fun ProgressLine(label: String, value: String, fraction: Float) {
-    Column(verticalArrangement = Arrangement.spacedBy(KcalSpacing.extraSmall)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(text = label, style = MaterialTheme.typography.bodyMedium)
-            Text(text = value, style = MaterialTheme.typography.bodyMedium)
-        }
-        LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
     }
 }
 
@@ -316,21 +264,6 @@ private fun DailyProgressCardPreview() {
             progress = todayContentPreviewState.progress,
             modifier = Modifier.padding(KcalSpacing.medium),
         )
-    }
-}
-
-@Preview(name = "Progress line White", uiMode = Configuration.UI_MODE_NIGHT_NO)
-@Preview(name = "Progress line Black", uiMode = Configuration.UI_MODE_NIGHT_YES)
-@Composable
-private fun ProgressLinePreview() {
-    KcalTheme(themeMode = ThemeMode.SYSTEM) {
-        Column(modifier = Modifier.padding(KcalSpacing.medium)) {
-            ProgressLine(
-                label = stringResource(R.string.nutrient_protein),
-                value = stringResource(R.string.nutrient_progress_grams, "54.0", "105.0"),
-                fraction = 0.5f,
-            )
-        }
     }
 }
 

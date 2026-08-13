@@ -148,9 +148,11 @@ class KcalDatabaseTest {
 
         dao.upsert(snapshot)
         dao.upsert(snapshot.copy(kcal = 2050))
+        dao.upsert(snapshot.copy(localDateEpochDay = 20_001))
 
         assertEquals(2050, dao.findByDate(20_000)?.kcal)
         assertNull(dao.findByDate(19_999))
+        assertEquals(listOf(20_000, 20_001), dao.observeAll().first().map { it.localDateEpochDay })
     }
 
     private fun mealEntry(epochDay: Int, atMillis: Long) = MealEntryEntity(

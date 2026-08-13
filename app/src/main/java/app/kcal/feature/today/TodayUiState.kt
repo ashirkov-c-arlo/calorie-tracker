@@ -1,19 +1,11 @@
 package app.kcal.feature.today
 
+import app.kcal.core.ui.MacroProgressUiState
+import app.kcal.core.ui.macroProgress
 import app.kcal.domain.model.MacroTotals
 import app.kcal.domain.model.Macros
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
-
-/** Progress fractions are prepared outside Compose so the screen remains presentation-only. */
-data class TodayMacroProgressUiState(
-    val consumed: MacroTotals,
-    val target: Macros,
-    val kcalFraction: Float,
-    val proteinFraction: Float,
-    val fatFraction: Float,
-    val carbsFraction: Float,
-)
 
 data class TodayMealUiState(val id: Long, val itemNames: PersistentList<String>, val totals: MacroTotals)
 
@@ -21,7 +13,7 @@ data class TodayUiState(
     val isLoading: Boolean = true,
     val hasError: Boolean = false,
     val consumed: MacroTotals = MacroTotals.ZERO,
-    val progress: TodayMacroProgressUiState? = null,
+    val progress: MacroProgressUiState? = null,
     val meals: PersistentList<TodayMealUiState> = persistentListOf(),
 )
 
@@ -56,14 +48,7 @@ internal val todayContentPreviewState = TodayUiState(
 
 internal val todayErrorPreviewState = TodayUiState(isLoading = false, hasError = true)
 
-private fun previewProgress(consumed: MacroTotals): TodayMacroProgressUiState {
-    val target = Macros(kcal = 2050, proteinG = 105.0, fatG = 56.9, carbsG = 280.0)
-    return TodayMacroProgressUiState(
-        consumed = consumed,
-        target = target,
-        kcalFraction = consumed.kcal.toFloat() / target.kcal,
-        proteinFraction = consumed.proteinG.toFloat() / target.proteinG.toFloat(),
-        fatFraction = consumed.fatG.toFloat() / target.fatG.toFloat(),
-        carbsFraction = consumed.carbsG.toFloat() / target.carbsG.toFloat(),
-    )
-}
+private fun previewProgress(consumed: MacroTotals): MacroProgressUiState = macroProgress(
+    consumed = consumed,
+    target = Macros(kcal = 2050, proteinG = 105.0, fatG = 56.9, carbsG = 280.0),
+)

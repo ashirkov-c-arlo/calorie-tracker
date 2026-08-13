@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import secrets
 import sys
+import threading
 import time
 import traceback
 import uuid
@@ -29,6 +30,15 @@ from .quota import Quota, QuotaExceeded, RateLimiter, key_hash
 PARSE_PATH = "/v1/nutrition/parse"
 INSIGHTS_PATH = "/v1/insights/generate"
 HEALTH_PATH = "/healthz"
+
+# A stalled client must not hold a worker thread open: SOCKET_TIMEOUT_S bounds one idle
+# read, BODY_DEADLINE_S bounds the upload inside the request deadline (a drip-feeder resets
+# the idle timeout forever), and MAX_CONNECTIONS bounds how many connections are served at
+# once. Slow *headers* are the reverse proxy's job (see README): http.server parses them
+# before any of our code runs.
+SOCKET_TIMEOUT_S = 20
+BODY_DEADLINE_S = 10
+MAX_CONNECTIONS = 64
 
 
 def log(**fields: Any) -> None:
@@ -52,6 +62,7 @@ class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "kcal-proxy"
     sys_version = ""
+    timeout = SOCKET_TIMEOUT_S  # applied to the socket by StreamRequestHandler.setup
 
     # --- plumbing --------------------------------------------------------------------
 
@@ -69,6 +80,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(payload)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Request-Id", self.request_id)
+        # One request per connection: an early response (auth, route, kill switch, rate
+        # limit) leaves the request body unread, and reusing the socket would parse that
+        # body as the next request. Closing is cheaper than draining it.
+        self.send_header("Connection", "close")
         if retry_after is not None:
             self.send_header("Retry-After", str(retry_after))
         self.end_headers()
@@ -84,7 +99,7 @@ class Handler(BaseHTTPRequestHandler):
                 return forwarded.split(",")[-1].strip()
         return self.client_address[0]
 
-    def _read_body(self) -> Any:
+    def _read_body(self, deadline: float) -> Any:
         try:
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError as exc:
@@ -92,13 +107,35 @@ class Handler(BaseHTTPRequestHandler):
         if length <= 0:
             raise ProxyError(400, "INVALID_REQUEST", detail="empty body")
         if length > self.cfg.max_body_bytes:
-            self.close_connection = True  # do not wait for a body we refuse to read
             raise ProxyError(413, "PAYLOAD_TOO_LARGE", detail="Content-Length too large")
-        raw = self.rfile.read(length)
+        # The upload shares the end-to-end deadline and may not spend all of it.
+        raw = self._read_exactly(length, min(deadline, time.monotonic() + BODY_DEADLINE_S))
         try:
             return json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise ProxyError(400, "INVALID_REQUEST", detail="body is not UTF-8 JSON") from exc
+
+    def _read_exactly(self, length: int, deadline: float) -> bytes:
+        """Read the body under one absolute deadline, not one deadline per idle read."""
+        chunks: list[bytes] = []
+        pending = length
+        try:
+            while pending:
+                budget = deadline - time.monotonic()
+                if budget <= 0:
+                    raise ProxyError(504, "TIMEOUT", detail="body deadline exceeded")
+                try:
+                    self.connection.settimeout(budget)
+                    chunk = self.rfile.read1(pending)
+                except OSError as exc:  # idle timeout, deadline hit mid-read, or a reset
+                    raise ProxyError(504, "TIMEOUT", detail="body read timed out") from exc
+                if not chunk:
+                    raise ProxyError(400, "INVALID_REQUEST", detail="body shorter than Content-Length")
+                chunks.append(chunk)
+                pending -= len(chunk)
+        finally:
+            self.connection.settimeout(SOCKET_TIMEOUT_S)  # the response write gets a fresh budget
+        return b"".join(chunks)
 
     def _authorize(self) -> str:
         presented = self.headers.get("X-Api-Key") or ""
@@ -118,6 +155,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         started = time.monotonic()
+        # One end-to-end budget for reading the body and for inference: the app gives up
+        # after 30 s, so the two phases must share the deadline instead of adding up.
+        deadline = started + self.cfg.request_deadline_s
         self.request_id = (self.headers.get("X-Request-Id") or "")[:64] or uuid.uuid4().hex
         path = self.path.split("?")[0]
         lang = resolve_language(self.headers.get("Accept-Language"))
@@ -135,24 +175,32 @@ class Handler(BaseHTTPRequestHandler):
             if not self.server.limiter.allow():  # type: ignore[attr-defined]
                 raise ProxyError(429, "THROTTLED", 2, detail="local rate limit")
 
-            request = validate_request(self._read_body(), self.cfg)
+            request = validate_request(self._read_body(deadline), self.cfg)
             try:
                 reserved = self.server.quota.reserve(key_id, key_hash(self._client_ip()))  # type: ignore[attr-defined]
             except QuotaExceeded as exhausted:
                 raise ProxyError(429, "QUOTA", exhausted.retry_after, detail=exhausted.scope) from exhausted
 
-            body, meta = run_parse(self.server.bedrock, self.cfg, request, lang, meta)  # type: ignore[attr-defined]
+            body, meta = run_parse(self.server.bedrock, self.cfg, request, lang, meta, deadline)  # type: ignore[attr-defined]
             result, code = body["type"], ""
             self._send(200, body)
         except ProxyError as error:
             code, detail = error.code, error.detail
-            if reserved and not error.billable:
+            # Once the model has answered, the call is paid for: keep the unit spent even
+            # if a later step (repair, delivery) fails.
+            if reserved and not meta.model_answered and not error.billable:
                 self.server.quota.refund(reserved)  # type: ignore[attr-defined]
             self._error(error)
+        except OSError as broken:  # the client vanished mid-response: nowhere to answer
+            result, code = "error", "UNKNOWN"
+            detail = f"delivery failed: {type(broken).__name__}"
+            if reserved and not meta.model_answered:
+                self.server.quota.refund(reserved)  # type: ignore[attr-defined]
+            self.close_connection = True
         except Exception as unexpected:  # noqa: BLE001 - single funnel, contract body only
             frame = traceback.extract_tb(unexpected.__traceback__)[-1]
             code, detail = "UNKNOWN", f"{type(unexpected).__name__} at {frame.filename}:{frame.lineno}"
-            if reserved:
+            if reserved and not meta.model_answered:
                 self.server.quota.refund(reserved)  # type: ignore[attr-defined]
             self._error(ProxyError(500, "UNKNOWN"))
         finally:
@@ -178,10 +226,26 @@ class Handler(BaseHTTPRequestHandler):
             )
 
 
+class ProxyServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer has no connection cap, so the refusal happens in
+    verify_request: returning False closes the socket before a thread is created."""
+
+    daemon_threads = True
+
+    def verify_request(self, request, client_address) -> bool:  # noqa: D102
+        return self.slots.acquire(blocking=False)  # type: ignore[attr-defined]
+
+    def process_request_thread(self, request, client_address) -> None:  # noqa: D102
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.slots.release()  # type: ignore[attr-defined]
+
+
 def build_server(cfg: Config, bedrock=None) -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer((cfg.host, cfg.port), Handler)
-    server.daemon_threads = True
+    server = ProxyServer((cfg.host, cfg.port), Handler)
     server.cfg = cfg  # type: ignore[attr-defined]
+    server.slots = threading.BoundedSemaphore(MAX_CONNECTIONS)  # type: ignore[attr-defined]
     server.limiter = RateLimiter(cfg.rate_per_second, cfg.rate_burst)  # type: ignore[attr-defined]
     server.quota = Quota(  # type: ignore[attr-defined]
         cfg.db_path, cfg.daily_request_cap, cfg.monthly_request_cap, cfg.per_ip_daily_cap

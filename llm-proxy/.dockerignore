@@ -1,0 +1,6 @@
+# The build context is uploaded to the Docker builder: keep secrets and data out of it.
+.env
+*.sqlite3
+results/
+__pycache__/
+*.pyc

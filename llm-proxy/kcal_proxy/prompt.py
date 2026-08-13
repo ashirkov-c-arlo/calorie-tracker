@@ -7,6 +7,7 @@ same text `run_eval.py` evaluates, so eval numbers describe production behaviour
 from __future__ import annotations
 
 import copy
+import html
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,10 @@ PHOTO
   fill the plate.
 """
 
+# Schema limits the validator re-checks after the model answers.
+MAX_ITEMS = 12
+MAX_QUESTION_CHARS = 200
+
 TOOL_CONFIG: dict[str, Any] = {
     "tools": [
         {
@@ -48,7 +53,7 @@ TOOL_CONFIG: dict[str, Any] = {
                             "items": {
                                 "type": "array",
                                 "minItems": 1,
-                                "maxItems": 12,
+                                "maxItems": MAX_ITEMS,
                                 "items": {
                                     "type": "object",
                                     "additionalProperties": False,
@@ -83,7 +88,7 @@ TOOL_CONFIG: dict[str, Any] = {
                         "additionalProperties": False,
                         "required": ["question"],
                         "properties": {
-                            "question": {"type": "string", "minLength": 3, "maxLength": 200}
+                            "question": {"type": "string", "minLength": 3, "maxLength": MAX_QUESTION_CHARS}
                         },
                     }
                 },
@@ -93,17 +98,18 @@ TOOL_CONFIG: dict[str, Any] = {
     "toolChoice": {"any": {}},
 }
 
-MAX_ITEMS = 12
-
-
 def tool_config() -> dict[str, Any]:
     """A private copy: the repair loop must never mutate the shared schema."""
     return copy.deepcopy(TOOL_CONFIG)
 
 
-def escape_delimiter(text: str) -> str:
-    """Prevent the untrusted payload from closing its own data block."""
-    return text.replace("</meal_description>", "<\u200b/meal_description>")
+def escape_untrusted(text: str) -> str:
+    """Untrusted text can neither close its own data block nor forge a new one.
+
+    Escaping only the exact closing delimiter still let a clarification answer emit
+    `</answer></clarification>`, so every `<`, `>` and `&` is escaped instead.
+    """
+    return html.escape(text, quote=False)
 
 
 def build_system(lang: str, has_image: bool = False) -> list[dict[str, str]]:
@@ -119,12 +125,12 @@ def build_messages(
     clarification_answer: str = "",
     image_bytes: bytes | None = None,
 ) -> list[dict[str, Any]]:
-    body = f"<meal_description>\n{escape_delimiter(text)}\n</meal_description>"
+    body = f"<meal_description>\n{escape_untrusted(text)}\n</meal_description>"
     if clarification_question:
         body += (
             "\n<clarification>\n"
-            f"<question>{escape_delimiter(clarification_question)}</question>\n"
-            f"<answer>{escape_delimiter(clarification_answer)}</answer>\n"
+            f"<question>{escape_untrusted(clarification_question)}</question>\n"
+            f"<answer>{escape_untrusted(clarification_answer)}</answer>\n"
             "</clarification>"
         )
     content: list[dict[str, Any]] = []

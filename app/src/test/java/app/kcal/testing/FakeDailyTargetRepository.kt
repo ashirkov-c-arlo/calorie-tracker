@@ -20,6 +20,8 @@ class FakeDailyTargetRepository(private var failOnWrite: Boolean = false) : Dail
 
     override fun observe(localDate: LocalDate): Flow<DailyTargetSnapshot?> = snapshots.map { it[localDate] }
 
+    override fun observeAll(): Flow<List<DailyTargetSnapshot>> = snapshots.map { it.values.toList() }
+
     override suspend fun find(localDate: LocalDate): DailyTargetSnapshot? = snapshots.value[localDate]
 
     override suspend fun upsert(snapshot: DailyTargetSnapshot) {

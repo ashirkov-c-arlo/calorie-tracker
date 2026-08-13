@@ -30,6 +30,11 @@ class FakeMealRepository(initial: List<MealEntry> = emptyList()) : MealRepositor
         )
     }
 
+    override fun observeAll(): Flow<List<MealEntry>> = flow {
+        if (readFails) throw IOException("meal storage unavailable")
+        emitAll(meals.map { entries -> entries.sortedWith(compareBy(MealEntry::at, MealEntry::id)) })
+    }
+
     override suspend fun findById(id: Long): MealEntry? {
         if (readFails) throw IOException("meal storage unavailable")
         return meals.value.firstOrNull { it.id == id }

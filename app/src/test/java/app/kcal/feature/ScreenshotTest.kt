@@ -27,6 +27,11 @@ import app.kcal.feature.entry.manualEntryErrorPreviewState
 import app.kcal.feature.entry.manualEntrySaveFailedPreviewState
 import app.kcal.feature.entry.manualEntryValidationPreviewState
 import app.kcal.feature.history.HistoryScreen
+import app.kcal.feature.history.HistoryUiState
+import app.kcal.feature.history.historyContentPreviewState
+import app.kcal.feature.history.historyEmptyPreviewState
+import app.kcal.feature.history.historyErrorPreviewState
+import app.kcal.feature.history.historyExpandedPreviewState
 import app.kcal.feature.profile.ProfileFormUiState
 import app.kcal.feature.profile.ProfileSetupScreen
 import app.kcal.feature.profile.emptyProfileFormUiState
@@ -225,10 +230,40 @@ class ScreenshotTest {
     fun trendsBlack() = capture(ThemeMode.BLACK) { TrendsScreen() }
 
     @Test
-    fun historyWhite() = capture(ThemeMode.WHITE) { HistoryScreen() }
+    fun historyWhite() = capture(ThemeMode.WHITE) { HistoryFixture(historyContentPreviewState) }
 
     @Test
-    fun historyBlack() = capture(ThemeMode.BLACK) { HistoryScreen() }
+    fun historyBlack() = capture(ThemeMode.BLACK) { HistoryFixture(historyContentPreviewState) }
+
+    @Test
+    @Config(qualifiers = "+ru")
+    fun historyWhiteRussian() = capture(ThemeMode.WHITE) { HistoryFixture(historyContentPreviewState) }
+
+    @Test
+    @Config(qualifiers = "+h1200dp")
+    fun historyExpandedDayWhite() = capture(ThemeMode.WHITE) { HistoryFixture(historyExpandedPreviewState) }
+
+    @Test
+    @Config(qualifiers = "+h1200dp")
+    fun historyExpandedDayBlack() = capture(ThemeMode.BLACK) { HistoryFixture(historyExpandedPreviewState) }
+
+    @Test
+    fun historyLoadingWhite() = capture(ThemeMode.WHITE) { HistoryFixture(HistoryUiState()) }
+
+    @Test
+    fun historyLoadingBlack() = capture(ThemeMode.BLACK) { HistoryFixture(HistoryUiState()) }
+
+    @Test
+    fun historyEmptyWhite() = capture(ThemeMode.WHITE) { HistoryFixture(historyEmptyPreviewState) }
+
+    @Test
+    fun historyEmptyBlack() = capture(ThemeMode.BLACK) { HistoryFixture(historyEmptyPreviewState) }
+
+    @Test
+    fun historyErrorWhite() = capture(ThemeMode.WHITE) { HistoryFixture(historyErrorPreviewState) }
+
+    @Test
+    fun historyErrorBlack() = capture(ThemeMode.BLACK) { HistoryFixture(historyErrorPreviewState) }
 
     @Test
     fun navHostWhite() = capture(ThemeMode.WHITE) { NavHostFixture() }
@@ -354,6 +389,17 @@ class ScreenshotTest {
             onRemoveItem = {},
             onDismissConfirmation = {},
             onConfirm = {},
+        )
+    }
+
+    @Composable
+    private fun HistoryFixture(uiState: HistoryUiState) {
+        HistoryScreen(
+            uiState = uiState,
+            onDayClick = {},
+            onEditMealClick = {},
+            onDeleteMealClick = {},
+            onRetry = {},
         )
     }
 
