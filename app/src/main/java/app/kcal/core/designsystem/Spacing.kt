@@ -12,4 +12,9 @@ object KcalSpacing {
 
     /** Minimum interactive size required for accessibility. */
     val minTouchTarget = 48.dp
+
+    /** Weight chart geometry; the only chart in the app. */
+    val chartHeight = 160.dp
+    val chartPointRadius = 3.dp
+    val chartLineWidth = 2.dp
 }

@@ -10,7 +10,7 @@ Android app --HTTPS/JSON--> your reverse proxy (TLS) --HTTP--> kcal-proxy --> Be
 
 ## Why this is not the AWS deployment in the plan
 
-`Kcal LLM Proxy — Implementation Plan.md` targets API Gateway + Lambda + DynamoDB + SSM +
+[`../docs/llm-proxy-implementation-plan.md`](../docs/llm-proxy-implementation-plan.md) targets API Gateway + Lambda + DynamoDB + SSM +
 CDK. This implementation is the same pipeline hosted on your own hardware, so the managed
 pieces collapse into the process:
 
@@ -30,6 +30,9 @@ already bound spend), Bedrock Guardrails (`GUARDRAIL_ID` was an inert hook), pro
 and `/v1/insights/generate`, which answers `501` until its v1.1 contract is approved.
 
 ## Run it
+
+For a non-Docker systemd deployment, follow
+[`../docs/llm-proxy-deploy.md`](../docs/llm-proxy-deploy.md).
 
 ```bash
 cp .env.example .env      # set API_KEYS and MODEL_TEXT
@@ -67,6 +70,11 @@ kcal.example.net {
     request_body { max_size 2MB }
 }
 ```
+
+With a certificate from a local CA rather than ACME, add
+`tls /etc/caddy/tls/fullchain.pem /etc/caddy/tls/privkey.pem` to that site block, keep the
+key out of the repository, and make every client trust the CA root: `SSL_CERT_FILE` for the
+smoke tests, an installed CA certificate for a debug APK on the device.
 
 Those two timeouts are **not optional**. A client that dribbles one header byte per idle
 timeout holds a connection slot forever, and only the reverse proxy sees that phase
@@ -161,7 +169,7 @@ disabled in your account — enabling it would export prompts and images to S3/C
 ## Tests
 
 ```bash
-python3 -m unittest discover -s tests -t .        # 72 tests, no network
+python3 -m unittest discover -s tests -t .        # 73 tests, no network
 python3 scripts/smoke.py --base-url https://… --api-key "$KEY" [--photo plate.jpg]
 python3 run_eval.py --csv eval-text-cases.csv     # model selection, needs AWS creds
 ```

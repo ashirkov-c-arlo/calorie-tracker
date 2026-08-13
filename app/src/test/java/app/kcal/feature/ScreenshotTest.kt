@@ -47,6 +47,15 @@ import app.kcal.feature.today.todayEmptyPreviewState
 import app.kcal.feature.today.todayErrorPreviewState
 import app.kcal.feature.today.todayNoTargetPreviewState
 import app.kcal.feature.trends.TrendsScreen
+import app.kcal.feature.trends.TrendsUiState
+import app.kcal.feature.trends.trendsEditingPastPreviewState
+import app.kcal.feature.trends.trendsEmptyPreviewState
+import app.kcal.feature.trends.trendsErrorPreviewState
+import app.kcal.feature.trends.trendsImperialPreviewState
+import app.kcal.feature.trends.trendsInvalidInputPreviewState
+import app.kcal.feature.trends.trendsManyPointsPreviewState
+import app.kcal.feature.trends.trendsSinglePointPreviewState
+import app.kcal.feature.trends.trendsTwoPointsPreviewState
 import app.kcal.navigation.KcalNavHost
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
@@ -224,10 +233,61 @@ class ScreenshotTest {
         capture(ThemeMode.WHITE) { EntryFixture(entryConfirmationRussianPreviewState) }
 
     @Test
-    fun trendsWhite() = capture(ThemeMode.WHITE) { TrendsScreen() }
+    @Config(qualifiers = "+h2400dp")
+    fun trendsWhite() = capture(ThemeMode.WHITE) { TrendsFixture(trendsManyPointsPreviewState) }
 
     @Test
-    fun trendsBlack() = capture(ThemeMode.BLACK) { TrendsScreen() }
+    @Config(qualifiers = "+h2400dp")
+    fun trendsBlack() = capture(ThemeMode.BLACK) { TrendsFixture(trendsManyPointsPreviewState) }
+
+    @Test
+    @Config(qualifiers = "+ru-h2400dp")
+    fun trendsWhiteRussian() = capture(ThemeMode.WHITE) { TrendsFixture(trendsManyPointsPreviewState) }
+
+    @Test
+    @Config(qualifiers = "+h2400dp")
+    fun trendsEditingPastWhite() = capture(ThemeMode.WHITE) { TrendsFixture(trendsEditingPastPreviewState) }
+
+    @Test
+    @Config(qualifiers = "+h2400dp")
+    fun trendsImperialWhite() = capture(ThemeMode.WHITE) { TrendsFixture(trendsImperialPreviewState) }
+
+    @Test
+    fun trendsLoadingWhite() = capture(ThemeMode.WHITE) { TrendsFixture(TrendsUiState()) }
+
+    @Test
+    fun trendsLoadingBlack() = capture(ThemeMode.BLACK) { TrendsFixture(TrendsUiState()) }
+
+    @Test
+    fun trendsEmptyWhite() = capture(ThemeMode.WHITE) { TrendsFixture(trendsEmptyPreviewState) }
+
+    @Test
+    fun trendsEmptyBlack() = capture(ThemeMode.BLACK) { TrendsFixture(trendsEmptyPreviewState) }
+
+    @Test
+    @Config(qualifiers = "+h1200dp")
+    fun trendsSinglePointWhite() = capture(ThemeMode.WHITE) { TrendsFixture(trendsSinglePointPreviewState) }
+
+    @Test
+    @Config(qualifiers = "+h1200dp")
+    fun trendsSinglePointBlack() = capture(ThemeMode.BLACK) { TrendsFixture(trendsSinglePointPreviewState) }
+
+    @Test
+    @Config(qualifiers = "+h1200dp")
+    fun trendsTwoPointsWhite() = capture(ThemeMode.WHITE) { TrendsFixture(trendsTwoPointsPreviewState) }
+
+    @Test
+    @Config(qualifiers = "+h1200dp")
+    fun trendsTwoPointsBlack() = capture(ThemeMode.BLACK) { TrendsFixture(trendsTwoPointsPreviewState) }
+
+    @Test
+    fun trendsInvalidInputWhite() = capture(ThemeMode.WHITE) { TrendsFixture(trendsInvalidInputPreviewState) }
+
+    @Test
+    fun trendsErrorWhite() = capture(ThemeMode.WHITE) { TrendsFixture(trendsErrorPreviewState) }
+
+    @Test
+    fun trendsErrorBlack() = capture(ThemeMode.BLACK) { TrendsFixture(trendsErrorPreviewState) }
 
     @Test
     fun historyWhite() = capture(ThemeMode.WHITE) { HistoryFixture(historyContentPreviewState) }
@@ -404,6 +464,18 @@ class ScreenshotTest {
     }
 
     @Composable
+    private fun TrendsFixture(uiState: TrendsUiState) {
+        TrendsScreen(
+            uiState = uiState,
+            onWeightChange = {},
+            onSave = {},
+            onEntryClick = {},
+            onLogTodayClick = {},
+            onRetry = {},
+        )
+    }
+
+    @Composable
     private fun NavHostFixture() {
         KcalNavHost(
             todayContent = { onSettingsClick, onAddMealClick, onEditMealClick ->
@@ -416,6 +488,7 @@ class ScreenshotTest {
                     onRetry = {},
                 )
             },
+            trendsContent = { TrendsFixture(trendsManyPointsPreviewState) },
         )
     }
 

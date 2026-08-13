@@ -19,10 +19,12 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest import mock
 
 from botocore.exceptions import ClientError
 
 import run_eval
+from scripts import smoke
 from kcal_proxy import prompt
 from kcal_proxy import __main__ as server_module
 from kcal_proxy.__main__ import build_server, resolve_language
@@ -859,6 +861,24 @@ class ContractFixtureTest(unittest.TestCase):
         for name in ("parse_empty_items.json", "parse_invalid_schema.json"):
             fixture = json.loads((FIXTURES / name).read_text(encoding="utf-8"))
             self.assertTrue(normalize_log_food(fixture)[2], f"{name} must stay hard-invalid")
+
+
+class SmokeTest(unittest.TestCase):
+    def test_photo_clarification_resends_the_same_image(self):
+        question = "How much pasta is on the plate?"
+        responses = [
+            (200, {"type": "clarification", "question": question}),
+            (200, {"type": "success", "items": [ITEM]}),
+        ]
+        with mock.patch.object(smoke, "call", side_effect=responses) as call:
+            status, body = smoke.call_photo("http://proxy", "key", "jpeg-base64")
+
+        self.assertEqual((status, body["type"]), (200, "success"))
+        self.assertEqual(call.call_count, 2)
+        follow_up = call.call_args_list[1].args[2]
+        self.assertEqual(follow_up["image"]["data_base64"], "jpeg-base64")
+        self.assertEqual(follow_up["clarification"]["question"], question)
+        self.assertTrue(follow_up["clarification"]["answer"])
 
 
 class EvalParityTest(unittest.TestCase):

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debuggable builds additionally trust CA certificates the user installed on the device, so a
+  debug APK can reach an LLM proxy whose certificate a local CA issued. Release builds ignore
+  this block entirely and keep trusting the system store only.
+-->
+<network-security-config>
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

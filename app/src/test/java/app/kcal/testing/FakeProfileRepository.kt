@@ -5,6 +5,7 @@ import app.kcal.domain.model.StoredProfile
 import app.kcal.domain.model.ThemeMode
 import app.kcal.domain.model.UnitSystem
 import app.kcal.domain.model.UserPreferences
+import app.kcal.domain.model.WeightEntry
 import app.kcal.domain.repository.ProfileRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +28,18 @@ class FakeProfileRepository(
     val savedProfiles = mutableListOf<StoredProfile>()
     val savedDates = mutableListOf<LocalDate>()
 
+    /** One entry per local date, like the Room primary key. */
+    val weightsByDate = MutableStateFlow(sortedMapOf<LocalDate, Double>())
+
+    /** Every accepted write, in completion order, so serialization can be asserted. */
+    val loggedWeights = mutableListOf<WeightEntry>()
+
+    override val weights: Flow<List<WeightEntry>> =
+        flow {
+            if (readFails) throw IOException("weights unavailable")
+            emitAll(weightsByDate.map { entries -> entries.map { (date, kg) -> WeightEntry(date, kg) } })
+        }
+
     override val preferences: Flow<UserPreferences> =
         flow {
             if (readFails) throw IOException("preferences unavailable")
@@ -42,6 +55,19 @@ class FakeProfileRepository(
         savedProfiles += profile
         savedDates += localDate
         state.value = state.value.copy(profile = profile)
+        profile.currentWeightKg?.let { logWeight(WeightEntry(localDate, it)) }
+    }
+
+    /** Mirrors the implementation: current weight is the latest entry, never a preference. */
+    override suspend fun logWeight(entry: WeightEntry) {
+        if (writeFails) throw IOException("weight storage unavailable")
+        loggedWeights += entry
+        weightsByDate.value = sortedMapOf<LocalDate, Double>().apply {
+            putAll(weightsByDate.value)
+            put(entry.localDate, entry.kg)
+        }
+        val latest = weightsByDate.value.entries.last()
+        state.value = state.value.copy(profile = state.value.profile.copy(currentWeightKg = latest.value))
     }
 
     override suspend fun setUnitSystem(unitSystem: UnitSystem) {

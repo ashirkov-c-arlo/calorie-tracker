@@ -1,13 +1,6 @@
 # Kcal Android Implementation Plan
 
-Status: **final client implementation plan; stages 1-5 and 7 implemented, stage 6 and stages 8-9
-not started**.
-
-> **Open approval — stage order.** Stage 7 (History) was implemented before stage 6 (weight
-> Trends) on explicit request. History depends only on stored meals and daily target
-> snapshots, so it needed nothing from stage 6, but `AGENTS.md` §15 requires stages to run in
-> order. Merging `feat/history` before stage 6 needs human approval; until then stage 6 remains
-> the next unfinished stage and Trends is still a placeholder screen.
+Status: **final client implementation plan; stages 1-7 implemented, stages 8-9 not started**.
 
 Normative inputs:
 
@@ -425,8 +418,14 @@ endpoint, quota policy, and key exist. This repository does not implement that b
 
 ### Work
 
-- Add Vico only now.
-- Add weight entry/edit UI with one upsert per local date.
+- Draw the chart on a Compose `Canvas`; no charting dependency is added.
+- Add weight entry/edit UI with one upsert per local date. Trends logs the current local date
+  and lists every logged day, and selecting a day edits that entry, so a wrong historical
+  weight can be corrected. Deleting a weight entry is not offered.
+- Keep the untouched input field synchronized with the stored value for the edited date, so a
+  change made elsewhere cannot be written back, and resolve the save date from the clock while
+  the editor follows today, so a screen left open across midnight logs the new day.
+- Guard the persisted-weight invariant in `domain/usecase/LogWeight`, not in the screen.
 - Render raw weight points.
 - Implement the agreed calendar-window trend:
 
@@ -444,6 +443,12 @@ Do not interpolate missing dates and do not substitute the last seven measuremen
 - Calendar gaps.
 - Month/year transitions.
 - One entry per day and same-day replacement.
+- Past-entry correction, day rollover with and without a lifecycle event, and a weight changed
+  elsewhere.
+- Serialized saves, and a draft started for another date while a save is in flight.
+- A failed save reported for its own date, inline or as a snackbar naming that date.
+- Real clicks on a history row, including the already selected day, reaching the editor.
+- Rejected non-finite/non-positive weights.
 - Unit conversion.
 - Trend values and chart ViewModel states.
 - White/Black visual regression.
@@ -537,7 +542,7 @@ Before code, extend `docs/llm-proxy-contract.md` with the exact
 | 1 | Compose, Navigation, Hilt, Room/KSP, DataStore, AppCompat, base tests |
 | 4 | Ktor client/content negotiation/timeouts and test engine |
 | 5 | Coil only if transient preview needs it |
-| 6 | Vico |
+| 6 | None — the chart is hand-drawn on `Canvas` |
 | 9 | No new production dependency expected |
 
 Do not preload later-stage dependencies into the skeleton.

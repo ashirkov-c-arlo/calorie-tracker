@@ -1,18 +1,20 @@
 # Kcal LLM Proxy — Implementation Plan
 
-> **Deployment revised (self-hosted).** The proxy is implemented in this directory as a
+> **Deployment revised (self-hosted).** The proxy is implemented in `llm-proxy/` as a
 > standalone Python service for a homelab, not as API Gateway + Lambda + DynamoDB + CDK.
 > The app-facing contract, prompt, tool schemas, pipeline, repair loop, filtering layers,
 > error mapping and request caps below still apply verbatim; §3 (architecture), §4
 > (repository layout), §5 (SSM), §11.2 (DynamoDB/usage plan), §13 (EMF/alarms), §14 (IaC/IAM)
-> and the AWS-specific parts of §16 are superseded by [`README.md`](README.md).
+> and the AWS-specific parts of §16 are superseded by
+> [`../llm-proxy/README.md`](../llm-proxy/README.md) and
+> [`llm-proxy-deploy.md`](llm-proxy-deploy.md).
 
 Status: **design accepted, implementation not started**. Region fixed to `eu-west-1`.
 
 Normative inputs:
 
-- `docs/llm-proxy-contract.md` (app-facing HTTP contract, v1 nutrition parse approved) — **immutable for v1**;
-- `implementation-plan.md` (Android client stages);
+- [`llm-proxy-contract.md`](llm-proxy-contract.md) (app-facing HTTP contract, v1 nutrition parse approved) — **immutable for v1**;
+- [`implementation-plan.md`](implementation-plan.md) (Android client stages);
 - decisions recorded in §2 of this document.
 
 This document covers the proxy repository only (`kcal-llm-proxy`). The Android client is a

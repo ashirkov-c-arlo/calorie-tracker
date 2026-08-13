@@ -277,7 +277,7 @@ class ProfileFormViewModel @Inject constructor(
             .orEmpty()
 
     private companion object {
-        val WEIGHT_RANGE_KG = 20.0..400.0
+        val WEIGHT_RANGE_KG = BodyMetrics.PLAUSIBLE_WEIGHT_RANGE_KG
         val HEIGHT_RANGE_CM = 50.0..250.0
         val AGE_RANGE = 1..120
         const val TARGET_WEIGHT_STEP_KG = 0.5

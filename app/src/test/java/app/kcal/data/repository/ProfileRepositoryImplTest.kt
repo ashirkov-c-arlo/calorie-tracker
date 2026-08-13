@@ -17,6 +17,7 @@ import app.kcal.domain.model.AppLanguage
 import app.kcal.domain.model.EnergyEquationSex
 import app.kcal.domain.model.ThemeMode
 import app.kcal.domain.model.UnitSystem
+import app.kcal.domain.model.WeightEntry
 import app.kcal.testing.completeProfile
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -103,6 +104,26 @@ class ProfileRepositoryImplTest {
         // The upsert replaces today's entry only, so the newer entry still wins.
         assertEquals(81.2, repository.preferences.first().profile.currentWeightKg)
         assertEquals(80.0, database.weightEntryDao().findByDate(today.toEpochDay().toInt())?.kg)
+    }
+
+    @Test
+    fun `the weight series is chronological and one upsert replaces its own date`() = runTest {
+        val yesterday = today.minusDays(1)
+        repository.logWeight(WeightEntry(localDate = today, kg = 81.0))
+        repository.logWeight(WeightEntry(localDate = yesterday, kg = 83.0))
+
+        assertEquals(
+            listOf(yesterday to 83.0, today to 81.0),
+            repository.weights.first().map { it.localDate to it.kg },
+        )
+
+        repository.logWeight(WeightEntry(localDate = today, kg = 80.4))
+
+        assertEquals(
+            listOf(yesterday to 83.0, today to 80.4),
+            repository.weights.first().map { it.localDate to it.kg },
+        )
+        assertEquals(80.4, repository.preferences.first().profile.currentWeightKg)
     }
 
     @Test

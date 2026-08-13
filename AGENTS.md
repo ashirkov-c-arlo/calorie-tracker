@@ -137,8 +137,8 @@ source of truth.
 - **Networking:** Ktor Client + `kotlinx.serialization` (`ContentNegotiation`, `HttpTimeout`)
 - **Images:** transient capture/selection via `ActivityResultContracts.TakePicture` and
   `PickVisualMedia`; Coil only if needed for the entry preview. **No CameraX**
-- **Charts:** Vico (compose-m3) for raw weight points + 7-day moving average. Simple
-  sparklines by hand on `Canvas`
+- **Charts:** hand-drawn on Compose `Canvas` — raw weight points, the 7-day moving average,
+  and sparklines. No charting dependency; Vico is not used
 - **Async:** Coroutines + Flow. `StateFlow` for state, `Channel` for one-shot events
 - **Tests:** JUnit4, `kotlin.test`, Turbine, Robolectric, Roborazzi. Prefer hand-written
   fakes over mocks; MockK only where a fake is genuinely impractical
