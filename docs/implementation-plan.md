@@ -2,15 +2,6 @@
 
 Status: **final client implementation plan; stages 1-7 implemented, stages 8-9 not started**.
 
-> **Approved deviation — stage order.** Stage 7 (History) was implemented before stage 6 (weight
-> Trends) on explicit request, and stage 6 followed on the `feat/weight-trends` branch. History
-> depends only on stored meals and daily target snapshots, so it needed nothing from stage 6.
-> Merging `feat/history` and then `feat/weight-trends` is approved.
->
-> **Approved deviation — no Vico.** Stage 6 renders the raw points and the 7-day average with a
-> Compose `Canvas` (`feature/trends/components/WeightChart.kt`) and no charting dependency.
-> `AGENTS.md` §4 records hand-drawn charts as the rule, so this is no longer a deviation from it.
-
 Normative inputs:
 
 - [`AGENTS.md`](../AGENTS.md) — product, architecture, safety, and delivery rules;

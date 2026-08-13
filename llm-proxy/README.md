@@ -10,7 +10,7 @@ Android app --HTTPS/JSON--> your reverse proxy (TLS) --HTTP--> kcal-proxy --> Be
 
 ## Why this is not the AWS deployment in the plan
 
-`Kcal LLM Proxy — Implementation Plan.md` targets API Gateway + Lambda + DynamoDB + SSM +
+[`../docs/llm-proxy-implementation-plan.md`](../docs/llm-proxy-implementation-plan.md) targets API Gateway + Lambda + DynamoDB + SSM +
 CDK. This implementation is the same pipeline hosted on your own hardware, so the managed
 pieces collapse into the process:
 
@@ -30,6 +30,9 @@ already bound spend), Bedrock Guardrails (`GUARDRAIL_ID` was an inert hook), pro
 and `/v1/insights/generate`, which answers `501` until its v1.1 contract is approved.
 
 ## Run it
+
+For a non-Docker systemd deployment, follow
+[`../docs/llm-proxy-deploy.md`](../docs/llm-proxy-deploy.md).
 
 ```bash
 cp .env.example .env      # set API_KEYS and MODEL_TEXT
