@@ -2,18 +2,14 @@
 
 Status: **final client implementation plan; stages 1-7 implemented, stages 8-9 not started**.
 
-> **Open approval — stage order.** Stage 7 (History) was implemented before stage 6 (weight
+> **Approved deviation — stage order.** Stage 7 (History) was implemented before stage 6 (weight
 > Trends) on explicit request, and stage 6 followed on the `feat/weight-trends` branch. History
-> depends only on stored meals and daily target snapshots, so it needed nothing from stage 6,
-> but `AGENTS.md` §15 requires stages to run in order. Merging `feat/history` and
-> `feat/weight-trends` in that order still needs human approval.
+> depends only on stored meals and daily target snapshots, so it needed nothing from stage 6.
+> Merging `feat/history` and then `feat/weight-trends` is approved.
 >
-> **Open approval — no Vico.** Stage 6 renders the raw points and the 7-day average with a
-> Compose `Canvas` (`feature/trends/components/WeightChart.kt`) instead of adding the Vico
-> dependency. This deviates from `AGENTS.md` §4, which assigns Vico to the weight chart and
-> leaves hand-drawn `Canvas` work to simple sparklines, and from §15 of this plan. It is not
-> approved yet: either grant the deviation or approve the dependency, and Vico then replaces
-> `WeightChart` behind the unchanged `TrendsUiState`.
+> **Approved deviation — no Vico.** Stage 6 renders the raw points and the 7-day average with a
+> Compose `Canvas` (`feature/trends/components/WeightChart.kt`) and no charting dependency.
+> `AGENTS.md` §4 records hand-drawn charts as the rule, so this is no longer a deviation from it.
 
 Normative inputs:
 
@@ -431,8 +427,7 @@ endpoint, quota policy, and key exist. This repository does not implement that b
 
 ### Work
 
-- Add Vico only now. **Deviation:** not added; the chart is a Compose `Canvas` (see the
-  open approval above).
+- Draw the chart on a Compose `Canvas`; no charting dependency is added.
 - Add weight entry/edit UI with one upsert per local date. Trends logs the current local date
   and lists every logged day, and selecting a day edits that entry, so a wrong historical
   weight can be corrected. Deleting a weight entry is not offered.
@@ -556,7 +551,7 @@ Before code, extend `docs/llm-proxy-contract.md` with the exact
 | 1 | Compose, Navigation, Hilt, Room/KSP, DataStore, AppCompat, base tests |
 | 4 | Ktor client/content negotiation/timeouts and test engine |
 | 5 | Coil only if transient preview needs it |
-| 6 | Vico — **not added**, the chart is hand-drawn on `Canvas` |
+| 6 | None — the chart is hand-drawn on `Canvas` |
 | 9 | No new production dependency expected |
 
 Do not preload later-stage dependencies into the skeleton.
