@@ -7,6 +7,7 @@ import app.kcal.domain.repository.ProfileRepository
 import app.kcal.domain.usecase.AggregateMealMacros
 import app.kcal.domain.usecase.ApplyTodayTarget
 import app.kcal.domain.usecase.BuildHistory
+import app.kcal.domain.usecase.BuildWeightTrend
 import app.kcal.domain.usecase.CalculateDailyTargets
 import app.kcal.domain.usecase.SaveMeal
 import app.kcal.domain.usecase.SaveProfile
@@ -45,6 +46,9 @@ object DomainModule {
 
     @Provides
     fun provideBuildHistory(aggregateMealMacros: AggregateMealMacros): BuildHistory = BuildHistory(aggregateMealMacros)
+
+    @Provides
+    fun provideBuildWeightTrend(): BuildWeightTrend = BuildWeightTrend()
 
     @Provides
     fun provideSaveProfile(

@@ -8,6 +8,7 @@ import app.kcal.domain.model.StoredProfile
 import app.kcal.domain.model.ThemeMode
 import app.kcal.domain.model.UnitSystem
 import app.kcal.domain.model.UserPreferences
+import app.kcal.domain.model.WeightEntry
 import app.kcal.domain.repository.ProfileRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -30,6 +31,9 @@ class ProfileRepositoryImpl @Inject constructor(
 
     override val isProfileComplete: Flow<Boolean> = preferences.map { it.profile.isComplete }
 
+    override val weights: Flow<List<WeightEntry>> =
+        weightEntryDao.observeAll().map { entries -> entries.map(WeightEntryEntity::toDomain) }
+
     override val themeMode: Flow<ThemeMode> = preferencesDataSource.preferences.map { it.themeMode }
 
     /**
@@ -48,6 +52,12 @@ class ProfileRepositoryImpl @Inject constructor(
         preferencesDataSource.saveProfile(profile)
     }
 
+    override suspend fun logWeight(entry: WeightEntry) {
+        weightEntryDao.upsert(
+            WeightEntryEntity(localDateEpochDay = entry.localDate.toEpochDay().toInt(), kg = entry.kg),
+        )
+    }
+
     override suspend fun setUnitSystem(unitSystem: UnitSystem) {
         preferencesDataSource.setUnitSystem(unitSystem)
     }
@@ -60,3 +70,6 @@ class ProfileRepositoryImpl @Inject constructor(
         preferencesDataSource.setThemeMode(themeMode)
     }
 }
+
+private fun WeightEntryEntity.toDomain(): WeightEntry =
+    WeightEntry(localDate = LocalDate.ofEpochDay(localDateEpochDay.toLong()), kg = kg)

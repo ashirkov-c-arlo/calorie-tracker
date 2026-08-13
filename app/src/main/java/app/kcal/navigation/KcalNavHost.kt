@@ -35,7 +35,9 @@ import app.kcal.feature.settings.SettingsRoute
 import app.kcal.feature.today.TodayRoute
 import app.kcal.feature.today.TodayScreen
 import app.kcal.feature.today.todayContentPreviewState
+import app.kcal.feature.trends.TrendsRoute
 import app.kcal.feature.trends.TrendsScreen
+import app.kcal.feature.trends.trendsManyPointsPreviewState
 import kotlin.reflect.KClass
 
 /**
@@ -81,6 +83,7 @@ fun KcalNavHost(
     historyContent: @Composable (onEditMealClick: (Long) -> Unit) -> Unit = { onEditMealClick ->
         HistoryRoute(onEditMealClick = onEditMealClick)
     },
+    trendsContent: @Composable () -> Unit = { TrendsRoute() },
 ) {
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = currentBackStackEntry?.destination
@@ -114,7 +117,7 @@ fun KcalNavHost(
                     { mealId -> navController.navigate(EditMealDestination(mealId)) },
                 )
             }
-            composable<TrendsDestination> { TrendsScreen() }
+            composable<TrendsDestination> { trendsContent() }
             composable<HistoryDestination> {
                 historyContent { mealId -> navController.navigate(EditMealDestination(mealId)) }
             }
@@ -170,6 +173,14 @@ private fun PreviewNavHost() {
                 onAddMealClick = onAddMealClick,
                 onEditMealClick = onEditMealClick,
                 onDeleteMealClick = {},
+                onRetry = {},
+            )
+        },
+        trendsContent = {
+            TrendsScreen(
+                uiState = trendsManyPointsPreviewState,
+                onWeightChange = {},
+                onSave = {},
                 onRetry = {},
             )
         },

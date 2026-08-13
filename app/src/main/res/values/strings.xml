@@ -23,7 +23,14 @@
 
     <string name="loading">Loading…</string>
 
-    <string name="placeholder_trends">Your weight points and the 7-day moving average will appear here.</string>
+    <string name="trends_log_title">Morning weight</string>
+    <string name="trends_chart_title">Weight and 7-day average</string>
+    <string name="trends_chart_legend">Dots are logged weights, the line is the 7-day average of the days logged in that calendar week window.</string>
+    <string name="trends_chart_content_description">Weight chart from %1$s to %2$s.</string>
+    <string name="trends_latest">Latest: %1$s %2$s</string>
+    <string name="trends_average">7-day average: %1$s %2$s</string>
+    <string name="trends_empty">Save your weight to see the chart and the 7-day average.</string>
+    <string name="trends_load_failed">Could not load your weight history from local storage.</string>
 
     <string name="today_progress_title">Daily progress</string>
     <string name="today_empty">No meals yet. Use Add to log one.</string>

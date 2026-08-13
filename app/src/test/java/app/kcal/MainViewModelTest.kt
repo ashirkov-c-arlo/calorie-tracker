@@ -11,6 +11,7 @@ import app.kcal.domain.model.DailyTargetSnapshot
 import app.kcal.domain.model.StoredProfile
 import app.kcal.domain.model.ThemeMode
 import app.kcal.domain.model.UserPreferences
+import app.kcal.domain.model.WeightEntry
 import app.kcal.domain.repository.DailyTargetRepository
 import app.kcal.domain.usecase.ApplyTodayTarget
 import app.kcal.domain.usecase.CalculateDailyTargets
@@ -99,6 +100,26 @@ class MainViewModelTest {
         val nextTarget = assertNotNull(dailyTargetRepository.find(today.plusDays(1)))
         assertEquals(firstTarget.targets, nextTarget.targets)
         assertEquals(2, dailyTargetRepository.upsertCount)
+    }
+
+    @Test
+    fun `logging today's weight rewrites today's target`() = runTest {
+        val repository = FakeProfileRepository(UserPreferences(profile = completeProfile(currentWeightKg = 82.4)))
+        viewModel(repository)
+        runCurrent()
+        val firstTarget = assertNotNull(dailyTargetRepository.find(today))
+
+        repository.logWeight(WeightEntry(localDate = today, kg = 95.0))
+        runCurrent()
+
+        val rewritten = assertNotNull(dailyTargetRepository.find(today))
+        assertNotEquals(firstTarget.targets, rewritten.targets)
+        assertEquals(
+            assertIs<DailyTargetResult.Available>(
+                CalculateDailyTargets().forStoredProfile(completeProfile(currentWeightKg = 95.0)),
+            ).targets,
+            rewritten.targets,
+        )
     }
 
     @Test

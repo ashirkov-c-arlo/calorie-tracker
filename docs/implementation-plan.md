@@ -1,13 +1,17 @@
 # Kcal Android Implementation Plan
 
-Status: **final client implementation plan; stages 1-5 and 7 implemented, stage 6 and stages 8-9
-not started**.
+Status: **final client implementation plan; stages 1-7 implemented, stages 8-9 not started**.
 
 > **Open approval — stage order.** Stage 7 (History) was implemented before stage 6 (weight
-> Trends) on explicit request. History depends only on stored meals and daily target
-> snapshots, so it needed nothing from stage 6, but `AGENTS.md` §15 requires stages to run in
-> order. Merging `feat/history` before stage 6 needs human approval; until then stage 6 remains
-> the next unfinished stage and Trends is still a placeholder screen.
+> Trends) on explicit request, and stage 6 followed on the `feat/weight-trends` branch. History
+> depends only on stored meals and daily target snapshots, so it needed nothing from stage 6,
+> but `AGENTS.md` §15 requires stages to run in order. Merging `feat/history` and
+> `feat/weight-trends` in that order still needs human approval.
+>
+> **Open approval — no Vico.** Stage 6 renders the raw points and the 7-day average with a
+> Compose `Canvas` (`feature/trends/components/WeightChart.kt`) instead of adding the Vico
+> dependency planned in §15. The chart is a line plus dots, which `AGENTS.md` §4 already allows
+> to be hand-drawn. Say so and Vico can replace `WeightChart` behind the same state.
 
 Normative inputs:
 
@@ -425,8 +429,11 @@ endpoint, quota policy, and key exist. This repository does not implement that b
 
 ### Work
 
-- Add Vico only now.
-- Add weight entry/edit UI with one upsert per local date.
+- Add Vico only now. **Deviation:** not added; the chart is a Compose `Canvas` (see the
+  open approval above).
+- Add weight entry/edit UI with one upsert per local date. Implemented as the morning-weight
+  field on Trends, which upserts the current local date; editing an arbitrary past date is not
+  offered.
 - Render raw weight points.
 - Implement the agreed calendar-window trend:
 
@@ -537,7 +544,7 @@ Before code, extend `docs/llm-proxy-contract.md` with the exact
 | 1 | Compose, Navigation, Hilt, Room/KSP, DataStore, AppCompat, base tests |
 | 4 | Ktor client/content negotiation/timeouts and test engine |
 | 5 | Coil only if transient preview needs it |
-| 6 | Vico |
+| 6 | Vico — **not added**, the chart is hand-drawn on `Canvas` |
 | 9 | No new production dependency expected |
 
 Do not preload later-stage dependencies into the skeleton.

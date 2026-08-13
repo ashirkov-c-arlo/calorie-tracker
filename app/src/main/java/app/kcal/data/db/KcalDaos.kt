@@ -18,6 +18,10 @@ interface WeightEntryDao {
     @Query("SELECT * FROM weight_entries ORDER BY local_date_epoch_day DESC LIMIT 1")
     fun observeLatest(): Flow<WeightEntryEntity?>
 
+    // ponytail: Trends observes the whole series; add a date-range query if it ever gets slow.
+    @Query("SELECT * FROM weight_entries ORDER BY local_date_epoch_day")
+    fun observeAll(): Flow<List<WeightEntryEntity>>
+
     @Query("SELECT * FROM weight_entries WHERE local_date_epoch_day = :epochDay")
     suspend fun findByDate(epochDay: Int): WeightEntryEntity?
 }

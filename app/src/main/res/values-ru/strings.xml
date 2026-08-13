@@ -21,7 +21,14 @@
 
     <string name="loading">Загрузка…</string>
 
-    <string name="placeholder_trends">Здесь появятся точки веса и скользящее среднее за 7 дней.</string>
+    <string name="trends_log_title">Утренний вес</string>
+    <string name="trends_chart_title">Вес и среднее за 7 дней</string>
+    <string name="trends_chart_legend">Точки — записанный вес, линия — среднее за дни, записанные в окне последних семи календарных дней.</string>
+    <string name="trends_chart_content_description">График веса с %1$s по %2$s.</string>
+    <string name="trends_latest">Последний: %1$s %2$s</string>
+    <string name="trends_average">Среднее за 7 дней: %1$s %2$s</string>
+    <string name="trends_empty">Сохраните вес, чтобы увидеть график и среднее за 7 дней.</string>
+    <string name="trends_load_failed">Не удалось загрузить историю веса из локального хранилища.</string>
 
     <string name="today_progress_title">Прогресс за день</string>
     <string name="today_empty">Приёмов пищи пока нет. Добавьте первый.</string>

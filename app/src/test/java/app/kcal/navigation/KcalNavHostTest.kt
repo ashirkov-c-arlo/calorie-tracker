@@ -23,6 +23,8 @@ import app.kcal.feature.profile.filledProfileFormUiState
 import app.kcal.feature.settings.SettingsScreen
 import app.kcal.feature.today.TodayScreen
 import app.kcal.feature.today.todayContentPreviewState
+import app.kcal.feature.trends.TrendsScreen
+import app.kcal.feature.trends.trendsManyPointsPreviewState
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -51,7 +53,7 @@ class KcalNavHostTest {
         showNavHost()
 
         composeRule.onNodeWithText(string(R.string.nav_trends)).performClick()
-        composeRule.onNodeWithText(string(R.string.placeholder_trends)).assertIsDisplayed()
+        composeRule.onNodeWithText(string(R.string.trends_log_title)).assertIsDisplayed()
 
         composeRule.onNodeWithText(string(R.string.nav_history)).performClick()
         composeRule.onNodeWithText(string(R.string.history_day_no_target)).assertIsDisplayed()
@@ -142,6 +144,14 @@ class KcalNavHostTest {
                             onDayClick = {},
                             onEditMealClick = onEditMealClick,
                             onDeleteMealClick = {},
+                            onRetry = {},
+                        )
+                    },
+                    trendsContent = {
+                        TrendsScreen(
+                            uiState = trendsManyPointsPreviewState,
+                            onWeightChange = {},
+                            onSave = {},
                             onRetry = {},
                         )
                     },
