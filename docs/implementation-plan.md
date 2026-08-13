@@ -1,6 +1,7 @@
 # Kcal Android Implementation Plan
 
-Status: **final client implementation plan; stages 1-5 implemented, stages 6-9 not started**.
+Status: **final client implementation plan; stages 1-5 and 7 implemented, stage 6 and stages 8-9
+not started**. Stage 7 (History) needs no weight data, so it was delivered before stage 6.
 
 Normative inputs:
 
