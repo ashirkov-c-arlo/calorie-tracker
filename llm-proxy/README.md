@@ -68,6 +68,11 @@ kcal.example.net {
 }
 ```
 
+With a certificate from a local CA rather than ACME, add
+`tls /etc/caddy/tls/fullchain.pem /etc/caddy/tls/privkey.pem` to that site block, keep the
+key out of the repository, and make every client trust the CA root: `SSL_CERT_FILE` for the
+smoke tests, an installed CA certificate for a debug APK on the device.
+
 Those two timeouts are **not optional**. A client that dribbles one header byte per idle
 timeout holds a connection slot forever, and only the reverse proxy sees that phase
 (`client_header_timeout` / `client_body_timeout` in nginx). The proxy enforces its own
