@@ -1,0 +1,14 @@
+services:
+  kcal-proxy:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:8080:8080"   # publish through your TLS reverse proxy, not directly
+    volumes:
+      - kcal-proxy-data:/data
+      # Read-only credentials instead of AWS_* in .env:
+      # - ${HOME}/.aws:/home/kcal/.aws:ro
+
+volumes:
+  kcal-proxy-data:
