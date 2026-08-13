@@ -10,7 +10,6 @@ import app.kcal.domain.usecase.AggregateMealMacros
 import app.kcal.domain.usecase.BuildHistory
 import app.kcal.testing.foodItem
 import app.kcal.testing.mealEntry
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.map
@@ -57,16 +56,15 @@ class HistoryIntegrationTest {
             repository.save(mealEntry(id = 0, localDate = monday, items = listOf(foodItem(kcal = 400))), null)
         repository.save(mealEntry(id = 0, localDate = wednesday, items = listOf(foodItem(kcal = 600))), null)
         val emissions = Channel<List<HistoryWeek>>(Channel.UNLIMITED)
-        val subscribed = CompletableDeferred<Unit>()
         val collector =
             launch(Dispatchers.Default) {
                 repository.observeAll().map { meals -> buildHistory(meals, emptyList()) }.collect { weeks ->
                     emissions.send(weeks)
-                    subscribed.complete(Unit)
                 }
             }
-        subscribed.await()
 
+        // Receiving the initial value proves the subscription is live before the edit, and a
+        // missing emission fails on the timeout instead of hanging the test.
         val initial = withTimeout(TIMEOUT_MILLIS) { emissions.receive() }.single()
         assertEquals(1_000L, initial.consumed.kcal)
         assertEquals(400L, initial.days.last().consumed.kcal)
