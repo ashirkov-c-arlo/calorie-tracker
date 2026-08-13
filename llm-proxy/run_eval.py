@@ -50,7 +50,12 @@ from typing import Any, Optional
 
 # The proxy's own validator and language check: a second implementation drifts, and a
 # gate that is laxer than production would pass a model production then rejects.
-from kcal_proxy.parse import language_ok, normalize_log_food, output_pieces
+from kcal_proxy.parse import (
+    language_ok,
+    normalize_ask_clarification,
+    normalize_log_food,
+    output_pieces,
+)
 from kcal_proxy.prompt import escape_untrusted
 
 try:
@@ -569,21 +574,17 @@ def run_one(client, model_key: str, model: dict, case: Case, repeat: int) -> Res
 
     if res.tool_name == "log_food":
         items, _, problems = normalize_log_food(payload)
-        res.schema_valid = not problems
-        if problems:
-            # Production answers 502 INVALID_RESPONSE here, so this is not a passing call.
-            res.error = "; ".join(problems)[:200]
-            return res
-        res.ok = True
-        score(case, res.tool_name, payload, items, res)
     else:
-        q = str(payload.get("question") or "").strip()
-        if not q:
-            res.error = "blank clarification question"
-            return res
-        res.ok = True
-        res.schema_valid = True
-        score(case, res.tool_name, payload, [], res)
+        items = []
+        # Production forbids a second question, so a follow-up case must not ask again.
+        _, problems = normalize_ask_clarification(payload, bool(case.clarification_question))
+    res.schema_valid = not problems
+    if problems:
+        # Production answers 502 INVALID_RESPONSE here, so this is not a passing call.
+        res.error = "; ".join(problems)[:200]
+        return res
+    res.ok = True
+    score(case, res.tool_name, payload, items, res)
 
     return res
 

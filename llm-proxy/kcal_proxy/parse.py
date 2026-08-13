@@ -303,6 +303,24 @@ def normalize_log_food(payload: Any) -> tuple[list[dict], str | None, list[str]]
     return list(merged.values()), note, problems
 
 
+def normalize_ask_clarification(payload: Any, already_answered: bool) -> tuple[str, list[str]]:
+    """Returns (question, problems), the ask_clarification counterpart of normalize_log_food.
+
+    Shared with run_eval.py so a model can never pass the eval on an answer production
+    would reject.
+    """
+    if already_answered:
+        # One question per entry: the answer is already in this request.
+        return "", ["the clarification is already answered, call log_food with your best assumption"]
+    question = payload.get("question") if isinstance(payload, dict) else None
+    if not isinstance(question, str) or len(question.strip()) < 3:
+        return "", ["question must be a non-blank sentence"]
+    question = question.strip()
+    if len(question) > MAX_QUESTION_CHARS:
+        return question, [f"question must be at most {MAX_QUESTION_CHARS} characters"]
+    return question, []
+
+
 # --------------------------------------------------------------------------------------
 # L3 output sanitizer (plan §9.5)
 # --------------------------------------------------------------------------------------
@@ -336,8 +354,6 @@ def sanitize_payload(tool: str, items: list[dict], note: str | None, question: s
                 problems.append("an item name became empty after sanitizing")
         note = sanitize_string(note, 200) or None if note is not None else None
     else:
-        if len(question) > MAX_QUESTION_CHARS:
-            problems.append(f"question must be at most {MAX_QUESTION_CHARS} characters")
         question = sanitize_string(question, MAX_QUESTION_CHARS)
         if len(question) < 3:
             problems.append("question is too short")
@@ -345,12 +361,12 @@ def sanitize_payload(tool: str, items: list[dict], note: str | None, question: s
 
 
 def output_pieces(items: list[dict], note: str | None, question: str) -> list[str]:
-    """The human-readable strings of a response, grouped for the language check.
+    """Every human-readable string of a response, one piece each.
 
-    Item names share one piece so a Latin brand among Russian dishes stays valid; a note
-    and a question are prose the model wrote itself and must comply on their own.
+    The contract localizes `items[].name`, `note` and `question` individually, so they are
+    language-checked individually: a long localized name must not mask a foreign one.
     """
-    return ["\n".join(str(item["name"]) for item in items), note or "", question]
+    return [str(item["name"]) for item in items] + [note or "", question]
 
 
 def _piece_language_ok(piece: str, lang: str) -> bool | None:
@@ -402,8 +418,17 @@ def _soft_flags(items: list[dict]) -> list[str]:
     return sorted(set(flags))
 
 
-def run_parse(client, cfg: Config, req: ParseRequest, lang: str, meta: Meta | None = None) -> tuple[dict, Meta]:
-    deadline = time.monotonic() + cfg.request_deadline_s
+def run_parse(
+    client,
+    cfg: Config,
+    req: ParseRequest,
+    lang: str,
+    meta: Meta | None = None,
+    deadline: float | None = None,
+) -> tuple[dict, Meta]:
+    """`deadline` is the one end-to-end budget owned by the HTTP layer, which already
+    spent part of it reading the body. The fallback is for direct calls."""
+    deadline = time.monotonic() + cfg.request_deadline_s if deadline is None else deadline
     meta = meta or Meta()
     meta.text_len = len(req.text)
     meta.image_bytes = len(req.image_bytes or b"")
@@ -440,15 +465,8 @@ def run_parse(client, cfg: Config, req: ParseRequest, lang: str, meta: Meta | No
             problems.append("the tool call was truncated, answer with fewer items")
         elif tool == "log_food":
             items, note, problems = normalize_log_food(payload)
-        elif req.question:
-            # One question per entry: the answer is already in this request.
-            problems.append("the clarification is already answered, call log_food with your best assumption")
         else:
-            raw_question = payload.get("question") if isinstance(payload, dict) else None
-            if not isinstance(raw_question, str) or len(raw_question.strip()) < 3:
-                problems.append("question must be a non-blank sentence")
-            else:
-                question = raw_question.strip()
+            question, problems = normalize_ask_clarification(payload, bool(req.question))
 
         if not problems:
             items, note, question, problems = sanitize_payload(tool, items, note, question)

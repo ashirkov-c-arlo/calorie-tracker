@@ -32,8 +32,10 @@ INSIGHTS_PATH = "/v1/insights/generate"
 HEALTH_PATH = "/healthz"
 
 # A stalled client must not hold a worker thread open: SOCKET_TIMEOUT_S bounds one idle
-# read, BODY_DEADLINE_S bounds the whole upload (a drip-feeder resets the idle timeout
-# forever), and MAX_CONNECTIONS bounds how many connections are served at once.
+# read, BODY_DEADLINE_S bounds the upload inside the request deadline (a drip-feeder resets
+# the idle timeout forever), and MAX_CONNECTIONS bounds how many connections are served at
+# once. Slow *headers* are the reverse proxy's job (see README): http.server parses them
+# before any of our code runs.
 SOCKET_TIMEOUT_S = 20
 BODY_DEADLINE_S = 10
 MAX_CONNECTIONS = 64
@@ -97,7 +99,7 @@ class Handler(BaseHTTPRequestHandler):
                 return forwarded.split(",")[-1].strip()
         return self.client_address[0]
 
-    def _read_body(self) -> Any:
+    def _read_body(self, deadline: float) -> Any:
         try:
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError as exc:
@@ -106,27 +108,27 @@ class Handler(BaseHTTPRequestHandler):
             raise ProxyError(400, "INVALID_REQUEST", detail="empty body")
         if length > self.cfg.max_body_bytes:
             raise ProxyError(413, "PAYLOAD_TOO_LARGE", detail="Content-Length too large")
-        raw = self._read_exactly(length)
+        # The upload shares the end-to-end deadline and may not spend all of it.
+        raw = self._read_exactly(length, min(deadline, time.monotonic() + BODY_DEADLINE_S))
         try:
             return json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise ProxyError(400, "INVALID_REQUEST", detail="body is not UTF-8 JSON") from exc
 
-    def _read_exactly(self, length: int) -> bytes:
+    def _read_exactly(self, length: int, deadline: float) -> bytes:
         """Read the body under one absolute deadline, not one deadline per idle read."""
-        deadline = time.monotonic() + BODY_DEADLINE_S
         chunks: list[bytes] = []
         pending = length
         try:
             while pending:
                 budget = deadline - time.monotonic()
                 if budget <= 0:
-                    raise ProxyError(400, "INVALID_REQUEST", detail="body deadline exceeded")
+                    raise ProxyError(504, "TIMEOUT", detail="body deadline exceeded")
                 try:
                     self.connection.settimeout(budget)
                     chunk = self.rfile.read1(pending)
                 except OSError as exc:  # idle timeout, deadline hit mid-read, or a reset
-                    raise ProxyError(400, "INVALID_REQUEST", detail="body read failed") from exc
+                    raise ProxyError(504, "TIMEOUT", detail="body read timed out") from exc
                 if not chunk:
                     raise ProxyError(400, "INVALID_REQUEST", detail="body shorter than Content-Length")
                 chunks.append(chunk)
@@ -153,6 +155,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         started = time.monotonic()
+        # One end-to-end budget for reading the body and for inference: the app gives up
+        # after 30 s, so the two phases must share the deadline instead of adding up.
+        deadline = started + self.cfg.request_deadline_s
         self.request_id = (self.headers.get("X-Request-Id") or "")[:64] or uuid.uuid4().hex
         path = self.path.split("?")[0]
         lang = resolve_language(self.headers.get("Accept-Language"))
@@ -170,13 +175,13 @@ class Handler(BaseHTTPRequestHandler):
             if not self.server.limiter.allow():  # type: ignore[attr-defined]
                 raise ProxyError(429, "THROTTLED", 2, detail="local rate limit")
 
-            request = validate_request(self._read_body(), self.cfg)
+            request = validate_request(self._read_body(deadline), self.cfg)
             try:
                 reserved = self.server.quota.reserve(key_id, key_hash(self._client_ip()))  # type: ignore[attr-defined]
             except QuotaExceeded as exhausted:
                 raise ProxyError(429, "QUOTA", exhausted.retry_after, detail=exhausted.scope) from exhausted
 
-            body, meta = run_parse(self.server.bedrock, self.cfg, request, lang, meta)  # type: ignore[attr-defined]
+            body, meta = run_parse(self.server.bedrock, self.cfg, request, lang, meta, deadline)  # type: ignore[attr-defined]
             result, code = body["type"], ""
             self._send(200, body)
         except ProxyError as error:

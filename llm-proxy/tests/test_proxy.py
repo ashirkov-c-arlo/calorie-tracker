@@ -32,7 +32,9 @@ from kcal_proxy.parse import (
     ProxyError,
     language_ok,
     map_client_error,
+    normalize_ask_clarification,
     normalize_log_food,
+    output_pieces,
     run_parse,
     sanitize_string,
     validate_request,
@@ -337,13 +339,13 @@ class PipelineTest(unittest.TestCase):
         body, _ = run_parse(bedrock, cfg(), self._request(), "ru")
         self.assertEqual(body["type"], "success")
 
-    def test_language_check_follows_the_dominant_script(self):
+    def test_language_check_covers_every_string(self):
         cases = {
-            # A Latin brand among Russian dishes stays valid.
-            ("ru", ("Куриная грудка", "Pepsi"), None): True,
-            # A long Russian note cannot carry English item names past the check.
+            ("ru", ("Куриная грудка", "Гречка"), None): True,
+            # A long localized name must not mask a foreign one.
+            ("ru", ("Очень длинное русское название блюда", "Chicken breast"), None): False,
+            # A long note in the right language does not excuse the names either.
             ("ru", ("Chicken breast",), "Длинное русское примечание о допущениях"): False,
-            # ... nor the other way round.
             ("en", ("Каша",), "A long English note about the assumptions made here"): False,
             # Another script is not English just because it has no Cyrillic.
             ("en", ("鸡胸肉",), None): False,
@@ -773,6 +775,15 @@ class HttpTest(unittest.TestCase):
             holder.join(5)
             self.assertEqual(self.post("/v1/nutrition/parse", {"text": "chicken"})[0], 200)
 
+    def test_the_request_deadline_also_covers_the_body_read(self):
+        # The upload and the inference share one budget instead of adding up.
+        conf = cfg(port=0, db_path=os.path.join(self.tmp, "q7.sqlite3"), request_deadline_s=0.0)
+        bedrock = FakeBedrock(tool_use("log_food", {"items": [ITEM], "note": None}))
+        with self.temporary_server(conf, bedrock):
+            self.assertEqual(self.post("/v1/nutrition/parse", {"text": "chicken"})[:2],
+                             (504, {"type": "error", "code": "TIMEOUT"}))
+        self.assertEqual(bedrock.calls, [])
+
     def test_kill_switch(self):
         conf = cfg(port=0, db_path=os.path.join(self.tmp, "q3.sqlite3"), enabled=False)
         with self.temporary_server(conf, FakeBedrock()):
@@ -840,7 +851,9 @@ class EvalParityTest(unittest.TestCase):
 
     def test_eval_scores_with_the_production_validator(self):
         self.assertIs(run_eval.normalize_log_food, normalize_log_food)
+        self.assertIs(run_eval.normalize_ask_clarification, normalize_ask_clarification)
         self.assertIs(run_eval.language_ok, language_ok)
+        self.assertIs(run_eval.output_pieces, output_pieces)
 
 
 if __name__ == "__main__":
