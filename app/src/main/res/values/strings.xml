@@ -13,6 +13,7 @@
     <string name="profile_setup_title">Your profile</string>
     <string name="manual_entry_add_title">Add meal</string>
     <string name="manual_entry_edit_title">Edit meal</string>
+    <string name="entry_title">Log food</string>
 
     <string name="settings_open_content_description">Open settings</string>
     <string name="today_add_meal_content_description">Add meal</string>
@@ -45,6 +46,32 @@
     <string name="manual_entry_review_warning">This value is outside the usual review range. Check it before saving.</string>
     <string name="manual_entry_load_failed">Could not load this meal from local storage.</string>
     <string name="manual_entry_save_failed">Could not save the meal. Check the values and try again.</string>
+
+    <string name="entry_text_label">What did you eat?</string>
+    <string name="entry_text_hint">Write it in any language. Portions help: “two eggs and 200 g of rice”.</string>
+    <string name="entry_text_required">Describe the meal first.</string>
+    <string name="entry_parsing">Reading your description…</string>
+    <string name="entry_clarification_answer_label">Your answer</string>
+    <string name="entry_photo_add">Add photo</string>
+    <string name="entry_photo_take">Take photo</string>
+    <string name="entry_photo_preparing">Preparing the photo…</string>
+    <string name="entry_photo_attached">Photo attached. It is used for this reading only and is never saved.</string>
+    <string name="entry_photo_remove">Remove photo</string>
+    <string name="entry_photo_failed">That image could not be read. Pick another photo or continue with text only.</string>
+    <string name="entry_confirm_title">Check before saving</string>
+    <string name="entry_confirm_subtitle">These values are an estimate. Edit anything that looks wrong.</string>
+
+    <string name="entry_failure_no_network">No connection. Log the meal manually or try again later.</string>
+    <string name="entry_failure_timeout">The request took too long. Try again or log the meal manually.</string>
+    <string name="entry_failure_busy">The service is busy right now. Try again later or log the meal manually.</string>
+    <string name="entry_failure_content_blocked">This description could not be processed. Rephrase it or log the meal manually.</string>
+    <string name="entry_failure_unavailable">Automatic reading is unavailable. Log the meal manually.</string>
+    <string name="entry_failure_unknown">The description could not be read. Try again or log the meal manually.</string>
+
+    <string name="action_parse">Read the description</string>
+    <string name="action_send_answer">Send answer</string>
+    <string name="action_log_manually">Log manually</string>
+    <string name="action_confirm">Save meal</string>
 
     <string name="profile_intro">Enter your data once. Every field is required, and you can change it later in Settings.</string>
     <string name="profile_disclaimer">This is an estimate for generally healthy adults aged 18 and over. It is not suitable for pregnancy, breastfeeding, eating disorders, therapeutic diets, or conditions such as kidney or liver disease.</string>

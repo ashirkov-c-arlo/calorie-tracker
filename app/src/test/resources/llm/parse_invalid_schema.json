@@ -1,0 +1,14 @@
+{
+  "type": "success",
+  "items": [
+    {
+      "name": "Oatmeal",
+      "grams": 250.0,
+      "protein_g": 12.0,
+      "fat_g": 6.0,
+      "carbs_g": 50.0,
+      "confidence": 0.8
+    }
+  ],
+  "note": null
+}

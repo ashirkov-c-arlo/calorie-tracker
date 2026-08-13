@@ -92,6 +92,12 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.collections.immutable)
 
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
+
     testImplementation(platform(libs.androidx.compose.bom))
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
@@ -102,5 +108,6 @@ dependencies {
     testImplementation(libs.roborazzi.compose)
     testImplementation(libs.roborazzi.junit.rule)
     testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.ktor.client.mock)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

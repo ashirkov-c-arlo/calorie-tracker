@@ -7,7 +7,7 @@ import app.kcal.domain.repository.ProfileRepository
 import app.kcal.domain.usecase.AggregateMealMacros
 import app.kcal.domain.usecase.ApplyTodayTarget
 import app.kcal.domain.usecase.CalculateDailyTargets
-import app.kcal.domain.usecase.SaveManualMeal
+import app.kcal.domain.usecase.SaveMeal
 import app.kcal.domain.usecase.SaveProfile
 import app.kcal.domain.usecase.SuggestLossPaces
 import app.kcal.domain.usecase.ValidateMeal
@@ -50,13 +50,13 @@ object DomainModule {
     ): SaveProfile = SaveProfile(profileRepository, calculateDailyTargets, timeProvider)
 
     @Provides
-    fun provideSaveManualMeal(
+    fun provideSaveMeal(
         mealRepository: MealRepository,
         profileRepository: ProfileRepository,
         calculateDailyTargets: CalculateDailyTargets,
         validateMeal: ValidateMeal,
         timeProvider: TimeProvider,
-    ): SaveManualMeal = SaveManualMeal(
+    ): SaveMeal = SaveMeal(
         mealRepository = mealRepository,
         profileRepository = profileRepository,
         calculateDailyTargets = calculateDailyTargets,

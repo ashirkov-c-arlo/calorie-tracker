@@ -1,0 +1,8 @@
+{
+  "type": "clarification",
+  "question": "Approximately how large was the serving?",
+  "usage": {
+    "input_tokens": 210,
+    "output_tokens": 24
+  }
+}

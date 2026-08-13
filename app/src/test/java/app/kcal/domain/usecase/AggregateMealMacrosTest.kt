@@ -1,9 +1,11 @@
 package app.kcal.domain.usecase
 
+import app.kcal.domain.model.MacroTotals
 import app.kcal.domain.model.Macros
 import app.kcal.testing.foodItem
 import app.kcal.testing.mealEntry
 import org.junit.Test
+import java.math.BigDecimal
 import kotlin.test.assertEquals
 
 class AggregateMealMacrosTest {
@@ -22,7 +24,7 @@ class AggregateMealMacrosTest {
             )
 
         assertEquals(
-            Macros(kcal = 420, proteinG = 12.5, fatG = 6.0, carbsG = 74.0),
+            MacroTotals.from(Macros(kcal = 420, proteinG = 12.5, fatG = 6.0, carbsG = 74.0)),
             aggregate(listOf(meal)),
         )
     }
@@ -35,8 +37,30 @@ class AggregateMealMacrosTest {
                 mealEntry(id = 2, items = listOf(foodItem(kcal = 400, proteinG = 30.0))),
             )
 
-        assertEquals(650, aggregate(meals).kcal)
-        assertEquals(50.0, aggregate(meals).proteinG)
-        assertEquals(Macros.ZERO, aggregate(emptyList()))
+        assertEquals(650L, aggregate(meals).kcal)
+        assertEquals(BigDecimal("50.0"), aggregate(meals).proteinG)
+        assertEquals(MacroTotals.ZERO, aggregate(emptyList()))
+    }
+
+    @Test
+    fun `reviewed values wider than Int and Double remain aggregatable`() {
+        val totals =
+            aggregate(
+                listOf(
+                    mealEntry(
+                        items =
+                        listOf(
+                            foodItem(kcal = Int.MAX_VALUE, proteinG = Double.MAX_VALUE),
+                            foodItem(kcal = 1, proteinG = Double.MAX_VALUE),
+                        ),
+                    ),
+                ),
+            )
+
+        assertEquals(Int.MAX_VALUE.toLong() + 1L, totals.kcal)
+        assertEquals(
+            0,
+            BigDecimal.valueOf(Double.MAX_VALUE).multiply(BigDecimal.valueOf(2)).compareTo(totals.proteinG),
+        )
     }
 }

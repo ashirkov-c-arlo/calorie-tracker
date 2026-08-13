@@ -1,6 +1,6 @@
 # Kcal Android Implementation Plan
 
-Status: **final client implementation plan; stages 1-2 (project skeleton, profile and target calculator) implemented, stages 3-9 not started**.
+Status: **final client implementation plan; stages 1-5 implemented, stages 6-9 not started**.
 
 Normative inputs:
 

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The only shared location the entry flow needs: transient meal photos in the cache directory,
+  handed to the camera app as a write target and deleted as soon as the flow no longer needs them.
+-->
+<paths>
+    <cache-path
+        name="entry_photos"
+        path="entry-photos/" />
+</paths>

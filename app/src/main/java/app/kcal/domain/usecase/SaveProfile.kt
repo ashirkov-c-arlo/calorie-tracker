@@ -12,9 +12,9 @@ import app.kcal.domain.repository.ProfileRepository
  * local date, so an interruption can only lose the edit itself and never pair new settings
  * with a stale weight.
  *
- * Today's target snapshot is deliberately **not** written here: the app shell owns that
- * write and performs it for every stored profile, which keeps a single writer and makes a
- * late save unable to overwrite a newer target.
+ * Today's target snapshot is deliberately **not** written here: the app shell serializes
+ * profile and local-date changes through [ApplyTodayTarget], so a stale calculation cannot
+ * overwrite a newer target.
  */
 class SaveProfile(
     private val profileRepository: ProfileRepository,

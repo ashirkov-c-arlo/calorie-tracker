@@ -19,6 +19,9 @@ data object HistoryDestination
 data object SettingsDestination
 
 @Serializable
+data object EntryDestination
+
+@Serializable
 data object ManualEntryDestination
 
 @Serializable

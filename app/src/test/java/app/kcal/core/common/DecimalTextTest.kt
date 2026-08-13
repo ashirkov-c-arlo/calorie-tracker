@@ -1,6 +1,7 @@
 package app.kcal.core.common
 
 import org.junit.Test
+import java.math.BigDecimal
 import java.util.Locale
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -47,6 +48,23 @@ class DecimalTextTest {
         assertEquals("82,4", DecimalText.format(82.4, Locale.forLanguageTag("ru")))
         assertEquals("0,50", DecimalText.format(0.5, Locale.forLanguageTag("ru"), decimals = 2))
         assertEquals("2089", DecimalText.formatInt(2089, Locale.forLanguageTag("ru")))
+    }
+
+    @Test
+    fun `editable formatting round trips every Double without rounding`() {
+        listOf(Locale.US, Locale.forLanguageTag("ru")).forEach { locale ->
+            listOf(12.55, 0.04, 100.05, 1.0e-12).forEach { value ->
+                val parsed = DecimalText.parse(DecimalText.formatEditable(value, locale))
+                assertEquals(value.toBits(), parsed?.toBits(), "lossless edit of $value in $locale")
+            }
+        }
+        assertEquals("12,55", DecimalText.formatEditable(12.55, Locale.forLanguageTag("ru")))
+    }
+
+    @Test
+    fun `wide totals format without narrowing`() {
+        assertEquals("2147483648", DecimalText.formatLong(2_147_483_648L, Locale.US))
+        assertEquals("12,6", DecimalText.format(BigDecimal("12.55"), Locale.forLanguageTag("ru")))
     }
 
     @Test

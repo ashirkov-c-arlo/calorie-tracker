@@ -28,6 +28,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -65,16 +66,9 @@ class TodayViewModelTest {
                     ),
                 ),
             )
-        val targets = FakeDailyTargetRepository()
-        targets.snapshots.value =
-            mapOf(
-                today to
-                    DailyTargetSnapshot(
-                        today,
-                        Macros(kcal = 2000, proteinG = 100.0, fatG = 60.0, carbsG = 250.0),
-                        0.4,
-                    ),
-            )
+        val targets = FakeDailyTargetRepository().apply {
+            snapshots.value = mapOf(today to targetSnapshot(today))
+        }
         val viewModel = viewModel(meals, targets)
         val states = collect(viewModel)
 
@@ -84,8 +78,9 @@ class TodayViewModelTest {
         val loaded = states.last()
         assertFalse(loaded.isLoading)
         assertEquals(listOf("Breakfast", "Lunch"), loaded.meals.map { it.itemNames.single() })
-        assertEquals(800, loaded.consumed.kcal)
-        assertEquals(0.4f, loaded.progress?.kcalFraction)
+        assertEquals(800L, loaded.consumed.kcal)
+        val target = assertNotNull(targets.snapshots.value[today])
+        assertEquals(800f / target.targets.kcal, loaded.progress?.kcalFraction)
     }
 
     @Test
@@ -97,16 +92,16 @@ class TodayViewModelTest {
         meals.save(mealEntry(id = 4, items = listOf(foodItem(kcal = 250))), null)
         meals.save(mealEntry(id = 5, items = listOf(foodItem(kcal = 350))), null)
         runCurrent()
-        assertEquals(600, viewModel.uiState.value.consumed.kcal)
+        assertEquals(600L, viewModel.uiState.value.consumed.kcal)
 
         viewModel.onDeleteMeal(4)
         runCurrent()
         assertEquals(listOf(5L), viewModel.uiState.value.meals.map { it.id })
-        assertEquals(350, viewModel.uiState.value.consumed.kcal)
+        assertEquals(350L, viewModel.uiState.value.consumed.kcal)
     }
 
     @Test
-    fun `returning after midnight observes the new local day`() = runTest {
+    fun `returning after midnight only observes the new local day`() = runTest {
         val meals =
             FakeMealRepository(
                 listOf(
@@ -114,7 +109,11 @@ class TodayViewModelTest {
                     mealEntry(id = 2, localDate = today.plusDays(1)),
                 ),
             )
-        val viewModel = viewModel(meals, FakeDailyTargetRepository())
+        val nextTarget = targetSnapshot(today.plusDays(1))
+        val targets = FakeDailyTargetRepository().apply {
+            snapshots.value = mapOf(today to targetSnapshot(today), today.plusDays(1) to nextTarget)
+        }
+        val viewModel = viewModel(meals, targets)
         runCurrent()
         assertEquals(listOf(1L), viewModel.uiState.value.meals.map { it.id })
 
@@ -123,6 +122,31 @@ class TodayViewModelTest {
         runCurrent()
 
         assertEquals(listOf(2L), viewModel.uiState.value.meals.map { it.id })
+        assertEquals(nextTarget.targets, viewModel.uiState.value.progress?.target)
+        assertEquals(0, targets.upsertCount)
+    }
+
+    @Test
+    fun `large reviewed values keep Today content available`() = runTest {
+        val meals =
+            FakeMealRepository(
+                listOf(
+                    mealEntry(
+                        items =
+                        listOf(
+                            foodItem(kcal = Int.MAX_VALUE, proteinG = Double.MAX_VALUE),
+                            foodItem(kcal = 1, proteinG = Double.MAX_VALUE),
+                        ),
+                    ),
+                ),
+            )
+        val viewModel = viewModel(meals, FakeDailyTargetRepository())
+
+        runCurrent()
+
+        assertFalse(viewModel.uiState.value.hasError)
+        assertEquals(Int.MAX_VALUE.toLong() + 1L, viewModel.uiState.value.consumed.kcal)
+        assertEquals(1, viewModel.uiState.value.meals.size)
     }
 
     @Test
@@ -153,8 +177,19 @@ class TodayViewModelTest {
         assertFalse(viewModel.uiState.value.isLoading)
     }
 
-    private fun viewModel(meals: FakeMealRepository, targets: FakeDailyTargetRepository) =
-        TodayViewModel(meals, targets, AggregateMealMacros(), timeProvider)
+    private fun viewModel(meals: FakeMealRepository, targets: FakeDailyTargetRepository): TodayViewModel =
+        TodayViewModel(
+            mealRepository = meals,
+            dailyTargetRepository = targets,
+            aggregateMealMacros = AggregateMealMacros(),
+            timeProvider = timeProvider,
+        )
+
+    private fun targetSnapshot(localDate: LocalDate) = DailyTargetSnapshot(
+        localDate = localDate,
+        targets = Macros(kcal = 2_000, proteinG = 100.0, fatG = 60.0, carbsG = 250.0),
+        effectiveLossRateKgPerWeek = 0.4,
+    )
 
     private fun TestScope.collect(viewModel: TodayViewModel): List<TodayUiState> {
         val states = mutableListOf<TodayUiState>()

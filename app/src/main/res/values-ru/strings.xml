@@ -11,6 +11,7 @@
     <string name="profile_setup_title">Ваш профиль</string>
     <string name="manual_entry_add_title">Добавить приём пищи</string>
     <string name="manual_entry_edit_title">Изменить приём пищи</string>
+    <string name="entry_title">Запись еды</string>
 
     <string name="settings_open_content_description">Открыть настройки</string>
     <string name="today_add_meal_content_description">Добавить приём пищи</string>
@@ -43,6 +44,32 @@
     <string name="manual_entry_review_warning">Значение выходит за обычный диапазон проверки. Проверьте его перед сохранением.</string>
     <string name="manual_entry_load_failed">Не удалось загрузить этот приём пищи из локального хранилища.</string>
     <string name="manual_entry_save_failed">Не удалось сохранить приём пищи. Проверьте значения и повторите попытку.</string>
+
+    <string name="entry_text_label">Что вы съели?</string>
+    <string name="entry_text_hint">Пишите на любом языке. Порции помогают: «два яйца и 200 г риса».</string>
+    <string name="entry_text_required">Сначала опишите приём пищи.</string>
+    <string name="entry_parsing">Читаем ваше описание…</string>
+    <string name="entry_clarification_answer_label">Ваш ответ</string>
+    <string name="entry_photo_add">Добавить фото</string>
+    <string name="entry_photo_take">Сделать фото</string>
+    <string name="entry_photo_preparing">Готовим фото…</string>
+    <string name="entry_photo_attached">Фото прикреплено. Оно нужно только для этого разбора и не сохраняется.</string>
+    <string name="entry_photo_remove">Убрать фото</string>
+    <string name="entry_photo_failed">Не удалось прочитать изображение. Выберите другое фото или продолжите только с текстом.</string>
+    <string name="entry_confirm_title">Проверьте перед сохранением</string>
+    <string name="entry_confirm_subtitle">Эти значения — оценка. Измените всё, что выглядит неверно.</string>
+
+    <string name="entry_failure_no_network">Нет соединения. Запишите приём пищи вручную или повторите позже.</string>
+    <string name="entry_failure_timeout">Запрос занял слишком много времени. Повторите попытку или запишите вручную.</string>
+    <string name="entry_failure_busy">Сервис сейчас занят. Повторите позже или запишите вручную.</string>
+    <string name="entry_failure_content_blocked">Это описание не удалось обработать. Переформулируйте его или запишите вручную.</string>
+    <string name="entry_failure_unavailable">Автоматическое чтение недоступно. Запишите приём пищи вручную.</string>
+    <string name="entry_failure_unknown">Не удалось прочитать описание. Повторите попытку или запишите вручную.</string>
+
+    <string name="action_parse">Прочитать описание</string>
+    <string name="action_send_answer">Отправить ответ</string>
+    <string name="action_log_manually">Записать вручную</string>
+    <string name="action_confirm">Сохранить приём пищи</string>
 
     <string name="profile_intro">Введите данные один раз. Все поля обязательны, позже их можно изменить в настройках.</string>
     <string name="profile_disclaimer">Это оценка для в целом здоровых взрослых от 18 лет. Она не подходит при беременности и кормлении, расстройствах пищевого поведения, лечебных диетах и заболеваниях, например почек или печени.</string>

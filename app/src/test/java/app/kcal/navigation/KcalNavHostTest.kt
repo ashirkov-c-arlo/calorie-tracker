@@ -13,6 +13,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.kcal.R
 import app.kcal.core.designsystem.KcalTheme
 import app.kcal.domain.model.ThemeMode
+import app.kcal.feature.entry.EntryScreen
+import app.kcal.feature.entry.EntryUiState
 import app.kcal.feature.entry.ManualEntryScreen
 import app.kcal.feature.entry.manualEntryEmptyPreviewState
 import app.kcal.feature.profile.filledProfileFormUiState
@@ -73,14 +75,17 @@ class KcalNavHostTest {
     }
 
     @Test
-    fun `add meal opens manual entry without bottom navigation and cancel returns`() {
+    fun `add meal opens text entry and logging manually replaces it`() {
         showNavHost()
 
         composeRule.onNodeWithContentDescription(string(R.string.today_add_meal_content_description))
             .performClick()
 
-        composeRule.onNodeWithText(string(R.string.manual_entry_add_title)).assertIsDisplayed()
+        composeRule.onNodeWithText(string(R.string.entry_title)).assertIsDisplayed()
         composeRule.onAllNodesWithText(string(R.string.nav_trends)).assertCountEquals(0)
+
+        composeRule.onNodeWithText(string(R.string.action_log_manually)).performClick()
+        composeRule.onNodeWithText(string(R.string.manual_entry_add_title)).assertIsDisplayed()
 
         composeRule.onNodeWithContentDescription(string(R.string.action_cancel)).performClick()
         composeRule.onNodeWithText(string(R.string.today_progress_title)).assertIsDisplayed()
@@ -110,6 +115,23 @@ class KcalNavHostTest {
                             onRemoveItem = {},
                             onSave = {},
                             onRetry = {},
+                        )
+                    },
+                    foodTextContent = { onClose, onLogManually ->
+                        EntryScreen(
+                            uiState = EntryUiState(),
+                            onBackClick = onClose,
+                            onLogManually = onLogManually,
+                            onTextChange = {},
+                            onParse = {},
+                            onClarificationAnswerChange = {},
+                            onSubmitClarification = {},
+                            onRetry = {},
+                            onItemChange = { _, _, _ -> },
+                            onAddItem = {},
+                            onRemoveItem = {},
+                            onDismissConfirmation = {},
+                            onConfirm = {},
                         )
                     },
                     settingsContent = { onBackClick ->
