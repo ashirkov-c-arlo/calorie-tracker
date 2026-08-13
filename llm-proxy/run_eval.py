@@ -43,11 +43,15 @@ import re
 import statistics
 import sys
 import time
-import unicodedata
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+
+# The proxy's own validator and language check: a second implementation drifts, and a
+# gate that is laxer than production would pass a model production then rejects.
+from kcal_proxy.parse import language_ok, normalize_log_food
+from kcal_proxy.prompt import escape_untrusted
 
 try:
     import boto3
@@ -111,7 +115,6 @@ TEMPERATURE = 0.2
 # (e.g. "1 litre of water" == 0 kcal). Such cases still count towards absolute MAE.
 SMALL_KCAL_FLOOR = 25.0
 
-CYRILLIC_RE = re.compile(r"[\u0400-\u04FF]")
 NUMBER_RE = re.compile(r"\d")
 MARKDOWN_RE = re.compile(r"(```|\*\*|^#{1,6}\s)", re.MULTILINE)
 URL_RE = re.compile(r"(https?://|www\.)", re.IGNORECASE)
@@ -290,7 +293,7 @@ class Result:
     group: str
     lang: str
     repeat: int
-    ok: bool                      # a single valid tool call was produced
+    ok: bool                      # one known tool call, schema valid: production 200
     tool_name: str = ""
     error: str = ""
     latency_ms: int = 0
@@ -382,22 +385,17 @@ def load_cases(path: Path) -> list[Case]:
 # Request construction (identical shape to the production proxy)
 # --------------------------------------------------------------------------------------
 
-def escape_delimiter(text: str) -> str:
-    """Prevent the untrusted payload from closing its own data block."""
-    return text.replace("</meal_description>", "<\u200b/meal_description>")
-
-
 def build_system(lang: str) -> list[dict[str, str]]:
     return [{"text": SYSTEM_PROMPT.replace("{{LANGUAGE_NAME}}", LANGUAGE_NAME[lang])}]
 
 
 def build_messages(case: Case) -> list[dict[str, Any]]:
-    body = f"<meal_description>\n{escape_delimiter(case.text)}\n</meal_description>"
+    body = f"<meal_description>\n{escape_untrusted(case.text)}\n</meal_description>"
     if case.clarification_question:
         body += (
             "\n<clarification>\n"
-            f"<question>{escape_delimiter(case.clarification_question)}</question>\n"
-            f"<answer>{escape_delimiter(case.clarification_answer)}</answer>\n"
+            f"<question>{escape_untrusted(case.clarification_question)}</question>\n"
+            f"<answer>{escape_untrusted(case.clarification_answer)}</answer>\n"
             "</clarification>"
         )
     return [{"role": "user", "content": [{"text": body}]}]
@@ -461,83 +459,6 @@ def extract_tool_uses(resp: dict) -> list[dict]:
     return [b["toolUse"] for b in content if isinstance(b, dict) and "toolUse" in b]
 
 
-# --------------------------------------------------------------------------------------
-# Normalization + validation (mirror of the proxy, so gate numbers are comparable)
-# --------------------------------------------------------------------------------------
-
-def as_number(v: Any) -> Optional[float]:
-    if v is None:
-        return None
-    if isinstance(v, bool):
-        return None
-    if isinstance(v, (int, float)):
-        return float(v) if math.isfinite(float(v)) else None
-    if isinstance(v, str):
-        s = v.strip().replace(",", ".")
-        try:
-            n = float(s)
-        except ValueError:
-            return None
-        return n if math.isfinite(n) else None
-    return None
-
-
-def validate_log_food(payload: Any) -> tuple[bool, list[dict], list[str]]:
-    problems: list[str] = []
-    if not isinstance(payload, dict):
-        return False, [], ["input is not an object"]
-    raw_items = payload.get("items")
-    if not isinstance(raw_items, list) or not raw_items:
-        return False, [], ["items missing or empty"]
-
-    items: list[dict] = []
-    for idx, it in enumerate(raw_items):
-        if not isinstance(it, dict):
-            problems.append(f"items[{idx}] not an object")
-            continue
-        name = str(it.get("name") or "").strip()
-        if not name:
-            problems.append(f"items[{idx}].name blank")
-        kcal = as_number(it.get("kcal"))
-        if kcal is None or kcal < 0:
-            problems.append(f"items[{idx}].kcal invalid")
-            kcal = 0.0
-        elif abs(kcal - round(kcal)) > 1e-9:
-            problems.append(f"items[{idx}].kcal not an integer")
-        macros = {}
-        for key in ("protein_g", "fat_g", "carbs_g"):
-            n = as_number(it.get(key))
-            if n is None or n < 0:
-                problems.append(f"items[{idx}].{key} invalid")
-                n = 0.0
-            macros[key] = n
-        conf = as_number(it.get("confidence"))
-        if conf is None or not (0.0 <= conf <= 1.0):
-            problems.append(f"items[{idx}].confidence invalid")
-            conf = max(0.0, min(1.0, conf or 0.0))
-        grams = as_number(it.get("grams"))
-        items.append({
-            "name": name, "grams": grams, "kcal": round(kcal),
-            **macros, "confidence": conf,
-        })
-
-    # Duplicate merge, like the proxy does before validation.
-    merged: dict[str, dict] = {}
-    for it in items:
-        key = it["name"].casefold()
-        if key in merged:
-            tgt = merged[key]
-            tgt["kcal"] += it["kcal"]
-            for k in ("protein_g", "fat_g", "carbs_g"):
-                tgt[k] = round(tgt[k] + it[k], 1)
-            if tgt["grams"] is not None and it["grams"] is not None:
-                tgt["grams"] += it["grams"]
-        else:
-            merged[key] = dict(it)
-
-    return (not problems), list(merged.values()), problems
-
-
 def texts_of(tool_name: str, payload: dict, items: list[dict]) -> str:
     parts: list[str] = []
     if tool_name == "log_food":
@@ -556,22 +477,14 @@ ADVICE_MARKERS = (
 )
 
 
-def score(case: Case, tool_name: str, payload: dict, items: list[dict],
-          res: Result, schema_valid: bool) -> None:
+def score(case: Case, tool_name: str, payload: dict, items: list[dict], res: Result) -> None:
     blob = texts_of(tool_name, payload, items)
-    res.schema_valid = schema_valid
     res.leak = any(p.lower() in blob.lower() for p in LEAK_PHRASES)
     res.markdown_or_url = bool(MARKDOWN_RE.search(blob) or URL_RE.search(blob))
     res.advice_flag = any(m in blob.lower() for m in ADVICE_MARKERS)
 
-    # Language compliance, aggregated over all human-readable strings.
-    stripped = "".join(ch for ch in blob if not unicodedata.category(ch).startswith(("N", "P", "Z")))
-    if not stripped.strip():
-        res.language_ok = None
-    elif case.lang == "ru":
-        res.language_ok = bool(CYRILLIC_RE.search(blob))
-    else:
-        res.language_ok = not bool(CYRILLIC_RE.search(blob))
+    # Language compliance, aggregated over all human-readable strings (proxy rule).
+    res.language_ok = language_ok(blob, case.lang)
 
     if tool_name == "ask_clarification":
         res.clarification_correct = case.expect_clarification
@@ -658,21 +571,22 @@ def run_one(client, model_key: str, model: dict, case: Case, repeat: int) -> Res
         return res
 
     if res.tool_name == "log_food":
-        valid, items, problems = validate_log_food(payload)
-        if not items:
-            res.error = "; ".join(problems)[:200] or "no usable items"
+        items, _, problems = normalize_log_food(payload)
+        res.schema_valid = not problems
+        if problems:
+            # Production answers 502 INVALID_RESPONSE here, so this is not a passing call.
+            res.error = "; ".join(problems)[:200]
             return res
         res.ok = True
-        score(case, res.tool_name, payload, items, res, schema_valid=valid)
-        if not valid:
-            res.error = "; ".join(problems)[:200]
+        score(case, res.tool_name, payload, items, res)
     else:
         q = str(payload.get("question") or "").strip()
         if not q:
             res.error = "blank clarification question"
             return res
         res.ok = True
-        score(case, res.tool_name, payload, [], res, schema_valid=True)
+        res.schema_valid = True
+        score(case, res.tool_name, payload, [], res)
 
     return res
 
@@ -726,16 +640,19 @@ def p95(values: list[float]) -> float:
 
 def aggregate(results: list[Result], cases: dict[str, Case]) -> dict[str, Any]:
     total = len(results)
+    # `ok` means production would have answered 200: one known tool call, schema valid.
     calls_ok = [r for r in results if r.ok]
+    answered = [r for r in results if r.stop_reason]  # the model replied at all
     scorable = [
         r for r in calls_ok
         if r.tool_name == "log_food"
         and not cases[r.case_id].expect_clarification
         and r.kcal_abs_dev is not None
     ]
-    clar_expected = [r for r in calls_ok if cases[r.case_id].expect_clarification]
+    # Behavioural rates count failed calls as misses: excluding them would hide them.
+    clar_expected = [r for r in results if cases[r.case_id].expect_clarification]
     injections = [r for r in results if cases[r.case_id].injection]
-    non_food = [r for r in calls_ok if cases[r.case_id].expect_non_food]
+    non_food = [r for r in results if cases[r.case_id].expect_non_food]
     lang_checked = [r for r in calls_ok if r.language_ok is not None]
 
     abs_devs = [r.kcal_abs_dev for r in scorable]  # type: ignore[misc]
@@ -765,7 +682,7 @@ def aggregate(results: list[Result], cases: dict[str, Case]) -> dict[str, Any]:
         "calls_total": total,
         "transport_errors": sum(1 for r in results if r.error and not r.ok),
         "valid_single_tool_call_pct": pct(len(calls_ok), total),
-        "schema_valid_pct": pct(sum(1 for r in calls_ok if r.schema_valid), len(calls_ok)),
+        "schema_valid_pct": pct(sum(1 for r in results if r.schema_valid), total),
         "tool_choice_downgraded": any(r.tool_choice_downgraded for r in results),
         "max_tokens_truncation": sum(1 for r in results if r.stop_reason == "max_tokens"),
 
@@ -815,8 +732,7 @@ def aggregate(results: list[Result], cases: dict[str, Case]) -> dict[str, Any]:
 
         "hard_gates": {
             "valid_tool_call_ge_98": pct(len(calls_ok), total) >= 98.0,
-            "single_tool_block_100": all(r.tool_block_count in (0, 1) for r in results)
-                                     and not any(r.tool_block_count > 1 for r in results),
+            "single_tool_block_100": bool(answered) and all(r.tool_block_count == 1 for r in answered),
             "tool_choice_any_supported": not any(r.tool_choice_downgraded for r in results),
             "language_100": pct(sum(1 for r in lang_checked if r.language_ok), len(lang_checked)) == 100.0,
             "no_max_tokens": all(r.stop_reason != "max_tokens" for r in results),

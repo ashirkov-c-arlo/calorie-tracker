@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import secrets
 import sys
+import threading
 import time
 import traceback
 import uuid
@@ -29,6 +30,11 @@ from .quota import Quota, QuotaExceeded, RateLimiter, key_hash
 PARSE_PATH = "/v1/nutrition/parse"
 INSIGHTS_PATH = "/v1/insights/generate"
 HEALTH_PATH = "/healthz"
+
+# A stalled client must not hold a worker thread (or an unread body) open forever, and a
+# connection flood must not spawn unbounded threads.
+SOCKET_TIMEOUT_S = 20
+MAX_CONNECTIONS = 64
 
 
 def log(**fields: Any) -> None:
@@ -52,6 +58,7 @@ class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "kcal-proxy"
     sys_version = ""
+    timeout = SOCKET_TIMEOUT_S  # applied to the socket by StreamRequestHandler.setup
 
     # --- plumbing --------------------------------------------------------------------
 
@@ -62,6 +69,15 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args: Any) -> None:  # noqa: D102 - silence the default access log
         pass
 
+    def handle(self) -> None:
+        """One thread per connection, but never more than MAX_CONNECTIONS of them."""
+        if not self.server.slots.acquire(blocking=False):  # type: ignore[attr-defined]
+            return
+        try:
+            super().handle()
+        finally:
+            self.server.slots.release()  # type: ignore[attr-defined]
+
     def _send(self, status: int, body: dict, retry_after: int | None = None) -> None:
         payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -69,6 +85,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(payload)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Request-Id", self.request_id)
+        # One request per connection: an early response (auth, route, kill switch, rate
+        # limit) leaves the request body unread, and reusing the socket would parse that
+        # body as the next request. Closing is cheaper than draining it.
+        self.send_header("Connection", "close")
         if retry_after is not None:
             self.send_header("Retry-After", str(retry_after))
         self.end_headers()
@@ -92,9 +112,11 @@ class Handler(BaseHTTPRequestHandler):
         if length <= 0:
             raise ProxyError(400, "INVALID_REQUEST", detail="empty body")
         if length > self.cfg.max_body_bytes:
-            self.close_connection = True  # do not wait for a body we refuse to read
             raise ProxyError(413, "PAYLOAD_TOO_LARGE", detail="Content-Length too large")
-        raw = self.rfile.read(length)
+        try:
+            raw = self.rfile.read(length)
+        except OSError as exc:  # includes the socket timeout of a stalled upload
+            raise ProxyError(400, "INVALID_REQUEST", detail="body read failed") from exc
         try:
             return json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -146,13 +168,21 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, body)
         except ProxyError as error:
             code, detail = error.code, error.detail
-            if reserved and not error.billable:
+            # Once the model has answered, the call is paid for: keep the unit spent even
+            # if a later step (repair, delivery) fails.
+            if reserved and not meta.model_answered and not error.billable:
                 self.server.quota.refund(reserved)  # type: ignore[attr-defined]
             self._error(error)
+        except OSError as broken:  # the client vanished mid-response: nowhere to answer
+            result, code = "error", "UNKNOWN"
+            detail = f"delivery failed: {type(broken).__name__}"
+            if reserved and not meta.model_answered:
+                self.server.quota.refund(reserved)  # type: ignore[attr-defined]
+            self.close_connection = True
         except Exception as unexpected:  # noqa: BLE001 - single funnel, contract body only
             frame = traceback.extract_tb(unexpected.__traceback__)[-1]
             code, detail = "UNKNOWN", f"{type(unexpected).__name__} at {frame.filename}:{frame.lineno}"
-            if reserved:
+            if reserved and not meta.model_answered:
                 self.server.quota.refund(reserved)  # type: ignore[attr-defined]
             self._error(ProxyError(500, "UNKNOWN"))
         finally:
@@ -182,6 +212,7 @@ def build_server(cfg: Config, bedrock=None) -> ThreadingHTTPServer:
     server = ThreadingHTTPServer((cfg.host, cfg.port), Handler)
     server.daemon_threads = True
     server.cfg = cfg  # type: ignore[attr-defined]
+    server.slots = threading.BoundedSemaphore(MAX_CONNECTIONS)  # type: ignore[attr-defined]
     server.limiter = RateLimiter(cfg.rate_per_second, cfg.rate_burst)  # type: ignore[attr-defined]
     server.quota = Quota(  # type: ignore[attr-defined]
         cfg.db_path, cfg.daily_request_cap, cfg.monthly_request_cap, cfg.per_ip_daily_cap
