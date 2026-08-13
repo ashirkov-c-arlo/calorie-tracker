@@ -67,9 +67,13 @@ The Android app expects HTTPS. Terminate TLS in the reverse proxy and point
 
 kcal.example.net {
     reverse_proxy 127.0.0.1:8080
-    request_body { max_size 2MB }
+    request_body { max_size 3MB }
 }
 ```
+
+Keep that cap above the proxy's own `MAX_BODY_BYTES` (1.5 MB by default): an oversized body
+must be refused by the proxy, which answers `413 PAYLOAD_TOO_LARGE` as contract JSON, not by
+the reverse proxy, which can only fail the copy and return an opaque `502`.
 
 With a certificate from a local CA rather than ACME, add
 `tls /etc/caddy/tls/fullchain.pem /etc/caddy/tls/privkey.pem` to that site block, keep the

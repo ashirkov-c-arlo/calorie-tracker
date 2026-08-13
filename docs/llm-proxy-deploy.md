@@ -234,11 +234,16 @@ if one already exists:
 
 kcal.example.net {
     request_body {
-        max_size 2MB
+        max_size 3MB
     }
     reverse_proxy 127.0.0.1:8080
 }
 ```
+
+The reverse-proxy cap has to stay **above** the proxy's own `MAX_BODY_BYTES` (1.5 MB by
+default). A body the proxy refuses answers `413` with contract JSON, while a body Caddy
+itself refuses fails mid-copy and reaches the app as an opaque `502`, so the two caps must
+not overlap.
 
 Replace the domain, then validate and reload:
 
@@ -269,7 +274,7 @@ install -o caddy -g caddy -m 0600 privkey.pem   /etc/caddy/tls/privkey.pem
 kcal.example.net {
     tls /etc/caddy/tls/fullchain.pem /etc/caddy/tls/privkey.pem
     request_body {
-        max_size 2MB
+        max_size 3MB
     }
     reverse_proxy 127.0.0.1:8080
 }
