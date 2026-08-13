@@ -43,6 +43,7 @@
     <string name="history_load_failed">Could not load your history from local storage.</string>
     <string name="history_week_header">Week %1$d · %2$s – %3$s</string>
     <string name="history_day_no_target">No daily target was saved for this day.</string>
+    <string name="history_delete_failed">Could not delete the meal. Try again.</string>
 
     <string name="manual_entry_item_number">Item %1$d</string>
     <string name="field_food_name">Food name</string>

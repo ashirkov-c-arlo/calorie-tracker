@@ -1,5 +1,6 @@
 package app.kcal.feature.history
 
+import android.content.res.Configuration
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,13 +17,16 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -36,6 +40,7 @@ import app.kcal.core.designsystem.KcalSpacing
 import app.kcal.core.designsystem.KcalTheme
 import app.kcal.core.ui.ErrorScreen
 import app.kcal.core.ui.LoadingScreen
+import app.kcal.core.ui.MacroProgressLines
 import app.kcal.core.ui.currentLocale
 import app.kcal.domain.model.MacroTotals
 import app.kcal.domain.model.ThemeMode
@@ -46,12 +51,20 @@ import java.time.format.FormatStyle
 @Composable
 fun HistoryRoute(onEditMealClick: (Long) -> Unit, viewModel: HistoryViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val deleteFailedMessage = stringResource(R.string.history_delete_failed)
+    LaunchedEffect(viewModel, deleteFailedMessage) {
+        viewModel.events.collect { event ->
+            if (event == HistoryEvent.DeleteFailed) snackbarHostState.showSnackbar(deleteFailedMessage)
+        }
+    }
     HistoryScreen(
         uiState = uiState,
         onDayClick = viewModel::onDayClick,
         onEditMealClick = onEditMealClick,
         onDeleteMealClick = viewModel::onDeleteMeal,
         onRetry = viewModel::onRetry,
+        snackbarHostState = snackbarHostState,
     )
 }
 
@@ -64,10 +77,12 @@ fun HistoryScreen(
     onDeleteMealClick: (Long) -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = { TopAppBar(title = { Text(text = stringResource(R.string.history_title)) }) },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
     ) { contentPadding ->
         when {
             uiState.isLoading -> LoadingScreen(modifier = Modifier.padding(contentPadding))
@@ -169,27 +184,16 @@ private fun DayCard(
             verticalArrangement = Arrangement.spacedBy(KcalSpacing.extraSmall),
         ) {
             Text(text = dayFormatter.format(day.localDate), style = MaterialTheme.typography.titleSmall)
-            if (day.target == null) {
+            if (day.progress == null) {
                 Text(
                     text = stringResource(R.string.history_day_no_target),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Text(text = consumedSummary(day.consumed), style = MaterialTheme.typography.bodySmall)
             } else {
-                Text(
-                    text =
-                    stringResource(
-                        R.string.nutrient_progress_kcal,
-                        DecimalText.formatLong(day.consumed.kcal, locale),
-                        DecimalText.formatInt(day.target.kcal, locale),
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                MacroProgressLines(progress = day.progress, modifier = Modifier.padding(top = KcalSpacing.small))
             }
-            day.kcalFraction?.let { fraction ->
-                LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
-            }
-            Text(text = consumedSummary(day.consumed), style = MaterialTheme.typography.bodySmall)
             if (day.isExpanded) {
                 day.meals.forEach { meal ->
                     HorizontalDivider()
@@ -251,6 +255,70 @@ private fun consumedSummary(consumed: MacroTotals): String {
         DecimalText.format(consumed.fatG, locale),
         DecimalText.format(consumed.carbsG, locale),
     )
+}
+
+@Preview(name = "History week header White", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "History week header Black", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun WeekHeaderPreview() {
+    KcalTheme(themeMode = ThemeMode.SYSTEM) {
+        Surface {
+            WeekHeader(
+                week = historyContentPreviewState.weeks.first(),
+                modifier = Modifier.padding(KcalSpacing.medium),
+            )
+        }
+    }
+}
+
+@Preview(name = "History day card White", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "History day card Black", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun DayCardPreview() {
+    KcalTheme(themeMode = ThemeMode.SYSTEM) {
+        Surface {
+            DayCard(
+                day = historyContentPreviewState.weeks.first().days.first(),
+                onClick = {},
+                onEditMealClick = {},
+                onDeleteMealClick = {},
+                modifier = Modifier.padding(KcalSpacing.medium),
+            )
+        }
+    }
+}
+
+@Preview(name = "History expanded day card White", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "History expanded day card Black", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun ExpandedDayCardPreview() {
+    KcalTheme(themeMode = ThemeMode.SYSTEM) {
+        Surface {
+            DayCard(
+                day = historyExpandedPreviewState.weeks.first().days.first(),
+                onClick = {},
+                onEditMealClick = {},
+                onDeleteMealClick = {},
+                modifier = Modifier.padding(KcalSpacing.medium),
+            )
+        }
+    }
+}
+
+@Preview(name = "History meal row White", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "History meal row Black", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun MealRowPreview() {
+    KcalTheme(themeMode = ThemeMode.SYSTEM) {
+        Surface {
+            MealRow(
+                meal = historyContentPreviewState.weeks.first().days.first().meals.first(),
+                onEditClick = {},
+                onDeleteClick = {},
+                modifier = Modifier.padding(KcalSpacing.medium),
+            )
+        }
+    }
 }
 
 @Composable

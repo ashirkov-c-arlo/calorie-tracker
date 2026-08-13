@@ -10,6 +10,7 @@ import app.kcal.testing.foodItem
 import app.kcal.testing.mealEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
@@ -22,6 +23,7 @@ import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -72,10 +74,13 @@ class HistoryViewModelTest {
         assertFalse(viewModel.uiState.value.isLoading)
         assertEquals(1_500L, week.consumed.kcal)
         assertEquals(listOf(tuesday, monday), week.days.map { it.localDate })
-        assertNull(week.days.first().target)
-        assertNull(week.days.first().kcalFraction)
-        assertEquals(2_000, week.days.last().target?.kcal)
-        assertEquals(0.25f, week.days.last().kcalFraction)
+        assertNull(week.days.first().progress)
+        val progress = assertNotNull(week.days.last().progress)
+        assertEquals(2_000, progress.target.kcal)
+        assertEquals(0.25f, progress.kcalFraction)
+        assertEquals(0.1f, progress.proteinFraction)
+        assertEquals(0.1f, progress.fatFraction)
+        assertEquals(0.2f, progress.carbsFraction)
     }
 
     @Test
@@ -149,7 +154,7 @@ class HistoryViewModelTest {
     }
 
     @Test
-    fun `delete failure keeps a retryable error state`() = runTest {
+    fun `delete failure reports itself once and keeps the history visible`() = runTest {
         val meals = FakeMealRepository(listOf(mealEntry(localDate = monday))).apply { writeFails = true }
         val viewModel = viewModel(meals, FakeDailyTargetRepository())
         runCurrent()
@@ -157,7 +162,9 @@ class HistoryViewModelTest {
         viewModel.onDeleteMeal(1)
         runCurrent()
 
-        assertTrue(viewModel.uiState.value.hasError)
+        assertEquals(HistoryEvent.DeleteFailed, viewModel.events.first())
+        assertFalse(viewModel.uiState.value.hasError)
+        assertEquals(1, viewModel.uiState.value.weeks.single().days.single().meals.size)
         assertEquals(1, meals.meals.value.size)
     }
 

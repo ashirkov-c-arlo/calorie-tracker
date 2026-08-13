@@ -3,8 +3,8 @@ package app.kcal.feature.today
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.kcal.core.common.TimeProvider
+import app.kcal.core.ui.macroProgress
 import app.kcal.domain.model.MacroTotals
-import app.kcal.domain.model.Macros
 import app.kcal.domain.repository.DailyTargetRepository
 import app.kcal.domain.repository.MealRepository
 import app.kcal.domain.usecase.AggregateMealMacros
@@ -17,8 +17,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
-import java.math.BigDecimal
-import java.math.MathContext
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -77,7 +75,7 @@ class TodayViewModel @Inject constructor(
                         TodayUiState(
                             isLoading = false,
                             consumed = consumed,
-                            progress = snapshot?.targets?.let { target -> progress(consumed, target) },
+                            progress = snapshot?.targets?.let { target -> macroProgress(consumed, target) },
                             meals =
                             meals.map { meal ->
                                 TodayMealUiState(
@@ -94,30 +92,5 @@ class TodayViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(isLoading = false, hasError = true)
                 }
             }
-    }
-
-    private fun progress(consumed: MacroTotals, target: Macros): TodayMacroProgressUiState = TodayMacroProgressUiState(
-        consumed = consumed,
-        target = target,
-        kcalFraction = ratio(consumed.kcal, target.kcal),
-        proteinFraction = ratio(consumed.proteinG, target.proteinG),
-        fatFraction = ratio(consumed.fatG, target.fatG),
-        carbsFraction = ratio(consumed.carbsG, target.carbsG),
-    )
-
-    private fun ratio(consumed: Long, target: Int): Float = when {
-        target <= 0 -> 0f
-        consumed >= target.toLong() -> 1f
-        else -> consumed.toFloat() / target
-    }
-
-    private fun ratio(consumed: BigDecimal, target: Double): Float {
-        if (target <= 0.0) return 0f
-        val targetDecimal = BigDecimal.valueOf(target)
-        return if (consumed >= targetDecimal) {
-            1f
-        } else {
-            consumed.divide(targetDecimal, MathContext.DECIMAL64).toFloat()
-        }
     }
 }

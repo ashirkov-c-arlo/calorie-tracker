@@ -251,6 +251,9 @@ class ScreenshotTest {
     fun historyLoadingWhite() = capture(ThemeMode.WHITE) { HistoryFixture(HistoryUiState()) }
 
     @Test
+    fun historyLoadingBlack() = capture(ThemeMode.BLACK) { HistoryFixture(HistoryUiState()) }
+
+    @Test
     fun historyEmptyWhite() = capture(ThemeMode.WHITE) { HistoryFixture(historyEmptyPreviewState) }
 
     @Test

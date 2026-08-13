@@ -34,7 +34,7 @@ interface DailyTargetSnapshotDao {
     @Query("SELECT * FROM daily_target_snapshots WHERE local_date_epoch_day = :epochDay")
     suspend fun findByDate(epochDay: Int): DailyTargetSnapshotEntity?
 
-    @Query("SELECT * FROM daily_target_snapshots")
+    @Query("SELECT * FROM daily_target_snapshots ORDER BY local_date_epoch_day")
     fun observeAll(): Flow<List<DailyTargetSnapshotEntity>>
 
     @Query("DELETE FROM daily_target_snapshots WHERE local_date_epoch_day = :epochDay")

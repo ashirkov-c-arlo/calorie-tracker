@@ -1,22 +1,28 @@
 package app.kcal.feature.history
 
+import app.kcal.core.ui.MacroProgressUiState
+import app.kcal.core.ui.macroProgress
 import app.kcal.domain.model.MacroTotals
 import app.kcal.domain.model.Macros
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import java.time.LocalDate
 
+/** Deleting a past meal must not hide the history, so its failure is a one-shot event. */
+sealed interface HistoryEvent {
+    data object DeleteFailed : HistoryEvent
+}
+
 data class HistoryMealUiState(val id: Long, val itemNames: PersistentList<String>, val totals: MacroTotals)
 
 /**
- * A logged day. [target] is the snapshot saved for that date, so past progress never moves
- * with the current settings. [kcalFraction] is null when no target was saved.
+ * A logged day. [progress] is built from the target snapshot saved for that date and is null
+ * when no snapshot exists, so history never borrows the current target.
  */
 data class HistoryDayUiState(
     val localDate: LocalDate,
     val consumed: MacroTotals,
-    val target: Macros?,
-    val kcalFraction: Float?,
+    val progress: MacroProgressUiState?,
     val isExpanded: Boolean,
     val meals: PersistentList<HistoryMealUiState>,
 )
@@ -104,8 +110,7 @@ private fun previewDay(
 ): HistoryDayUiState = HistoryDayUiState(
     localDate = localDate,
     consumed = consumed,
-    target = target,
-    kcalFraction = target?.let { consumed.kcal.toFloat() / it.kcal },
+    progress = target?.let { macroProgress(consumed, it) },
     isExpanded = isExpanded,
     meals =
     persistentListOf(

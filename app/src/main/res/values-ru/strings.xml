@@ -41,6 +41,7 @@
     <string name="history_load_failed">Не удалось загрузить историю из локального хранилища.</string>
     <string name="history_week_header">Неделя %1$d · %2$s – %3$s</string>
     <string name="history_day_no_target">Для этого дня цель не сохранялась.</string>
+    <string name="history_delete_failed">Не удалось удалить приём пищи. Попробуйте снова.</string>
 
     <string name="manual_entry_item_number">Продукт %1$d</string>
     <string name="field_food_name">Название продукта</string>

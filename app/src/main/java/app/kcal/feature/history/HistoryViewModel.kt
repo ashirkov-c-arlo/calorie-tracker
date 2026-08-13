@@ -2,6 +2,7 @@ package app.kcal.feature.history
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.kcal.core.ui.macroProgress
 import app.kcal.domain.model.HistoryDay
 import app.kcal.domain.model.HistoryWeek
 import app.kcal.domain.model.MealEntry
@@ -13,10 +14,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
@@ -31,6 +34,9 @@ class HistoryViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(HistoryUiState())
     val uiState: StateFlow<HistoryUiState> = _uiState.asStateFlow()
+
+    private val eventChannel = Channel<HistoryEvent>(Channel.BUFFERED)
+    val events = eventChannel.receiveAsFlow()
 
     private val expandedDay = MutableStateFlow<LocalDate?>(null)
     private var loadJob: Job? = null
@@ -48,6 +54,7 @@ class HistoryViewModel @Inject constructor(
         expandedDay.value = localDate.takeUnless { it == expandedDay.value }
     }
 
+    /** A failed delete keeps the loaded history on screen and reports itself once. */
     fun onDeleteMeal(mealId: Long) {
         viewModelScope.launch {
             try {
@@ -55,7 +62,7 @@ class HistoryViewModel @Inject constructor(
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (storageFailure: Exception) {
-                _uiState.value = _uiState.value.copy(isLoading = false, hasError = true)
+                eventChannel.send(HistoryEvent.DeleteFailed)
             }
         }
     }
@@ -98,10 +105,7 @@ class HistoryViewModel @Inject constructor(
     private fun HistoryDay.toUiState(expanded: LocalDate?): HistoryDayUiState = HistoryDayUiState(
         localDate = localDate,
         consumed = consumed,
-        target = target,
-        kcalFraction = target?.kcal?.takeIf { it > 0 }?.let { kcal ->
-            (consumed.kcal.toFloat() / kcal).coerceIn(0f, 1f)
-        },
+        progress = target?.let { macroProgress(consumed, it) },
         isExpanded = localDate == expanded,
         meals = meals.map(::toMealUiState).toPersistentList(),
     )
