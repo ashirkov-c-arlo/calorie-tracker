@@ -17,6 +17,8 @@ import app.kcal.feature.entry.EntryScreen
 import app.kcal.feature.entry.EntryUiState
 import app.kcal.feature.entry.ManualEntryScreen
 import app.kcal.feature.entry.manualEntryEmptyPreviewState
+import app.kcal.feature.history.HistoryScreen
+import app.kcal.feature.history.historyContentPreviewState
 import app.kcal.feature.profile.filledProfileFormUiState
 import app.kcal.feature.settings.SettingsScreen
 import app.kcal.feature.today.TodayScreen
@@ -52,7 +54,7 @@ class KcalNavHostTest {
         composeRule.onNodeWithText(string(R.string.placeholder_trends)).assertIsDisplayed()
 
         composeRule.onNodeWithText(string(R.string.nav_history)).performClick()
-        composeRule.onNodeWithText(string(R.string.placeholder_history)).assertIsDisplayed()
+        composeRule.onNodeWithText(string(R.string.history_day_no_target)).assertIsDisplayed()
 
         composeRule.onNodeWithText(string(R.string.nav_today)).performClick()
         composeRule.onNodeWithText(string(R.string.today_progress_title)).assertIsDisplayed()
@@ -132,6 +134,15 @@ class KcalNavHostTest {
                             onRemoveItem = {},
                             onDismissConfirmation = {},
                             onConfirm = {},
+                        )
+                    },
+                    historyContent = { onEditMealClick ->
+                        HistoryScreen(
+                            uiState = historyContentPreviewState,
+                            onDayClick = {},
+                            onEditMealClick = onEditMealClick,
+                            onDeleteMealClick = {},
+                            onRetry = {},
                         )
                     },
                     settingsContent = { onBackClick ->

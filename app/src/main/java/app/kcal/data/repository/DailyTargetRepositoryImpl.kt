@@ -15,6 +15,9 @@ class DailyTargetRepositoryImpl @Inject constructor(private val dao: DailyTarget
     override fun observe(localDate: LocalDate): Flow<DailyTargetSnapshot?> =
         dao.observeByDate(localDate.epochDayInt()).map { it?.toDomain() }
 
+    override fun observeAll(): Flow<List<DailyTargetSnapshot>> =
+        dao.observeAll().map { snapshots -> snapshots.map(DailyTargetSnapshotEntity::toDomain) }
+
     override suspend fun find(localDate: LocalDate): DailyTargetSnapshot? =
         dao.findByDate(localDate.epochDayInt())?.toDomain()
 

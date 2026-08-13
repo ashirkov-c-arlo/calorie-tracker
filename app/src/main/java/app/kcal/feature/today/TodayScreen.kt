@@ -169,7 +169,7 @@ private fun DailyProgressCard(
                 Text(
                     text =
                     stringResource(
-                        R.string.today_consumed_without_target,
+                        R.string.consumed_summary,
                         DecimalText.formatLong(consumed.kcal, locale),
                         DecimalText.format(consumed.proteinG, locale),
                         DecimalText.format(consumed.fatG, locale),

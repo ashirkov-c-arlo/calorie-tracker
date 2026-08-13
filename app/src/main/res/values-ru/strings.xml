@@ -22,13 +22,12 @@
     <string name="loading">Загрузка…</string>
 
     <string name="placeholder_trends">Здесь появятся точки веса и скользящее среднее за 7 дней.</string>
-    <string name="placeholder_history">Здесь появятся дни и недели ISO с сохранёнными для них целями.</string>
 
     <string name="today_progress_title">Прогресс за день</string>
     <string name="today_empty">Приёмов пищи пока нет. Добавьте первый.</string>
     <string name="today_load_failed">Не удалось загрузить дневник за сегодня из локального хранилища.</string>
     <string name="today_target_unavailable">Цель на день недоступна. Приёмы пищи всё равно можно записывать.</string>
-    <string name="today_consumed_without_target">%1$s ккал · Белки %2$s г · Жиры %3$s г · Углеводы %4$s г</string>
+    <string name="consumed_summary">%1$s ккал · Белки %2$s г · Жиры %3$s г · Углеводы %4$s г</string>
     <string name="nutrient_calories">Калории</string>
     <string name="nutrient_protein">Белки</string>
     <string name="nutrient_fat">Жиры</string>
@@ -37,6 +36,11 @@
     <string name="nutrient_progress_grams">%1$s / %2$s г</string>
     <string name="meal_kcal">%1$s ккал</string>
     <string name="meal_macros">Белки %1$s г · Жиры %2$s г · Углеводы %3$s г</string>
+
+    <string name="history_empty">Записей пока нет. Дни и недели ISO появятся здесь после первого сохранённого приёма пищи.</string>
+    <string name="history_load_failed">Не удалось загрузить историю из локального хранилища.</string>
+    <string name="history_week_header">Неделя %1$d · %2$s – %3$s</string>
+    <string name="history_day_no_target">Для этого дня цель не сохранялась.</string>
 
     <string name="manual_entry_item_number">Продукт %1$d</string>
     <string name="field_food_name">Название продукта</string>

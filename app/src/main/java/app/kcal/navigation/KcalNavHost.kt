@@ -30,7 +30,7 @@ import app.kcal.core.designsystem.KcalTheme
 import app.kcal.domain.model.ThemeMode
 import app.kcal.feature.entry.EntryRoute
 import app.kcal.feature.entry.ManualEntryRoute
-import app.kcal.feature.history.HistoryScreen
+import app.kcal.feature.history.HistoryRoute
 import app.kcal.feature.settings.SettingsRoute
 import app.kcal.feature.today.TodayRoute
 import app.kcal.feature.today.TodayScreen
@@ -78,6 +78,9 @@ fun KcalNavHost(
     settingsContent: @Composable (onBackClick: () -> Unit) -> Unit = { onBackClick ->
         SettingsRoute(onBackClick = onBackClick)
     },
+    historyContent: @Composable (onEditMealClick: (Long) -> Unit) -> Unit = { onEditMealClick ->
+        HistoryRoute(onEditMealClick = onEditMealClick)
+    },
 ) {
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = currentBackStackEntry?.destination
@@ -112,7 +115,9 @@ fun KcalNavHost(
                 )
             }
             composable<TrendsDestination> { TrendsScreen() }
-            composable<HistoryDestination> { HistoryScreen() }
+            composable<HistoryDestination> {
+                historyContent { mealId -> navController.navigate(EditMealDestination(mealId)) }
+            }
             composable<SettingsDestination> {
                 settingsContent { navController.popBackStack() }
             }

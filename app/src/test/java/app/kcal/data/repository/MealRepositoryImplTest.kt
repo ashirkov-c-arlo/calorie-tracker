@@ -61,6 +61,19 @@ class MealRepositoryImplTest {
     }
 
     @Test
+    fun `observeAll returns every logged day newest first with its items`() = runTest {
+        val earlier = LocalDate.of(2026, 3, 14)
+        val later = LocalDate.of(2026, 3, 16)
+        repository.save(mealEntry(id = 0, localDate = earlier, items = listOf(foodItem(name = "Older"))), null)
+        repository.save(mealEntry(id = 0, localDate = later, items = listOf(foodItem(name = "Newer"))), null)
+
+        val stored = repository.observeAll().first()
+
+        assertEquals(listOf(later, earlier), stored.map { it.localDate })
+        assertEquals(listOf("Newer", "Older"), stored.map { it.items.single().name })
+    }
+
+    @Test
     fun `delete removes the meal and its relational items`() = runTest {
         val date = LocalDate.of(2026, 3, 15)
         val id = repository.save(mealEntry(id = 0, localDate = date), targetIfMissing = null)

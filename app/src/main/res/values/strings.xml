@@ -24,13 +24,12 @@
     <string name="loading">Loading…</string>
 
     <string name="placeholder_trends">Your weight points and the 7-day moving average will appear here.</string>
-    <string name="placeholder_history">Days and ISO weeks with their saved targets will appear here.</string>
 
     <string name="today_progress_title">Daily progress</string>
     <string name="today_empty">No meals yet. Use Add to log one.</string>
     <string name="today_load_failed">Could not load today’s journal from local storage.</string>
     <string name="today_target_unavailable">No daily target is available. You can still log meals.</string>
-    <string name="today_consumed_without_target">%1$s kcal · Protein %2$s g · Fat %3$s g · Carbs %4$s g</string>
+    <string name="consumed_summary">%1$s kcal · Protein %2$s g · Fat %3$s g · Carbs %4$s g</string>
     <string name="nutrient_calories">Calories</string>
     <string name="nutrient_protein">Protein</string>
     <string name="nutrient_fat">Fat</string>
@@ -39,6 +38,11 @@
     <string name="nutrient_progress_grams">%1$s / %2$s g</string>
     <string name="meal_kcal">%1$s kcal</string>
     <string name="meal_macros">Protein %1$s g · Fat %2$s g · Carbs %3$s g</string>
+
+    <string name="history_empty">Nothing logged yet. Days and ISO weeks appear here once you save a meal.</string>
+    <string name="history_load_failed">Could not load your history from local storage.</string>
+    <string name="history_week_header">Week %1$d · %2$s – %3$s</string>
+    <string name="history_day_no_target">No daily target was saved for this day.</string>
 
     <string name="manual_entry_item_number">Item %1$d</string>
     <string name="field_food_name">Food name</string>

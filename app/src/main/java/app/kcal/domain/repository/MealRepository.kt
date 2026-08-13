@@ -9,6 +9,9 @@ interface MealRepository {
 
     fun observeByDate(localDate: LocalDate): Flow<List<MealEntry>>
 
+    /** The whole journal, newest day first, for day and ISO-week history. */
+    fun observeAll(): Flow<List<MealEntry>>
+
     suspend fun findById(id: Long): MealEntry?
 
     /** Saves the meal and inserts [targetIfMissing] in the same atomic storage operation. */

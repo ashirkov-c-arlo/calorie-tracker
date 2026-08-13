@@ -9,6 +9,8 @@ interface DailyTargetRepository {
 
     fun observe(localDate: LocalDate): Flow<DailyTargetSnapshot?>
 
+    fun observeAll(): Flow<List<DailyTargetSnapshot>>
+
     suspend fun find(localDate: LocalDate): DailyTargetSnapshot?
 
     suspend fun upsert(snapshot: DailyTargetSnapshot)

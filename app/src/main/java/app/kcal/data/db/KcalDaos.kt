@@ -34,6 +34,9 @@ interface DailyTargetSnapshotDao {
     @Query("SELECT * FROM daily_target_snapshots WHERE local_date_epoch_day = :epochDay")
     suspend fun findByDate(epochDay: Int): DailyTargetSnapshotEntity?
 
+    @Query("SELECT * FROM daily_target_snapshots")
+    fun observeAll(): Flow<List<DailyTargetSnapshotEntity>>
+
     @Query("DELETE FROM daily_target_snapshots WHERE local_date_epoch_day = :epochDay")
     suspend fun deleteByDate(epochDay: Int)
 }
@@ -59,6 +62,11 @@ interface MealEntryDao {
             "ORDER BY at_epoch_millis, id",
     )
     fun observeByDate(epochDay: Int): Flow<List<MealEntryWithItems>>
+
+    // ponytail: History observes the whole journal; add a date-range query if it ever gets slow.
+    @Transaction
+    @Query("SELECT * FROM meal_entries ORDER BY local_date_epoch_day DESC, at_epoch_millis, id")
+    fun observeAll(): Flow<List<MealEntryWithItems>>
 
     @Transaction
     @Query("SELECT * FROM meal_entries WHERE id = :id")
