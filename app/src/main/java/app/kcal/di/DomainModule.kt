@@ -2,11 +2,15 @@ package app.kcal.di
 
 import app.kcal.core.common.TimeProvider
 import app.kcal.domain.repository.DailyTargetRepository
+import app.kcal.domain.repository.MealRepository
 import app.kcal.domain.repository.ProfileRepository
+import app.kcal.domain.usecase.AggregateMealMacros
 import app.kcal.domain.usecase.ApplyTodayTarget
 import app.kcal.domain.usecase.CalculateDailyTargets
-import app.kcal.domain.usecase.ReconcileTodayTarget
+import app.kcal.domain.usecase.SaveManualMeal
 import app.kcal.domain.usecase.SaveProfile
+import app.kcal.domain.usecase.SuggestLossPaces
+import app.kcal.domain.usecase.ValidateMeal
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -24,19 +28,39 @@ object DomainModule {
     fun provideCalculateDailyTargets(): CalculateDailyTargets = CalculateDailyTargets()
 
     @Provides
+    fun provideSuggestLossPaces(): SuggestLossPaces = SuggestLossPaces()
+
+    @Provides
     fun provideApplyTodayTarget(
         dailyTargetRepository: DailyTargetRepository,
         calculateDailyTargets: CalculateDailyTargets,
-        timeProvider: TimeProvider,
-    ): ApplyTodayTarget = ApplyTodayTarget(dailyTargetRepository, calculateDailyTargets, timeProvider)
+    ): ApplyTodayTarget = ApplyTodayTarget(dailyTargetRepository, calculateDailyTargets)
 
     @Provides
-    fun provideSaveProfile(profileRepository: ProfileRepository, applyTodayTarget: ApplyTodayTarget): SaveProfile =
-        SaveProfile(profileRepository, applyTodayTarget)
+    fun provideValidateMeal(): ValidateMeal = ValidateMeal()
 
     @Provides
-    fun provideReconcileTodayTarget(
+    fun provideAggregateMealMacros(): AggregateMealMacros = AggregateMealMacros()
+
+    @Provides
+    fun provideSaveProfile(
         profileRepository: ProfileRepository,
-        applyTodayTarget: ApplyTodayTarget,
-    ): ReconcileTodayTarget = ReconcileTodayTarget(profileRepository, applyTodayTarget)
+        calculateDailyTargets: CalculateDailyTargets,
+        timeProvider: TimeProvider,
+    ): SaveProfile = SaveProfile(profileRepository, calculateDailyTargets, timeProvider)
+
+    @Provides
+    fun provideSaveManualMeal(
+        mealRepository: MealRepository,
+        profileRepository: ProfileRepository,
+        calculateDailyTargets: CalculateDailyTargets,
+        validateMeal: ValidateMeal,
+        timeProvider: TimeProvider,
+    ): SaveManualMeal = SaveManualMeal(
+        mealRepository = mealRepository,
+        profileRepository = profileRepository,
+        calculateDailyTargets = calculateDailyTargets,
+        validateMeal = validateMeal,
+        timeProvider = timeProvider,
+    )
 }

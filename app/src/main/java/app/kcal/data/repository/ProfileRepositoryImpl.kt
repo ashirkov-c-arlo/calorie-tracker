@@ -1,6 +1,5 @@
 package app.kcal.data.repository
 
-import app.kcal.core.common.TimeProvider
 import app.kcal.data.db.WeightEntryDao
 import app.kcal.data.db.WeightEntryEntity
 import app.kcal.data.prefs.ProfilePreferencesDataSource
@@ -13,12 +12,12 @@ import app.kcal.domain.repository.ProfileRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import java.time.LocalDate
 import javax.inject.Inject
 
 class ProfileRepositoryImpl @Inject constructor(
     private val preferencesDataSource: ProfilePreferencesDataSource,
     private val weightEntryDao: WeightEntryDao,
-    private val timeProvider: TimeProvider,
 ) : ProfileRepository {
 
     override val preferences: Flow<UserPreferences> =
@@ -33,16 +32,20 @@ class ProfileRepositoryImpl @Inject constructor(
 
     override val themeMode: Flow<ThemeMode> = preferencesDataSource.preferences.map { it.themeMode }
 
-    override suspend fun saveProfile(profile: StoredProfile) {
-        preferencesDataSource.saveProfile(profile)
+    /**
+     * The weight entry is written before the calculator inputs, and the inputs go into one
+     * atomic preferences edit. An interruption can therefore only lose the edit itself: what
+     * remains is the previous, consistent set of settings together with a freshly logged
+     * weight, never new settings paired with a stale weight. Current weight is never
+     * duplicated into preferences.
+     */
+    override suspend fun saveProfile(profile: StoredProfile, localDate: LocalDate) {
         profile.currentWeightKg?.let { weightKg ->
             weightEntryDao.upsert(
-                WeightEntryEntity(
-                    localDateEpochDay = timeProvider.today().toEpochDay().toInt(),
-                    kg = weightKg,
-                ),
+                WeightEntryEntity(localDateEpochDay = localDate.toEpochDay().toInt(), kg = weightKg),
             )
         }
+        preferencesDataSource.saveProfile(profile)
     }
 
     override suspend fun setUnitSystem(unitSystem: UnitSystem) {

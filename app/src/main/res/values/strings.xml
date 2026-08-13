@@ -11,15 +11,40 @@
     <string name="history_title">History</string>
     <string name="settings_title">Settings</string>
     <string name="profile_setup_title">Your profile</string>
+    <string name="manual_entry_add_title">Add meal</string>
+    <string name="manual_entry_edit_title">Edit meal</string>
 
     <string name="settings_open_content_description">Open settings</string>
+    <string name="today_add_meal_content_description">Add meal</string>
+    <string name="meal_edit_content_description">Edit meal</string>
+    <string name="meal_delete_content_description">Delete meal</string>
     <string name="navigate_back_content_description">Back</string>
 
     <string name="loading">Loading…</string>
 
-    <string name="placeholder_today">Daily calorie and macro progress with your meals will appear here.</string>
     <string name="placeholder_trends">Your weight points and the 7-day moving average will appear here.</string>
     <string name="placeholder_history">Days and ISO weeks with their saved targets will appear here.</string>
+
+    <string name="today_progress_title">Daily progress</string>
+    <string name="today_empty">No meals yet. Use Add to log one.</string>
+    <string name="today_load_failed">Could not load today’s journal from local storage.</string>
+    <string name="today_target_unavailable">No daily target is available. You can still log meals.</string>
+    <string name="today_consumed_without_target">%1$s kcal · Protein %2$s g · Fat %3$s g · Carbs %4$s g</string>
+    <string name="nutrient_calories">Calories</string>
+    <string name="nutrient_protein">Protein</string>
+    <string name="nutrient_fat">Fat</string>
+    <string name="nutrient_carbs">Carbs</string>
+    <string name="nutrient_progress_kcal">%1$s / %2$s kcal</string>
+    <string name="nutrient_progress_grams">%1$s / %2$s g</string>
+    <string name="meal_kcal">%1$s kcal</string>
+    <string name="meal_macros">Protein %1$s g · Fat %2$s g · Carbs %3$s g</string>
+
+    <string name="manual_entry_item_number">Item %1$d</string>
+    <string name="field_food_name">Food name</string>
+    <string name="field_food_grams_optional">Weight (optional)</string>
+    <string name="manual_entry_review_warning">This value is outside the usual review range. Check it before saving.</string>
+    <string name="manual_entry_load_failed">Could not load this meal from local storage.</string>
+    <string name="manual_entry_save_failed">Could not save the meal. Check the values and try again.</string>
 
     <string name="profile_intro">Enter your data once. Every field is required, and you can change it later in Settings.</string>
     <string name="profile_disclaimer">This is an estimate for generally healthy adults aged 18 and over. It is not suitable for pregnancy, breastfeeding, eating disorders, therapeutic diets, or conditions such as kidney or liver disease.</string>
@@ -30,7 +55,15 @@
     <string name="field_height_inches">Height, inches</string>
     <string name="field_age">Age, years</string>
     <string name="field_target_weight">Target weight</string>
-    <string name="field_loss_rate">Weight loss rate</string>
+    <string name="field_loss_pace">Weight loss pace</string>
+    <string name="loss_pace_slow">Slow</string>
+    <string name="loss_pace_moderate">Moderate</string>
+    <string name="loss_pace_fast">Fast</string>
+    <string name="loss_pace_option">%1$s · %2$s %3$s</string>
+    <string name="loss_pace_unavailable">Enter your current weight to see the available paces.</string>
+    <string name="target_weight_unset">Not selected</string>
+    <string name="target_weight_needs_height">Enter your height to choose a target weight.</string>
+    <string name="target_weight_range_hint">Body mass index %1$s–%2$s at your height means %3$s–%4$s %5$s.</string>
 
     <string name="field_formula_variant">Formula variant</string>
     <string name="field_formula_variant_hint">Selects the validated Mifflin–St Jeor constants. It is not a gender identity setting.</string>
@@ -50,13 +83,22 @@
     <string name="unit_in">in</string>
     <string name="unit_kg_per_week">kg / week</string>
     <string name="unit_lb_per_week">lb / week</string>
+    <string name="unit_g">g</string>
+    <string name="unit_kcal">kcal</string>
 
     <string name="error_required">Required</string>
     <string name="error_invalid_number">Enter a number</string>
-    <string name="error_save_failed">Saving the target failed. Your profile is stored and the target is recalculated on the next start.</string>
+    <string name="error_save_failed">Could not save the changes. Try again.</string>
     <string name="error_out_of_range">Value out of range</string>
+    <string name="error_non_negative">Enter zero or a positive number</string>
 
     <string name="action_save">Save</string>
+    <string name="action_retry">Try again</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_add_item">Add item</string>
+    <string name="action_remove_item">Remove item</string>
+
+    <string name="startup_failed">Local storage is unavailable, so the daily target could not be prepared.</string>
 
     <string name="target_title">Estimated daily target</string>
     <string name="target_kcal">%1$s kcal</string>
@@ -66,7 +108,7 @@
 
     <string name="warning_rate_limited">The pace is limited to at most 1 kg per week and 1 percent of your body weight.</string>
     <string name="warning_deficit_capped">The deficit is capped at 20 percent of your daily energy use and at 750 kcal.</string>
-    <string name="warning_intake_floor">The target is kept at the minimum intake for the selected formula variant.</string>
+    <string name="warning_intake_floor">The minimum intake for the selected formula variant limited the deficit.</string>
     <string name="warning_target_reached">Your current weight already reached the target, so the goal is maintenance.</string>
 
     <string name="unavailable_missing_inputs">Fill in every field to see an estimate.</string>

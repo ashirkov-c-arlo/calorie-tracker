@@ -1,19 +1,31 @@
 package app.kcal.domain.usecase
 
+import app.kcal.core.common.TimeProvider
 import app.kcal.domain.model.StoredProfile
 import app.kcal.domain.repository.ProfileRepository
 
 /**
- * Persists the calculator inputs and keeps today's target consistent with them.
+ * Persists the calculator inputs and reports the resulting estimate.
  *
- * The write spans DataStore and Room, so it cannot be one transaction. The target is
- * calculated first, the user's input is stored next, and today's snapshot is written or
- * removed last. If the last step fails or the process dies in between, the profile is still
- * saved and [ReconcileTodayTarget] repairs the missing snapshot on the next start.
+ * Values that would break the persisted-data invariants are rejected before anything is
+ * written. The weight entry is written before the atomic preferences edit, both for the same
+ * local date, so an interruption can only lose the edit itself and never pair new settings
+ * with a stale weight.
+ *
+ * Today's target snapshot is deliberately **not** written here: the app shell owns that
+ * write and performs it for every stored profile, which keeps a single writer and makes a
+ * late save unable to overwrite a newer target.
  */
-class SaveProfile(private val profileRepository: ProfileRepository, private val applyTodayTarget: ApplyTodayTarget) {
+class SaveProfile(
+    private val profileRepository: ProfileRepository,
+    private val calculateDailyTargets: CalculateDailyTargets,
+    private val timeProvider: TimeProvider,
+) {
     suspend operator fun invoke(profile: StoredProfile): DailyTargetResult {
-        profileRepository.saveProfile(profile)
-        return applyTodayTarget(profile)
+        if (!profile.hasValidValues) {
+            return DailyTargetResult.Unavailable(DailyTargetUnavailableReason.INVALID_MEASUREMENTS)
+        }
+        profileRepository.saveProfile(profile, timeProvider.today())
+        return calculateDailyTargets.forStoredProfile(profile)
     }
 }

@@ -37,7 +37,7 @@ class MainActivity : AppCompatActivity() {
             LaunchedEffect(appLanguage) { appLanguage?.let(::applyAppLanguage) }
 
             KcalTheme(themeMode = uiState.themeMode) {
-                KcalApp(uiState = uiState)
+                KcalApp(uiState = uiState, onRetryStartup = viewModel::onRetryStartup)
             }
         }
     }

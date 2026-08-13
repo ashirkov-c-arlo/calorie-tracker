@@ -268,6 +268,9 @@ next collection instead of pretending cross-store atomicity.
 - Implement required `ProfileSetup` and editable Settings.
 - Use the user-facing label “Formula variant” / localized Russian equivalent.
 - Give formula variant and activity no preselected values.
+- Take target weight from a slider bounded by the reference body mass index interval for the
+  entered height, and the loss rate from three derived paces, as specified in `AGENTS.md`.
+  Neither input coerces a stored value, and the selected pace is saved as the user's intent.
 - Show estimate/medical-scope text and any effective-rate guardrail warning.
 - Apply language, units, and theme changes immediately through their supported APIs.
 

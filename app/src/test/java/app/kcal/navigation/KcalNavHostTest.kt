@@ -13,8 +13,12 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.kcal.R
 import app.kcal.core.designsystem.KcalTheme
 import app.kcal.domain.model.ThemeMode
+import app.kcal.feature.entry.ManualEntryScreen
+import app.kcal.feature.entry.manualEntryEmptyPreviewState
 import app.kcal.feature.profile.filledProfileFormUiState
 import app.kcal.feature.settings.SettingsScreen
+import app.kcal.feature.today.TodayScreen
+import app.kcal.feature.today.todayContentPreviewState
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -33,7 +37,7 @@ class KcalNavHostTest {
     fun `starts on today with the bottom navigation visible`() {
         showNavHost()
 
-        composeRule.onNodeWithText(string(R.string.placeholder_today)).assertIsDisplayed()
+        composeRule.onNodeWithText(string(R.string.today_progress_title)).assertIsDisplayed()
         composeRule.onNodeWithText(string(R.string.nav_trends)).assertIsDisplayed()
         composeRule.onNodeWithText(string(R.string.nav_history)).assertIsDisplayed()
     }
@@ -49,7 +53,7 @@ class KcalNavHostTest {
         composeRule.onNodeWithText(string(R.string.placeholder_history)).assertIsDisplayed()
 
         composeRule.onNodeWithText(string(R.string.nav_today)).performClick()
-        composeRule.onNodeWithText(string(R.string.placeholder_today)).assertIsDisplayed()
+        composeRule.onNodeWithText(string(R.string.today_progress_title)).assertIsDisplayed()
     }
 
     @Test
@@ -65,14 +69,49 @@ class KcalNavHostTest {
         composeRule.onNodeWithContentDescription(string(R.string.navigate_back_content_description))
             .performClick()
 
-        composeRule.onNodeWithText(string(R.string.placeholder_today)).assertIsDisplayed()
+        composeRule.onNodeWithText(string(R.string.today_progress_title)).assertIsDisplayed()
     }
 
-    /** The settings route resolves a Hilt view model, so the test injects the stateless screen. */
+    @Test
+    fun `add meal opens manual entry without bottom navigation and cancel returns`() {
+        showNavHost()
+
+        composeRule.onNodeWithContentDescription(string(R.string.today_add_meal_content_description))
+            .performClick()
+
+        composeRule.onNodeWithText(string(R.string.manual_entry_add_title)).assertIsDisplayed()
+        composeRule.onAllNodesWithText(string(R.string.nav_trends)).assertCountEquals(0)
+
+        composeRule.onNodeWithContentDescription(string(R.string.action_cancel)).performClick()
+        composeRule.onNodeWithText(string(R.string.today_progress_title)).assertIsDisplayed()
+    }
+
+    /** Stateful Hilt routes are replaced with their stateless screens in this navigation test. */
     private fun showNavHost() {
         composeRule.setContent {
             KcalTheme(themeMode = ThemeMode.WHITE) {
                 KcalNavHost(
+                    todayContent = { onSettingsClick, onAddMealClick, onEditMealClick ->
+                        TodayScreen(
+                            uiState = todayContentPreviewState,
+                            onSettingsClick = onSettingsClick,
+                            onAddMealClick = onAddMealClick,
+                            onEditMealClick = onEditMealClick,
+                            onDeleteMealClick = {},
+                            onRetry = {},
+                        )
+                    },
+                    entryContent = { mealId, onClose ->
+                        ManualEntryScreen(
+                            uiState = manualEntryEmptyPreviewState.copy(mealId = mealId),
+                            onBackClick = onClose,
+                            onItemChange = { _, _, _ -> },
+                            onAddItem = {},
+                            onRemoveItem = {},
+                            onSave = {},
+                            onRetry = {},
+                        )
+                    },
                     settingsContent = { onBackClick ->
                         SettingsScreen(
                             uiState = filledProfileFormUiState,
@@ -85,7 +124,7 @@ class KcalNavHostTest {
                             onFormulaVariantSelect = {},
                             onActivityLevelSelect = {},
                             onTargetWeightChange = {},
-                            onLossRateChange = {},
+                            onLossPaceSelect = {},
                             onUnitSystemSelect = {},
                             onAppLanguageSelect = {},
                             onThemeModeSelect = {},

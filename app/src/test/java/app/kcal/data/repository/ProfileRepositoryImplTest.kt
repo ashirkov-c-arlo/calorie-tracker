@@ -8,7 +8,6 @@ import androidx.datastore.preferences.core.edit
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import app.kcal.core.common.TimeProvider
 import app.kcal.data.db.KcalDatabase
 import app.kcal.data.db.WeightEntryEntity
 import app.kcal.data.prefs.ProfilePreferencesDataSource
@@ -27,10 +26,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
-import java.time.Clock
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -59,11 +55,6 @@ class ProfileRepositoryImplTest {
             ProfileRepositoryImpl(
                 preferencesDataSource = ProfilePreferencesDataSource(dataStore),
                 weightEntryDao = database.weightEntryDao(),
-                timeProvider =
-                TimeProvider(
-                    clock = Clock.fixed(Instant.parse("2026-03-15T09:00:00Z"), ZoneId.of("UTC")),
-                    zoneId = ZoneId.of("UTC"),
-                ),
             )
     }
 
@@ -87,7 +78,7 @@ class ProfileRepositoryImplTest {
 
     @Test
     fun `saving the profile stores canonical values and upserts today's weight`() = runTest {
-        repository.saveProfile(completeProfile())
+        repository.saveProfile(completeProfile(), today)
 
         val preferences = repository.preferences.first()
         assertTrue(preferences.profile.isComplete)
@@ -100,14 +91,14 @@ class ProfileRepositoryImplTest {
 
     @Test
     fun `current weight comes from the latest weight entry and is not duplicated`() = runTest {
-        repository.saveProfile(completeProfile())
+        repository.saveProfile(completeProfile(), today)
         database.weightEntryDao().upsert(
             WeightEntryEntity(localDateEpochDay = today.plusDays(1).toEpochDay().toInt(), kg = 81.2),
         )
 
         assertEquals(81.2, repository.preferences.first().profile.currentWeightKg)
 
-        repository.saveProfile(completeProfile(currentWeightKg = 80.0))
+        repository.saveProfile(completeProfile(currentWeightKg = 80.0), today)
 
         // The upsert replaces today's entry only, so the newer entry still wins.
         assertEquals(81.2, repository.preferences.first().profile.currentWeightKg)

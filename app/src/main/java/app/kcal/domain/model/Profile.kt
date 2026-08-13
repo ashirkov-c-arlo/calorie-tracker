@@ -36,6 +36,16 @@ data class StoredProfile(
     )
 
     val isComplete: Boolean get() = toInputs() != null
+
+    /**
+     * Whether the present values may be persisted at all. Stored numbers must be finite,
+     * body measurements and age positive, and the requested rate non-negative. Missing
+     * values are allowed here: completeness is a separate question.
+     */
+    val hasValidValues: Boolean
+        get() = listOfNotNull(currentWeightKg, heightCm, targetWeightKg).all { it.isFinite() && it > 0.0 } &&
+            requestedLossRateKgPerWeek?.let { it.isFinite() && it >= 0.0 } != false &&
+            ageYears?.let { it > 0 } != false
 }
 
 /** Everything the settings screen and the app shell read from preferences. */

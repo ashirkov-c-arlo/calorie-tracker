@@ -8,22 +8,39 @@ import app.kcal.domain.model.UserPreferences
 import app.kcal.domain.repository.ProfileRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import java.io.IOException
+import java.time.LocalDate
 
 /** Hand-written fake so tests never touch DataStore or Room. */
-class FakeProfileRepository(initial: UserPreferences = UserPreferences()) : ProfileRepository {
+class FakeProfileRepository(
+    initial: UserPreferences = UserPreferences(),
+    /** Simulates storage that cannot be read; flipping it back lets a retry succeed. */
+    var readFails: Boolean = false,
+    /** Simulates a failing profile write. */
+    var writeFails: Boolean = false,
+) : ProfileRepository {
 
     val state = MutableStateFlow(initial)
-    var savedProfiles = mutableListOf<StoredProfile>()
+    val savedProfiles = mutableListOf<StoredProfile>()
+    val savedDates = mutableListOf<LocalDate>()
 
-    override val preferences: Flow<UserPreferences> = state
+    override val preferences: Flow<UserPreferences> =
+        flow {
+            if (readFails) throw IOException("preferences unavailable")
+            emitAll(state)
+        }
 
     override val isProfileComplete: Flow<Boolean> = state.map { it.profile.isComplete }
 
     override val themeMode: Flow<ThemeMode> = state.map { it.themeMode }
 
-    override suspend fun saveProfile(profile: StoredProfile) {
+    override suspend fun saveProfile(profile: StoredProfile, localDate: LocalDate) {
+        if (writeFails) throw IOException("profile storage unavailable")
         savedProfiles += profile
+        savedDates += localDate
         state.value = state.value.copy(profile = profile)
     }
 

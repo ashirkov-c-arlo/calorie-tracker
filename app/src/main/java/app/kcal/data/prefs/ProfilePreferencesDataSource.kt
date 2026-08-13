@@ -44,7 +44,11 @@ class ProfilePreferencesDataSource @Inject constructor(private val dataStore: Da
             )
         }
 
-    /** Writes every calculator input that is present. Current weight is ignored here. */
+    /**
+     * Writes every calculator input that is present in one atomic edit, so the stored
+     * settings can never be half applied. Current weight is deliberately absent: it lives
+     * only as the latest weight entry in Room.
+     */
     suspend fun saveProfile(profile: StoredProfile) {
         dataStore.edit { preferences ->
             profile.heightCm?.let { preferences[Keys.HEIGHT_CM] = it }

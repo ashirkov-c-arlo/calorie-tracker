@@ -12,8 +12,10 @@ import app.kcal.data.db.KcalDatabase
 import app.kcal.data.db.MealEntryDao
 import app.kcal.data.db.WeightEntryDao
 import app.kcal.data.repository.DailyTargetRepositoryImpl
+import app.kcal.data.repository.MealRepositoryImpl
 import app.kcal.data.repository.ProfileRepositoryImpl
 import app.kcal.domain.repository.DailyTargetRepository
+import app.kcal.domain.repository.MealRepository
 import app.kcal.domain.repository.ProfileRepository
 import dagger.Binds
 import dagger.Module
@@ -73,4 +75,7 @@ interface RepositoryModule {
 
     @Binds
     fun bindDailyTargetRepository(impl: DailyTargetRepositoryImpl): DailyTargetRepository
+
+    @Binds
+    fun bindMealRepository(impl: MealRepositoryImpl): MealRepository
 }
