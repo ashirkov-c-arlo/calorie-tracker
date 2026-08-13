@@ -1,7 +1,13 @@
 # Kcal Android Implementation Plan
 
 Status: **final client implementation plan; stages 1-5 and 7 implemented, stage 6 and stages 8-9
-not started**. Stage 7 (History) needs no weight data, so it was delivered before stage 6.
+not started**.
+
+> **Open approval — stage order.** Stage 7 (History) was implemented before stage 6 (weight
+> Trends) on explicit request. History depends only on stored meals and daily target
+> snapshots, so it needed nothing from stage 6, but `AGENTS.md` §15 requires stages to run in
+> order. Merging `feat/history` before stage 6 needs human approval; until then stage 6 remains
+> the next unfinished stage and Trends is still a placeholder screen.
 
 Normative inputs:
 
