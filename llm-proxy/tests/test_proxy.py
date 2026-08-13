@@ -29,6 +29,7 @@ from kcal_proxy.__main__ import build_server, resolve_language
 from kcal_proxy.config import Config
 from kcal_proxy.parse import (
     ProxyError,
+    language_ok,
     map_client_error,
     normalize_log_food,
     run_parse,
@@ -745,6 +746,10 @@ class EvalParityTest(unittest.TestCase):
         self.assertEqual(prompt.TOOL_CONFIG, run_eval.TOOL_CONFIG)
         self.assertEqual(prompt.CANARY, run_eval.CANARY)
         self.assertEqual(prompt.build_system("ru"), run_eval.build_system("ru"))
+
+    def test_eval_scores_with_the_production_validator(self):
+        self.assertIs(run_eval.normalize_log_food, normalize_log_food)
+        self.assertIs(run_eval.language_ok, language_ok)
 
 
 if __name__ == "__main__":

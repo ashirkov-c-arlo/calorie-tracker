@@ -86,22 +86,36 @@ See `.env.example`. The caps that actually bound the AWS bill:
 | `ENABLED` | true | kill switch: `false` answers `503` and the app falls back to manual logging |
 
 Only requests that reach the model are counted; validation failures, auth failures and
-kill-switch refusals are free. A throttle, a 503 or a deadline hit before any model output
-refunds the unit. A clarification round trip costs two units, as designed.
+kill-switch refusals are free. A throttle, a 503 or a deadline hit *before* any model output
+refunds the unit; once the model has answered, the unit stays spent even if the repair turn
+fails or the client disappears before the response is delivered. A clarification round trip
+costs two units, as designed.
+
+Every response closes the connection (one request per socket): an early refusal — auth, route,
+kill switch, rate limit — never reads the request body, and reusing the socket would parse that
+body as the next request. A stalled client is dropped after `SOCKET_TIMEOUT_S`, and no more
+than `MAX_CONNECTIONS` connections are served at once (both in `kcal_proxy/__main__.py`).
 
 ## Pipeline
 
 `kcal_proxy/parse.py`, in order: validate the request (L0) → Converse with
 `toolChoice = any` (retry only throttling and transient 5xx, at most 2 extra attempts, one
-optional fallback model) → extract exactly one `toolUse` → normalize numbers → hard-validate
-→ at most **one** repair turn → sanitize output (markdown, URLs, contacts, length, prompt-leak
-canary, aggregate output-language check) → contract JSON.
+optional fallback model; an attempt that could outlive `REQUEST_DEADLINE_S` never starts) →
+extract exactly one `toolUse` → normalize numbers → hard-validate → at most **one** repair
+turn → sanitize output (markdown, URLs, contacts, length, prompt-leak canary, dominant-script
+output-language check) → contract JSON.
+
+A payload that does not match the tool schema — a missing `grams`/`note` key, a non-string
+name, a fractional `kcal`, more than 12 items — spends the one repair turn instead of being
+quietly normalized or truncated.
 
 Soft findings (`kcal > 5000`, 4/9/4 energy mismatch, low confidence) never fail the request:
 they appear as `flags` in the log line, and the app shows an editable "needs review" draft.
 
 The system prompt lives in `kcal_proxy/PROMPT.md` and is the same text `run_eval.py`
-evaluates — a test fails if the two drift. Review prompt changes like a formula change.
+evaluates — a test fails if the two drift. `run_eval.py` also imports the proxy's own
+validator and language check, so an eval gate can never be laxer than production. Review
+prompt changes like a formula change.
 
 ## Logging and privacy
 
@@ -121,7 +135,7 @@ disabled in your account — enabling it would export prompts and images to S3/C
 ## Tests
 
 ```bash
-python3 -m unittest discover -s tests -t .        # 55 tests, no network
+python3 -m unittest discover -s tests -t .        # 63 tests, no network
 python3 scripts/smoke.py --base-url https://… --api-key "$KEY" [--photo plate.jpg]
 python3 run_eval.py --csv eval-text-cases.csv     # model selection, needs AWS creds
 ```
