@@ -9,6 +9,7 @@ import app.kcal.domain.usecase.ApplyTodayTarget
 import app.kcal.domain.usecase.BuildHistory
 import app.kcal.domain.usecase.BuildWeightTrend
 import app.kcal.domain.usecase.CalculateDailyTargets
+import app.kcal.domain.usecase.LogWeight
 import app.kcal.domain.usecase.SaveMeal
 import app.kcal.domain.usecase.SaveProfile
 import app.kcal.domain.usecase.SuggestLossPaces
@@ -49,6 +50,9 @@ object DomainModule {
 
     @Provides
     fun provideBuildWeightTrend(): BuildWeightTrend = BuildWeightTrend()
+
+    @Provides
+    fun provideLogWeight(profileRepository: ProfileRepository): LogWeight = LogWeight(profileRepository)
 
     @Provides
     fun provideSaveProfile(

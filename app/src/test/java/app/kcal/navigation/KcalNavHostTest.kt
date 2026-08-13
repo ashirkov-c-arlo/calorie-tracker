@@ -152,6 +152,8 @@ class KcalNavHostTest {
                             uiState = trendsManyPointsPreviewState,
                             onWeightChange = {},
                             onSave = {},
+                            onEntryClick = {},
+                            onLogTodayClick = {},
                             onRetry = {},
                         )
                     },

@@ -10,8 +10,10 @@ Status: **final client implementation plan; stages 1-7 implemented, stages 8-9 n
 >
 > **Open approval — no Vico.** Stage 6 renders the raw points and the 7-day average with a
 > Compose `Canvas` (`feature/trends/components/WeightChart.kt`) instead of adding the Vico
-> dependency planned in §15. The chart is a line plus dots, which `AGENTS.md` §4 already allows
-> to be hand-drawn. Say so and Vico can replace `WeightChart` behind the same state.
+> dependency. This deviates from `AGENTS.md` §4, which assigns Vico to the weight chart and
+> leaves hand-drawn `Canvas` work to simple sparklines, and from §15 of this plan. It is not
+> approved yet: either grant the deviation or approve the dependency, and Vico then replaces
+> `WeightChart` behind the unchanged `TrendsUiState`.
 
 Normative inputs:
 
@@ -431,9 +433,12 @@ endpoint, quota policy, and key exist. This repository does not implement that b
 
 - Add Vico only now. **Deviation:** not added; the chart is a Compose `Canvas` (see the
   open approval above).
-- Add weight entry/edit UI with one upsert per local date. Implemented as the morning-weight
-  field on Trends, which upserts the current local date; editing an arbitrary past date is not
-  offered.
+- Add weight entry/edit UI with one upsert per local date. Trends logs the current local date
+  and lists every logged day, and selecting a day edits that entry, so a wrong historical
+  weight can be corrected. Deleting a weight entry is not offered.
+- Keep the untouched input field synchronized with the stored value for the edited date, so a
+  change made elsewhere or a day rollover cannot be written back.
+- Guard the persisted-weight invariant in `domain/usecase/LogWeight`, not in the screen.
 - Render raw weight points.
 - Implement the agreed calendar-window trend:
 
@@ -451,6 +456,9 @@ Do not interpolate missing dates and do not substitute the last seven measuremen
 - Calendar gaps.
 - Month/year transitions.
 - One entry per day and same-day replacement.
+- Past-entry correction, day rollover, and a weight changed elsewhere.
+- Serialized saves.
+- Rejected non-finite/non-positive weights.
 - Unit conversion.
 - Trend values and chart ViewModel states.
 - White/Black visual regression.

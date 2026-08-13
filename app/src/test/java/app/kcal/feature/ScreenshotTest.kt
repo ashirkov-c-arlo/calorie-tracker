@@ -48,6 +48,7 @@ import app.kcal.feature.today.todayErrorPreviewState
 import app.kcal.feature.today.todayNoTargetPreviewState
 import app.kcal.feature.trends.TrendsScreen
 import app.kcal.feature.trends.TrendsUiState
+import app.kcal.feature.trends.trendsEditingPastPreviewState
 import app.kcal.feature.trends.trendsEmptyPreviewState
 import app.kcal.feature.trends.trendsErrorPreviewState
 import app.kcal.feature.trends.trendsImperialPreviewState
@@ -232,16 +233,23 @@ class ScreenshotTest {
         capture(ThemeMode.WHITE) { EntryFixture(entryConfirmationRussianPreviewState) }
 
     @Test
+    @Config(qualifiers = "+h2400dp")
     fun trendsWhite() = capture(ThemeMode.WHITE) { TrendsFixture(trendsManyPointsPreviewState) }
 
     @Test
+    @Config(qualifiers = "+h2400dp")
     fun trendsBlack() = capture(ThemeMode.BLACK) { TrendsFixture(trendsManyPointsPreviewState) }
 
     @Test
-    @Config(qualifiers = "+ru")
+    @Config(qualifiers = "+ru-h2400dp")
     fun trendsWhiteRussian() = capture(ThemeMode.WHITE) { TrendsFixture(trendsManyPointsPreviewState) }
 
     @Test
+    @Config(qualifiers = "+h2400dp")
+    fun trendsEditingPastWhite() = capture(ThemeMode.WHITE) { TrendsFixture(trendsEditingPastPreviewState) }
+
+    @Test
+    @Config(qualifiers = "+h2400dp")
     fun trendsImperialWhite() = capture(ThemeMode.WHITE) { TrendsFixture(trendsImperialPreviewState) }
 
     @Test
@@ -257,15 +265,19 @@ class ScreenshotTest {
     fun trendsEmptyBlack() = capture(ThemeMode.BLACK) { TrendsFixture(trendsEmptyPreviewState) }
 
     @Test
+    @Config(qualifiers = "+h1200dp")
     fun trendsSinglePointWhite() = capture(ThemeMode.WHITE) { TrendsFixture(trendsSinglePointPreviewState) }
 
     @Test
+    @Config(qualifiers = "+h1200dp")
     fun trendsSinglePointBlack() = capture(ThemeMode.BLACK) { TrendsFixture(trendsSinglePointPreviewState) }
 
     @Test
+    @Config(qualifiers = "+h1200dp")
     fun trendsTwoPointsWhite() = capture(ThemeMode.WHITE) { TrendsFixture(trendsTwoPointsPreviewState) }
 
     @Test
+    @Config(qualifiers = "+h1200dp")
     fun trendsTwoPointsBlack() = capture(ThemeMode.BLACK) { TrendsFixture(trendsTwoPointsPreviewState) }
 
     @Test
@@ -453,7 +465,14 @@ class ScreenshotTest {
 
     @Composable
     private fun TrendsFixture(uiState: TrendsUiState) {
-        TrendsScreen(uiState = uiState, onWeightChange = {}, onSave = {}, onRetry = {})
+        TrendsScreen(
+            uiState = uiState,
+            onWeightChange = {},
+            onSave = {},
+            onEntryClick = {},
+            onLogTodayClick = {},
+            onRetry = {},
+        )
     }
 
     @Composable

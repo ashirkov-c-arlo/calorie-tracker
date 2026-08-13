@@ -10,6 +10,7 @@ import app.kcal.domain.model.WeightEntry
 import app.kcal.domain.repository.ProfileRepository
 import app.kcal.domain.usecase.BodyMetrics
 import app.kcal.domain.usecase.BuildWeightTrend
+import app.kcal.domain.usecase.LogWeight
 import app.kcal.domain.usecase.UnitConversions
 import app.kcal.feature.profile.ProfileFieldError
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,12 +22,18 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import javax.inject.Inject
 
 /**
  * Weight logging and the calendar-window trend. The typed value is converted to canonical
  * kilograms before validation and storage, so limits never depend on the displayed units, and
- * one save upserts the entry of the current local date.
+ * one save upserts the entry of the edited date.
+ *
+ * The editor follows the current local date until the user picks a logged day, which is how a
+ * wrong historical entry is corrected. An untouched field always mirrors what is stored for the
+ * edited date, so it cannot go stale and write back an outdated weight after a change made
+ * elsewhere or after midnight.
  *
  * Today's target snapshot is not written here: the app shell owns target replacement and
  * reacts to the new latest weight, so a stale calculation cannot overwrite a newer target.
@@ -34,6 +41,7 @@ import javax.inject.Inject
 @HiltViewModel
 class TrendsViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
+    private val logWeight: LogWeight,
     private val buildWeightTrend: BuildWeightTrend,
     private val timeProvider: TimeProvider,
     private val localeProvider: AppLocaleProvider,
@@ -42,80 +50,130 @@ class TrendsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(TrendsUiState())
     val uiState: StateFlow<TrendsUiState> = _uiState.asStateFlow()
 
+    private val currentDate = MutableStateFlow(timeProvider.today())
+
+    /** Null while the editor follows the current local date. */
+    private val selectedDate = MutableStateFlow<LocalDate?>(null)
+
+    /** True once the user typed, which is the only state in which the field is not refilled. */
+    private var isDraftEdited = false
+
     private var loadJob: Job? = null
 
     init {
         load()
     }
 
+    /** Picks up a day change after navigation or app resume. */
+    fun onVisible() {
+        currentDate.value = timeProvider.today()
+    }
+
     fun onRetry() {
         load()
     }
 
+    /** Selects a logged day for correction; the field is refilled from its stored value. */
+    fun onEntryClick(localDate: LocalDate) {
+        isDraftEdited = false
+        selectedDate.value = localDate
+    }
+
+    /** Returns the editor to the current local date. */
+    fun onLogTodayClick() {
+        isDraftEdited = false
+        selectedDate.value = null
+    }
+
     fun onWeightChange(text: String) {
+        isDraftEdited = true
         _uiState.value = _uiState.value.copy(weightInput = text, inputError = null, saveFailed = false)
     }
 
+    /** One save at a time, so an older write can never land after a newer one. */
     fun onSave() {
         val state = _uiState.value
+        if (state.isSaving) return
+        val localDate = state.editedDate ?: return
         val kilograms = state.weightInput.toKilograms(state.unitSystem)
         if (kilograms == null) {
             _uiState.value = state.copy(inputError = inputError(state), saveFailed = false)
             return
         }
-        _uiState.value = state.copy(inputError = null, saveFailed = false)
+        _uiState.value = state.copy(inputError = null, saveFailed = false, isSaving = true)
+        val savedInput = state.weightInput
         viewModelScope.launch {
             try {
-                profileRepository.logWeight(WeightEntry(localDate = timeProvider.today(), kg = kilograms))
+                val stored = logWeight(WeightEntry(localDate = localDate, kg = kilograms))
+                if (stored) {
+                    // The field tracks storage again, unless the user kept typing meanwhile.
+                    if (_uiState.value.weightInput == savedInput) isDraftEdited = false
+                } else {
+                    _uiState.value = _uiState.value.copy(inputError = ProfileFieldError.OUT_OF_RANGE)
+                }
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (storageFailure: Exception) {
                 // Surfaced as a retryable message; nothing about the value is logged.
                 _uiState.value = _uiState.value.copy(saveFailed = true)
+            } finally {
+                _uiState.value = _uiState.value.copy(isSaving = false)
             }
         }
     }
 
-    /**
-     * The field is filled from the entry of the current local date, and refilled whenever the
-     * unit system changes, so a value typed in one unit can never be stored as another.
-     */
     private fun load() {
         loadJob?.cancel()
         _uiState.value = TrendsUiState()
+        isDraftEdited = false
         loadJob =
             viewModelScope.launch {
                 try {
-                    combine(profileRepository.weights, profileRepository.preferences) { weights, preferences ->
-                        weights to preferences.unitSystem
-                    }.collect { (weights, unitSystem) ->
-                        val state = _uiState.value
-                        val refill = state.isLoading || state.unitSystem != unitSystem
-                        val today = weights.firstOrNull { it.localDate == timeProvider.today() }
-                        _uiState.value =
-                            state.copy(
-                                isLoading = false,
-                                unitSystem = unitSystem,
-                                weightInput = if (refill) today?.kg.formatInput(unitSystem) else state.weightInput,
-                                inputError = state.inputError.takeUnless { refill },
-                                points =
-                                buildWeightTrend(weights)
-                                    .map { point ->
-                                        WeightPointUiState(
-                                            localDate = point.localDate,
-                                            value = point.kg.toDisplayed(unitSystem),
-                                            trendValue = point.trendKg.toDisplayed(unitSystem),
-                                        )
-                                    }
-                                    .toPersistentList(),
-                            )
-                    }
+                    combine(
+                        profileRepository.weights,
+                        profileRepository.preferences,
+                        currentDate,
+                        selectedDate,
+                    ) { weights, preferences, today, selected ->
+                        Inputs(weights, preferences.unitSystem, selected ?: today, selected == null)
+                    }.collect { inputs -> _uiState.value = reduce(inputs) }
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (storageFailure: Exception) {
                     _uiState.value = _uiState.value.copy(isLoading = false, hasError = true)
                 }
             }
+    }
+
+    private fun reduce(inputs: Inputs): TrendsUiState {
+        val state = _uiState.value
+        // A typed value is kept, unless the editor moved to another date or unit system: then it
+        // would mean something else than the user typed.
+        val refill =
+            !isDraftEdited ||
+                state.isLoading ||
+                state.unitSystem != inputs.unitSystem ||
+                state.editedDate != inputs.editedDate
+        if (refill) isDraftEdited = false
+        val storedKg = inputs.weights.firstOrNull { it.localDate == inputs.editedDate }?.kg
+        return state.copy(
+            isLoading = false,
+            unitSystem = inputs.unitSystem,
+            editedDate = inputs.editedDate,
+            isEditingToday = inputs.isEditingToday,
+            weightInput = if (refill) storedKg.formatInput(inputs.unitSystem) else state.weightInput,
+            inputError = state.inputError.takeUnless { refill },
+            points =
+            buildWeightTrend(inputs.weights)
+                .map { point ->
+                    WeightPointUiState(
+                        localDate = point.localDate,
+                        value = point.kg.toDisplayed(inputs.unitSystem),
+                        trendValue = point.trendKg.toDisplayed(inputs.unitSystem),
+                    )
+                }
+                .toPersistentList(),
+        )
     }
 
     private fun inputError(state: TrendsUiState): ProfileFieldError = when {
@@ -136,4 +194,11 @@ class TrendsViewModel @Inject constructor(
 
     private fun Double?.formatInput(unitSystem: UnitSystem): String =
         this?.let { DecimalText.format(it.toDisplayed(unitSystem), localeProvider.current()) }.orEmpty()
+
+    private data class Inputs(
+        val weights: List<WeightEntry>,
+        val unitSystem: UnitSystem,
+        val editedDate: LocalDate,
+        val isEditingToday: Boolean,
+    )
 }

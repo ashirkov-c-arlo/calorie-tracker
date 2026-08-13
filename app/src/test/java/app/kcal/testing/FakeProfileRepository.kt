@@ -31,6 +31,9 @@ class FakeProfileRepository(
     /** One entry per local date, like the Room primary key. */
     val weightsByDate = MutableStateFlow(sortedMapOf<LocalDate, Double>())
 
+    /** Every accepted write, in completion order, so serialization can be asserted. */
+    val loggedWeights = mutableListOf<WeightEntry>()
+
     override val weights: Flow<List<WeightEntry>> =
         flow {
             if (readFails) throw IOException("weights unavailable")
@@ -58,6 +61,7 @@ class FakeProfileRepository(
     /** Mirrors the implementation: current weight is the latest entry, never a preference. */
     override suspend fun logWeight(entry: WeightEntry) {
         if (writeFails) throw IOException("weight storage unavailable")
+        loggedWeights += entry
         weightsByDate.value = sortedMapOf<LocalDate, Double>().apply {
             putAll(weightsByDate.value)
             put(entry.localDate, entry.kg)

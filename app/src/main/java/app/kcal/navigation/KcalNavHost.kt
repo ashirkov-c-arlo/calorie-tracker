@@ -181,6 +181,8 @@ private fun PreviewNavHost() {
                 uiState = trendsManyPointsPreviewState,
                 onWeightChange = {},
                 onSave = {},
+                onEntryClick = {},
+                onLogTodayClick = {},
                 onRetry = {},
             )
         },

@@ -15,26 +15,31 @@ data class WeightPointUiState(val localDate: LocalDate, val value: Double, val t
 
 /**
  * Trends state. [points] are oldest first, so the newest entry is the last one. Values are in
- * the displayed unit system while storage stays in kilograms.
+ * the displayed unit system while storage stays in kilograms. [editedDate] is the date the
+ * input field writes to: the current local date until the user selects a logged day.
  */
 data class TrendsUiState(
     val isLoading: Boolean = true,
     val hasError: Boolean = false,
     val unitSystem: UnitSystem = UnitSystem.METRIC,
+    val editedDate: LocalDate? = null,
+    val isEditingToday: Boolean = true,
     val weightInput: String = "",
     val inputError: ProfileFieldError? = null,
+    val isSaving: Boolean = false,
     val saveFailed: Boolean = false,
     val points: PersistentList<WeightPointUiState> = persistentListOf(),
 ) {
     val latest: WeightPointUiState? get() = points.lastOrNull()
 }
 
-internal val trendsEmptyPreviewState = TrendsUiState(isLoading = false)
+internal val trendsEmptyPreviewState = TrendsUiState(isLoading = false, editedDate = LocalDate.of(2026, 3, 17))
 
 internal val trendsErrorPreviewState = TrendsUiState(isLoading = false, hasError = true)
 
 internal val trendsInvalidInputPreviewState = TrendsUiState(
     isLoading = false,
+    editedDate = LocalDate.of(2026, 3, 17),
     weightInput = "8oo",
     inputError = ProfileFieldError.INVALID_NUMBER,
 )
@@ -65,6 +70,16 @@ internal val trendsImperialPreviewState = trendsManyPointsPreviewState.let { sta
     )
 }
 
+/** Correcting a wrong entry from an earlier day. */
+internal val trendsEditingPastPreviewState = trendsManyPointsPreviewState.let { state ->
+    val corrected = state.points[state.points.size - 4]
+    state.copy(
+        editedDate = corrected.localDate,
+        isEditingToday = false,
+        weightInput = corrected.value.toString(),
+    )
+}
+
 private fun WeightPointUiState.inPounds(): WeightPointUiState = copy(
     value = UnitConversions.kilogramsToPounds(value),
     trendValue = UnitConversions.kilogramsToPounds(trendValue),
@@ -82,6 +97,7 @@ private fun previewState(kilograms: List<Double>, skipEvery: Int = 0): TrendsUiS
         }
     return TrendsUiState(
         isLoading = false,
+        editedDate = points.last().localDate,
         weightInput = points.last().value.toString(),
         points = points.toPersistentList(),
     )
