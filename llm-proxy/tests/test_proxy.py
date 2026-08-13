@@ -29,6 +29,7 @@ from kcal_proxy.__main__ import build_server, resolve_language
 from kcal_proxy.config import Config
 from kcal_proxy.parse import (
     Meta,
+    _soft_flags,
     ProxyError,
     language_ok,
     map_client_error,
@@ -191,6 +192,18 @@ class NormalizationTest(unittest.TestCase):
         self.assertEqual(len(items), 1)
         self.assertEqual((items[0]["kcal"], items[0]["grams"]), (397, 200.0))
         self.assertIsNone(note)
+
+    def test_merging_duplicates_does_not_depend_on_their_order(self):
+        known = dict(ITEM, grams=100, confidence=0.9)
+        unknown = dict(ITEM, name="chicken BREAST", grams=None, confidence=0.1)
+        for pair in ((known, unknown), (unknown, known)):
+            with self.subTest(first=pair[0]["grams"]):
+                items, _, problems = normalize_log_food({"items": list(pair), "note": None})
+                self.assertEqual(problems, [])
+                self.assertEqual(len(items), 1)
+                self.assertIsNone(items[0]["grams"])  # one part's mass is unknown
+                self.assertEqual(items[0]["confidence"], 0.1)  # the weakest one survives
+                self.assertIn("low_confidence", _soft_flags(items))
 
     def test_hard_invalid_inputs(self):
         item_without = lambda key: {k: v for k, v in ITEM.items() if k != key}  # noqa: E731
@@ -776,13 +789,21 @@ class HttpTest(unittest.TestCase):
             self.assertEqual(self.post("/v1/nutrition/parse", {"text": "chicken"})[0], 200)
 
     def test_the_request_deadline_also_covers_the_body_read(self):
-        # The upload and the inference share one budget instead of adding up.
-        conf = cfg(port=0, db_path=os.path.join(self.tmp, "q7.sqlite3"), request_deadline_s=0.0)
+        # A slow upload spends most of the shared budget, leaving less than one Bedrock
+        # attempt (connect + read = 0.5 s), so no inference may start.
+        conf = cfg(port=0, db_path=os.path.join(self.tmp, "q7.sqlite3"), request_deadline_s=0.9,
+                   connect_timeout_s=0.2, read_timeout_s=0.3)
         bedrock = FakeBedrock(tool_use("log_food", {"items": [ITEM], "note": None}))
-        with self.temporary_server(conf, bedrock):
-            self.assertEqual(self.post("/v1/nutrition/parse", {"text": "chicken"})[:2],
-                             (504, {"type": "error", "code": "TIMEOUT"}))
-        self.assertEqual(bedrock.calls, [])
+        body = json.dumps({"text": "chicken"}).encode()
+        with self.temporary_server(conf, bedrock) as server:
+            with socket.create_connection(server.server_address, timeout=5) as sock:
+                sock.sendall(b"POST /v1/nutrition/parse HTTP/1.1\r\nHost: kcal\r\n"
+                             b"X-Api-Key: test-key\r\nContent-Type: application/json\r\n"
+                             b"Content-Length: %d\r\n\r\n" % len(body))
+                time.sleep(0.6)  # the body arrives late, but still inside the deadline
+                sock.sendall(body)
+                self.assertIn(b"504", sock.recv(4096).splitlines()[0])
+        self.assertEqual(bedrock.calls, [])  # a fresh deadline here would have called out
 
     def test_kill_switch(self):
         conf = cfg(port=0, db_path=os.path.join(self.tmp, "q3.sqlite3"), enabled=False)
@@ -849,11 +870,31 @@ class EvalParityTest(unittest.TestCase):
         self.assertEqual(prompt.CANARY, run_eval.CANARY)
         self.assertEqual(prompt.build_system("ru"), run_eval.build_system("ru"))
 
-    def test_eval_scores_with_the_production_validator(self):
-        self.assertIs(run_eval.normalize_log_food, normalize_log_food)
-        self.assertIs(run_eval.normalize_ask_clarification, normalize_ask_clarification)
-        self.assertIs(run_eval.language_ok, language_ok)
-        self.assertIs(run_eval.output_pieces, output_pieces)
+    def test_eval_rejects_what_production_rejects(self):
+        def case(**overrides):
+            fields = dict(
+                id="X", group="g", lang="en", text="pasta", clarification_question="",
+                clarification_answer="", expect_clarification=True, expect_non_food=False,
+                injection=False, gt_kcal=None, gt_protein_g=None, gt_fat_g=None,
+                gt_carbs_g=None, gt_items=None, tolerance_pct=None, notes="",
+            )
+            return run_eval.Case(**{**fields, **overrides})
+
+        answered = case(clarification_question="How much pasta?", clarification_answer="250 g")
+        payloads = {
+            "numeric question": (case(), {"question": 123}, False),
+            "over-long question": (case(), {"question": "How much? " + "x" * 200}, False),
+            "repeat question": (answered, {"question": "Can you clarify again?"}, False),
+            "valid question": (case(), {"question": "How much pasta was it?"}, True),
+            "fractional kcal": (case(), None, False),
+        }
+        for label, (subject, payload, expected) in payloads.items():
+            with self.subTest(label):
+                tool, payload = ("ask_clarification", payload) if payload else (
+                    "log_food", {"items": [dict(ITEM, kcal=296.7)], "note": None})
+                result = run_eval.run_one(FakeBedrock(tool_use(tool, payload)), "m",
+                                          {"invoke_id": "m"}, subject, 1)
+                self.assertEqual((result.ok, result.schema_valid), (expected, expected), result.error)
 
 
 if __name__ == "__main__":

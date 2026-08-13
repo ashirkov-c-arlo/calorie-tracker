@@ -161,7 +161,7 @@ disabled in your account — enabling it would export prompts and images to S3/C
 ## Tests
 
 ```bash
-python3 -m unittest discover -s tests -t .        # 71 tests, no network
+python3 -m unittest discover -s tests -t .        # 72 tests, no network
 python3 scripts/smoke.py --base-url https://… --api-key "$KEY" [--photo plate.jpg]
 python3 run_eval.py --csv eval-text-cases.csv     # model selection, needs AWS creds
 ```

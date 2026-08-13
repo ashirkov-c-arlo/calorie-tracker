@@ -289,8 +289,11 @@ def normalize_log_food(payload: Any) -> tuple[list[dict], str | None, list[str]]
             target["kcal"] += item["kcal"]
             for macro in ("protein_g", "fat_g", "carbs_g"):
                 target[macro] = round(target[macro] + item[macro], 1)
-            if target["grams"] is not None and item["grams"] is not None:
-                target["grams"] = round(target["grams"] + item["grams"], 1)
+            # A merged mass is only meaningful when every part is known, and the merged
+            # confidence is the weakest one, otherwise the order of the items decides.
+            known = target["grams"] is not None and item["grams"] is not None
+            target["grams"] = round(target["grams"] + item["grams"], 1) if known else None
+            target["confidence"] = min(target["confidence"], item["confidence"])
         else:
             merged[key] = dict(item)
 
