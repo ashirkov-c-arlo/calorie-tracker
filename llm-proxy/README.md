@@ -55,8 +55,13 @@ The Android app expects HTTPS. Terminate TLS in the reverse proxy and point
 ```caddy
 kcal.example.net {
     reverse_proxy 127.0.0.1:8080
+    request_body { max_size 2MB }
 }
 ```
+
+Also cap the upload time there (`timeouts.read_body` in Caddy, `client_body_timeout` in
+nginx): the proxy enforces its own `BODY_DEADLINE_S`, but a slow upload is cheapest to kill
+in front of it.
 
 Set `TRUST_FORWARDED_FOR=true` only when such a proxy is in front, otherwise a client can
 spoof `X-Forwarded-For` and evade `PER_IP_DAILY_CAP`.
@@ -93,8 +98,10 @@ costs two units, as designed.
 
 Every response closes the connection (one request per socket): an early refusal — auth, route,
 kill switch, rate limit — never reads the request body, and reusing the socket would parse that
-body as the next request. A stalled client is dropped after `SOCKET_TIMEOUT_S`, and no more
-than `MAX_CONNECTIONS` connections are served at once (both in `kcal_proxy/__main__.py`).
+body as the next request. One idle read is bounded by `SOCKET_TIMEOUT_S` and the whole body
+by the absolute `BODY_DEADLINE_S` (a drip-feeder resets an idle timeout forever), while
+`MAX_CONNECTIONS` is enforced in `verify_request`, so a flood is refused before a thread
+exists (all three in `kcal_proxy/__main__.py`).
 
 ## Pipeline
 
@@ -102,12 +109,19 @@ than `MAX_CONNECTIONS` connections are served at once (both in `kcal_proxy/__mai
 `toolChoice = any` (retry only throttling and transient 5xx, at most 2 extra attempts, one
 optional fallback model; an attempt that could outlive `REQUEST_DEADLINE_S` never starts) →
 extract exactly one `toolUse` → normalize numbers → hard-validate → at most **one** repair
-turn → sanitize output (markdown, URLs, contacts, length, prompt-leak canary, dominant-script
+turn → sanitize output (markdown, URLs, contacts, length, prompt-leak canary, per-string
 output-language check) → contract JSON.
 
-A payload that does not match the tool schema — a missing `grams`/`note` key, a non-string
-name, a fractional `kcal`, more than 12 items — spends the one repair turn instead of being
-quietly normalized or truncated.
+A payload that does not match the tool schema — a missing `grams`/`note` key, a `grams` value
+that is neither a number nor `null`, a non-string or over-long `question`, a non-string name,
+a fractional `kcal`, more than 12 items — spends the one repair turn instead of being quietly
+normalized or truncated. A repair only starts if a whole attempt still fits in the deadline.
+After a clarification has been answered, a second `ask_clarification` is invalid too: one
+question per entry, so the app can never be looped.
+
+The language check runs per string: a note and a question must be written in the requested
+language on their own, while item names are judged together so a Latin brand among Russian
+dishes stays valid.
 
 Soft findings (`kcal > 5000`, 4/9/4 energy mismatch, low confidence) never fail the request:
 they appear as `flags` in the log line, and the app shows an editable "needs review" draft.
@@ -135,7 +149,7 @@ disabled in your account — enabling it would export prompts and images to S3/C
 ## Tests
 
 ```bash
-python3 -m unittest discover -s tests -t .        # 63 tests, no network
+python3 -m unittest discover -s tests -t .        # 70 tests, no network
 python3 scripts/smoke.py --base-url https://… --api-key "$KEY" [--photo plate.jpg]
 python3 run_eval.py --csv eval-text-cases.csv     # model selection, needs AWS creds
 ```

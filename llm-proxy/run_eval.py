@@ -50,7 +50,7 @@ from typing import Any, Optional
 
 # The proxy's own validator and language check: a second implementation drifts, and a
 # gate that is laxer than production would pass a model production then rejects.
-from kcal_proxy.parse import language_ok, normalize_log_food
+from kcal_proxy.parse import language_ok, normalize_log_food, output_pieces
 from kcal_proxy.prompt import escape_untrusted
 
 try:
@@ -459,15 +459,11 @@ def extract_tool_uses(resp: dict) -> list[dict]:
     return [b["toolUse"] for b in content if isinstance(b, dict) and "toolUse" in b]
 
 
-def texts_of(tool_name: str, payload: dict, items: list[dict]) -> str:
-    parts: list[str] = []
+def texts_of(tool_name: str, payload: dict, items: list[dict]) -> list[str]:
+    """The response's human-readable pieces, grouped exactly like the proxy groups them."""
     if tool_name == "log_food":
-        parts += [str(i.get("name") or "") for i in items]
-        if payload.get("note"):
-            parts.append(str(payload["note"]))
-    else:
-        parts.append(str(payload.get("question") or ""))
-    return "\n".join(parts)
+        return output_pieces(items, str(payload.get("note") or ""), "")
+    return output_pieces([], "", str(payload.get("question") or ""))
 
 
 ADVICE_MARKERS = (
@@ -478,13 +474,14 @@ ADVICE_MARKERS = (
 
 
 def score(case: Case, tool_name: str, payload: dict, items: list[dict], res: Result) -> None:
-    blob = texts_of(tool_name, payload, items)
+    pieces = texts_of(tool_name, payload, items)
+    blob = "\n".join(pieces)
     res.leak = any(p.lower() in blob.lower() for p in LEAK_PHRASES)
     res.markdown_or_url = bool(MARKDOWN_RE.search(blob) or URL_RE.search(blob))
     res.advice_flag = any(m in blob.lower() for m in ADVICE_MARKERS)
 
-    # Language compliance, aggregated over all human-readable strings (proxy rule).
-    res.language_ok = language_ok(blob, case.lang)
+    # Language compliance, judged per piece by the proxy's own rule.
+    res.language_ok = language_ok(pieces, case.lang)
 
     if tool_name == "ask_clarification":
         res.clarification_correct = case.expect_clarification
@@ -655,6 +652,14 @@ def aggregate(results: list[Result], cases: dict[str, Case]) -> dict[str, Any]:
     non_food = [r for r in results if cases[r.case_id].expect_non_food]
     lang_checked = [r for r in calls_ok if r.language_ok is not None]
 
+    # Routing rates: only a valid answer counts as correct routing, and a failed case is
+    # a miss rather than an omission from the denominator.
+    def routed_pct(subset: list[Result]) -> float:
+        return pct(sum(1 for r in subset if r.ok and r.tool_name == "ask_clarification"), len(subset))
+
+    language_pct = pct(sum(1 for r in lang_checked if r.language_ok), len(lang_checked))
+    non_food_pct = routed_pct(non_food)
+
     abs_devs = [r.kcal_abs_dev for r in scorable]  # type: ignore[misc]
     pct_devs = [r.kcal_pct_dev for r in scorable if r.kcal_pct_dev is not None]
     signed = [r.kcal_signed_dev for r in scorable]  # type: ignore[misc]
@@ -701,19 +706,15 @@ def aggregate(results: list[Result], cases: dict[str, Case]) -> dict[str, Any]:
             sum(1 for r in scorable if r.energy_consistent is not None),
         ),
 
-        "clarification_recall_pct": pct(
-            sum(1 for r in clar_expected if r.tool_name == "ask_clarification"), len(clar_expected)
-        ),
-        "non_food_routed_pct": pct(
-            sum(1 for r in non_food if r.tool_name == "ask_clarification"), len(non_food)
-        ),
+        "clarification_recall_pct": routed_pct(clar_expected),
+        "non_food_routed_pct": non_food_pct,
         "false_clarification_pct": pct(
             sum(1 for r in calls_ok
                 if r.tool_name == "ask_clarification" and not cases[r.case_id].expect_clarification),
             sum(1 for r in calls_ok if not cases[r.case_id].expect_clarification),
         ),
 
-        "language_ok_pct": pct(sum(1 for r in lang_checked if r.language_ok), len(lang_checked)),
+        "language_ok_pct": language_pct,
         "prompt_leaks": sum(1 for r in results if r.leak),
         "markdown_or_url": sum(1 for r in results if r.markdown_or_url),
         "advice_flags": sum(1 for r in results if r.advice_flag),
@@ -734,11 +735,10 @@ def aggregate(results: list[Result], cases: dict[str, Case]) -> dict[str, Any]:
             "valid_tool_call_ge_98": pct(len(calls_ok), total) >= 98.0,
             "single_tool_block_100": bool(answered) and all(r.tool_block_count == 1 for r in answered),
             "tool_choice_any_supported": not any(r.tool_choice_downgraded for r in results),
-            "language_100": pct(sum(1 for r in lang_checked if r.language_ok), len(lang_checked)) == 100.0,
+            "language_100": language_pct == 100.0,
             "no_max_tokens": all(r.stop_reason != "max_tokens" for r in results),
             "no_prompt_leak": not any(r.leak for r in results),
-            "non_food_100": pct(sum(1 for r in non_food if r.tool_name == "ask_clarification"),
-                                len(non_food)) == 100.0,
+            "non_food_100": non_food_pct == 100.0,
             "latency_p95_le_8s": int(p95(lat)) <= 8000,
         },
         "by_group": group_mae(),

@@ -28,6 +28,7 @@ from kcal_proxy import __main__ as server_module
 from kcal_proxy.__main__ import build_server, resolve_language
 from kcal_proxy.config import Config
 from kcal_proxy.parse import (
+    Meta,
     ProxyError,
     language_ok,
     map_client_error,
@@ -90,12 +91,15 @@ ITEM = {"name": "Chicken breast", "grams": 180, "kcal": 297,
 
 
 class FakeBedrock:
-    def __init__(self, *responses) -> None:
+    def __init__(self, *responses, delay: float = 0.0) -> None:
         self.responses = list(responses)
+        self.delay = delay  # lets a test spend part of the request deadline
         self.calls: list[dict] = []
 
     def converse(self, **kwargs):
         self.calls.append(kwargs)
+        if self.delay:
+            time.sleep(self.delay)
         response = self.responses.pop(0) if self.responses else self.calls[-1]
         if isinstance(response, Exception):
             raise response
@@ -197,6 +201,9 @@ class NormalizationTest(unittest.TestCase):
                         {"items": [dict(ITEM, kcal=None)], "note": None},
                         {"items": [dict(ITEM, fat_g=-1)], "note": None},
                         {"items": [dict(ITEM, grams=-5)], "note": None},
+                        {"items": [dict(ITEM, grams="garbage")], "note": None},
+                        {"items": [dict(ITEM, grams=True)], "note": None},
+                        {"items": [dict(ITEM, grams={})], "note": None},
                         {"items": [dict(ITEM, confidence=4)], "note": None},
                         {"items": [dict(ITEM, name="  ")], "note": None}):
             with self.subTest(payload=payload):
@@ -332,21 +339,62 @@ class PipelineTest(unittest.TestCase):
 
     def test_language_check_follows_the_dominant_script(self):
         cases = {
-            # A Latin brand name inside a Russian answer is not a language violation.
-            ("ru", "Кола Coca-Cola", "без сахара"): True,
-            # A Russian note cannot carry English items past the check.
-            ("ru", "Chicken breast", "заметка"): False,
+            # A Latin brand among Russian dishes stays valid.
+            ("ru", ("Куриная грудка", "Pepsi"), None): True,
+            # A long Russian note cannot carry English item names past the check.
+            ("ru", ("Chicken breast",), "Длинное русское примечание о допущениях"): False,
+            # ... nor the other way round.
+            ("en", ("Каша",), "A long English note about the assumptions made here"): False,
             # Another script is not English just because it has no Cyrillic.
-            ("en", "鸡胸肉", None): False,
+            ("en", ("鸡胸肉",), None): False,
         }
-        for (lang, name, note), expected in cases.items():
-            with self.subTest(lang=lang, name=name):
+        for (lang, names, note), expected in cases.items():
+            with self.subTest(lang=lang, names=names):
                 good = tool_use("log_food", {"items": [dict(ITEM, name="Ok" if lang == "en" else "Ок")],
                                              "note": None})
-                bedrock = FakeBedrock(tool_use("log_food", {"items": [dict(ITEM, name=name)],
-                                                           "note": note}), good)
+                bedrock = FakeBedrock(
+                    tool_use("log_food", {"items": [dict(ITEM, name=name) for name in names],
+                                          "note": note}), good)
                 _, meta = run_parse(bedrock, cfg(), self._request(), lang)
                 self.assertEqual(meta.repair_used, not expected)
+
+    def test_a_second_clarification_is_refused(self):
+        again = tool_use("ask_clarification", {"question": "Can you clarify again?"})
+        bedrock = FakeBedrock(again, again)
+        answered = self._request(clarification={"question": "How much?", "answer": "250 g"})
+        with self.assertRaises(ProxyError) as raised:
+            run_parse(bedrock, cfg(), answered, "en")
+        self.assertEqual((raised.exception.status, raised.exception.code), (502, "INVALID_RESPONSE"))
+        self.assertEqual(len(bedrock.calls), 2)  # one repair, then it gives up
+
+    def test_a_first_clarification_is_still_allowed(self):
+        bedrock = FakeBedrock(tool_use("ask_clarification", {"question": "How large was it?"}))
+        body, _ = run_parse(bedrock, cfg(), self._request(), "en")
+        self.assertEqual(body["type"], "clarification")
+
+    def test_an_off_schema_question_is_repaired(self):
+        good = tool_use("ask_clarification", {"question": "How large was the portion?"})
+        for payload in ({"question": 123}, {"question": "x" * 201}):
+            with self.subTest(payload=payload):
+                bedrock = FakeBedrock(tool_use("ask_clarification", payload), good)
+                body, meta = run_parse(bedrock, cfg(), self._request(), "en")
+                self.assertEqual(body["question"], "How large was the portion?")
+                self.assertTrue(meta.repair_used)
+
+    def test_every_tool_block_gets_a_tool_result(self):
+        two_blocks = {
+            "output": {"message": {"role": "assistant", "content": [
+                {"toolUse": {"toolUseId": "tu-1", "name": "log_food",
+                             "input": {"items": [ITEM], "note": None}}},
+                {"toolUse": {"toolUseId": "tu-2", "name": "log_food",
+                             "input": {"items": [ITEM], "note": None}}},
+            ]}},
+            "stopReason": "tool_use", "usage": {"inputTokens": 1, "outputTokens": 1},
+        }
+        bedrock = FakeBedrock(two_blocks, tool_use("log_food", {"items": [ITEM], "note": None}))
+        run_parse(bedrock, cfg(), self._request(), "en")
+        answers = bedrock.calls[1]["messages"][-1]["content"]
+        self.assertEqual([a["toolResult"]["toolUseId"] for a in answers], ["tu-1", "tu-2"])
 
     def test_soft_findings_are_flags_not_failures(self):
         bedrock = FakeBedrock(tool_use("log_food", {"items": [
@@ -404,6 +452,27 @@ class PipelineTest(unittest.TestCase):
             run_parse(bedrock, conf, self._request(), "en")
         self.assertEqual(raised.exception.code, "INVALID_RESPONSE")
         self.assertEqual(len(bedrock.calls), 1)
+
+    def test_repair_needs_room_for_a_whole_attempt_not_just_its_own_floor(self):
+        bedrock = FakeBedrock(tool_use("log_food", {"items": [], "note": None}),
+                              tool_use("log_food", {"items": [ITEM], "note": None}), delay=0.1)
+        # 0.25 s left is above repair_min_remaining_s but below connect + read.
+        conf = cfg(request_deadline_s=0.35, repair_min_remaining_s=0.05,
+                   connect_timeout_s=0.1, read_timeout_s=0.2)
+        with self.assertRaises(ProxyError) as raised:
+            run_parse(bedrock, conf, self._request(), "en")
+        self.assertEqual(raised.exception.code, "INVALID_RESPONSE")
+        self.assertEqual(len(bedrock.calls), 1)  # a repair here could only time out
+
+    def test_a_repair_that_never_answers_is_still_reported_as_used(self):
+        bedrock = FakeBedrock(tool_use("log_food", {"items": [], "note": None}),
+                              client_error("ThrottlingException"),
+                              client_error("ThrottlingException"))
+        meta = Meta()
+        with self.assertRaises(ProxyError) as raised:
+            run_parse(bedrock, cfg(), self._request(), "en", meta)
+        self.assertEqual(raised.exception.code, "THROTTLED")
+        self.assertTrue(meta.repair_used)
 
 
 class ErrorMappingTest(unittest.TestCase):
@@ -556,17 +625,23 @@ class HttpTest(unittest.TestCase):
         self.assertEqual(received.count(b"HTTP/1.1 "), 1)
 
     def test_a_stalled_upload_cannot_hold_a_worker_thread(self):
-        original, server_module.Handler.timeout = server_module.Handler.timeout, 0.5
+        # A drip-feeder resets any idle timeout forever, so the whole body has a deadline.
+        body = json.dumps({"text": "chicken and rice"}).encode()
+        original, server_module.BODY_DEADLINE_S = server_module.BODY_DEADLINE_S, 0.3
         try:
             with socket.create_connection(self.server.server_address, timeout=5) as sock:
                 sock.sendall(b"POST /v1/nutrition/parse HTTP/1.1\r\nHost: kcal\r\n"
-                             b"X-Api-Key: test-key\r\nContent-Length: 40\r\n\r\n{\"text\":")
-                received = b""
-                while chunk := sock.recv(4096):
-                    received += chunk
+                             b"X-Api-Key: test-key\r\nContent-Length: %d\r\n\r\n" % len(body))
+                for index in range(len(body)):
+                    try:
+                        sock.sendall(body[index:index + 1])
+                    except OSError:
+                        break  # the proxy gave up on the upload, as it must
+                    time.sleep(0.05)
+                else:
+                    self.fail("a drip-fed body was accepted past its deadline")
         finally:
-            server_module.Handler.timeout = original
-        self.assertIn(b"400", received.split(b"\r\n")[0])
+            server_module.BODY_DEADLINE_S = original
 
     def test_bad_key_is_auth_before_anything_else(self):
         self.assertEqual(self.post("/v1/nutrition/parse", {"text": "x"}, key="nope")[:2],
@@ -681,6 +756,22 @@ class HttpTest(unittest.TestCase):
                                  (429, {"type": "error", "code": "QUOTA"}))
         finally:
             server_module.Handler._send = original
+
+    def test_a_connection_flood_is_refused_before_a_thread_is_created(self):
+        conf = cfg(port=0, db_path=os.path.join(self.tmp, "q6.sqlite3"))
+        bedrock = FakeBedrock(tool_use("log_food", {"items": [ITEM], "note": None}),
+                              tool_use("log_food", {"items": [ITEM], "note": None}), delay=1.0)
+        with self.temporary_server(conf, bedrock) as server:
+            server.slots = threading.BoundedSemaphore(1)
+            holder = threading.Thread(target=self.post, daemon=True,
+                                      args=("/v1/nutrition/parse", {"text": "chicken"}))
+            holder.start()
+            time.sleep(0.3)  # the only slot is now held by an in-flight request
+            with socket.create_connection(server.server_address, timeout=5) as extra:
+                extra.sendall(b"GET /healthz HTTP/1.1\r\nHost: kcal\r\n\r\n")
+                self.assertEqual(extra.recv(4096), b"")  # closed, never handled
+            holder.join(5)
+            self.assertEqual(self.post("/v1/nutrition/parse", {"text": "chicken"})[0], 200)
 
     def test_kill_switch(self):
         conf = cfg(port=0, db_path=os.path.join(self.tmp, "q3.sqlite3"), enabled=False)

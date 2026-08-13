@@ -31,9 +31,11 @@ PARSE_PATH = "/v1/nutrition/parse"
 INSIGHTS_PATH = "/v1/insights/generate"
 HEALTH_PATH = "/healthz"
 
-# A stalled client must not hold a worker thread (or an unread body) open forever, and a
-# connection flood must not spawn unbounded threads.
+# A stalled client must not hold a worker thread open: SOCKET_TIMEOUT_S bounds one idle
+# read, BODY_DEADLINE_S bounds the whole upload (a drip-feeder resets the idle timeout
+# forever), and MAX_CONNECTIONS bounds how many connections are served at once.
 SOCKET_TIMEOUT_S = 20
+BODY_DEADLINE_S = 10
 MAX_CONNECTIONS = 64
 
 
@@ -68,15 +70,6 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, *args: Any) -> None:  # noqa: D102 - silence the default access log
         pass
-
-    def handle(self) -> None:
-        """One thread per connection, but never more than MAX_CONNECTIONS of them."""
-        if not self.server.slots.acquire(blocking=False):  # type: ignore[attr-defined]
-            return
-        try:
-            super().handle()
-        finally:
-            self.server.slots.release()  # type: ignore[attr-defined]
 
     def _send(self, status: int, body: dict, retry_after: int | None = None) -> None:
         payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -113,14 +106,34 @@ class Handler(BaseHTTPRequestHandler):
             raise ProxyError(400, "INVALID_REQUEST", detail="empty body")
         if length > self.cfg.max_body_bytes:
             raise ProxyError(413, "PAYLOAD_TOO_LARGE", detail="Content-Length too large")
-        try:
-            raw = self.rfile.read(length)
-        except OSError as exc:  # includes the socket timeout of a stalled upload
-            raise ProxyError(400, "INVALID_REQUEST", detail="body read failed") from exc
+        raw = self._read_exactly(length)
         try:
             return json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise ProxyError(400, "INVALID_REQUEST", detail="body is not UTF-8 JSON") from exc
+
+    def _read_exactly(self, length: int) -> bytes:
+        """Read the body under one absolute deadline, not one deadline per idle read."""
+        deadline = time.monotonic() + BODY_DEADLINE_S
+        chunks: list[bytes] = []
+        pending = length
+        try:
+            while pending:
+                budget = deadline - time.monotonic()
+                if budget <= 0:
+                    raise ProxyError(400, "INVALID_REQUEST", detail="body deadline exceeded")
+                try:
+                    self.connection.settimeout(budget)
+                    chunk = self.rfile.read1(pending)
+                except OSError as exc:  # idle timeout, deadline hit mid-read, or a reset
+                    raise ProxyError(400, "INVALID_REQUEST", detail="body read failed") from exc
+                if not chunk:
+                    raise ProxyError(400, "INVALID_REQUEST", detail="body shorter than Content-Length")
+                chunks.append(chunk)
+                pending -= len(chunk)
+        finally:
+            self.connection.settimeout(SOCKET_TIMEOUT_S)  # the response write gets a fresh budget
+        return b"".join(chunks)
 
     def _authorize(self) -> str:
         presented = self.headers.get("X-Api-Key") or ""
@@ -208,9 +221,24 @@ class Handler(BaseHTTPRequestHandler):
             )
 
 
+class ProxyServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer has no connection cap, so the refusal happens in
+    verify_request: returning False closes the socket before a thread is created."""
+
+    daemon_threads = True
+
+    def verify_request(self, request, client_address) -> bool:  # noqa: D102
+        return self.slots.acquire(blocking=False)  # type: ignore[attr-defined]
+
+    def process_request_thread(self, request, client_address) -> None:  # noqa: D102
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.slots.release()  # type: ignore[attr-defined]
+
+
 def build_server(cfg: Config, bedrock=None) -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer((cfg.host, cfg.port), Handler)
-    server.daemon_threads = True
+    server = ProxyServer((cfg.host, cfg.port), Handler)
     server.cfg = cfg  # type: ignore[attr-defined]
     server.slots = threading.BoundedSemaphore(MAX_CONNECTIONS)  # type: ignore[attr-defined]
     server.limiter = RateLimiter(cfg.rate_per_second, cfg.rate_burst)  # type: ignore[attr-defined]

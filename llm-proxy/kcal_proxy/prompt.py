@@ -34,6 +34,10 @@ PHOTO
   fill the plate.
 """
 
+# Schema limits the validator re-checks after the model answers.
+MAX_ITEMS = 12
+MAX_QUESTION_CHARS = 200
+
 TOOL_CONFIG: dict[str, Any] = {
     "tools": [
         {
@@ -49,7 +53,7 @@ TOOL_CONFIG: dict[str, Any] = {
                             "items": {
                                 "type": "array",
                                 "minItems": 1,
-                                "maxItems": 12,
+                                "maxItems": MAX_ITEMS,
                                 "items": {
                                     "type": "object",
                                     "additionalProperties": False,
@@ -84,7 +88,7 @@ TOOL_CONFIG: dict[str, Any] = {
                         "additionalProperties": False,
                         "required": ["question"],
                         "properties": {
-                            "question": {"type": "string", "minLength": 3, "maxLength": 200}
+                            "question": {"type": "string", "minLength": 3, "maxLength": MAX_QUESTION_CHARS}
                         },
                     }
                 },
@@ -93,9 +97,6 @@ TOOL_CONFIG: dict[str, Any] = {
     ],
     "toolChoice": {"any": {}},
 }
-
-MAX_ITEMS = 12
-
 
 def tool_config() -> dict[str, Any]:
     """A private copy: the repair loop must never mutate the shared schema."""
