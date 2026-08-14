@@ -17,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,7 +36,10 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -62,13 +66,15 @@ fun EntryRoute(onClose: () -> Unit, onLogManually: () -> Unit, viewModel: EntryV
             if (event == EntryEvent.Saved) onClose()
         }
     }
+    // Which item the running picker belongs to; saved because the Photo Picker can outlive us.
+    var photoTarget by rememberSaveable { mutableLongStateOf(FIRST_ITEM_KEY) }
     val takePicture =
         rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { captured ->
             viewModel.onCaptureResult(captured)
         }
     val pickPhoto =
         rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { picked ->
-            picked?.let(viewModel::onPhotoPicked)
+            picked?.let { viewModel.onPhotoPicked(photoTarget, it) }
         }
     val context = LocalContext.current
     val canTakePhoto =
@@ -78,6 +84,8 @@ fun EntryRoute(onClose: () -> Unit, onLogManually: () -> Unit, viewModel: EntryV
         onBackClick = onClose,
         onLogManually = onLogManually,
         onTextChange = viewModel::onTextChange,
+        onAddInput = viewModel::onAddInput,
+        onRemoveInput = viewModel::onRemoveInput,
         onParse = viewModel::onParse,
         onClarificationAnswerChange = viewModel::onClarificationAnswerChange,
         onSubmitClarification = viewModel::onSubmitClarification,
@@ -88,16 +96,18 @@ fun EntryRoute(onClose: () -> Unit, onLogManually: () -> Unit, viewModel: EntryV
         onDismissConfirmation = viewModel::onDismissConfirmation,
         onConfirm = viewModel::onConfirm,
         canTakePhoto = canTakePhoto,
-        onPickPhoto = {
+        onPickPhoto = { key ->
+            photoTarget = key
             pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         },
-        onTakePhoto = {
+        onTakePhoto = { key ->
+            photoTarget = key
             try {
-                takePicture.launch(viewModel.onCaptureRequested().uri)
+                takePicture.launch(viewModel.onCaptureRequested(key).uri)
             } catch (noCameraApp: ActivityNotFoundException) {
                 // A camera sensor does not guarantee an app that answers the capture intent, and
                 // package visibility makes resolving it unreliable.
-                viewModel.onCaptureUnavailable()
+                viewModel.onCaptureUnavailable(key)
             }
         },
         onRemovePhoto = viewModel::onRemovePhoto,
@@ -110,11 +120,13 @@ fun EntryScreen(
     uiState: EntryUiState,
     onBackClick: () -> Unit,
     onLogManually: () -> Unit,
-    onTextChange: (String) -> Unit,
+    onTextChange: (Long, String) -> Unit,
+    onAddInput: () -> Unit,
+    onRemoveInput: (Long) -> Unit,
     onParse: () -> Unit,
-    onClarificationAnswerChange: (String) -> Unit,
-    onSubmitClarification: () -> Unit,
-    onRetry: () -> Unit,
+    onClarificationAnswerChange: (Long, String) -> Unit,
+    onSubmitClarification: (Long) -> Unit,
+    onRetry: (Long) -> Unit,
     onItemChange: (Long, MealItemField, String) -> Unit,
     onAddItem: () -> Unit,
     onRemoveItem: (Long) -> Unit,
@@ -122,11 +134,11 @@ fun EntryScreen(
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier,
     canTakePhoto: Boolean = true,
-    onPickPhoto: () -> Unit = {},
-    onTakePhoto: () -> Unit = {},
-    onRemovePhoto: () -> Unit = {},
+    onPickPhoto: (Long) -> Unit = {},
+    onTakePhoto: (Long) -> Unit = {},
+    onRemovePhoto: (Long) -> Unit = {},
 ) {
-    val busy = uiState.isParsing || uiState.isSaving || uiState.isAttachingPhoto
+    val busy = !uiState.canSubmit
     BackHandler(enabled = busy) {}
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -153,56 +165,29 @@ fun EntryScreen(
                 .padding(KcalSpacing.medium),
             verticalArrangement = Arrangement.spacedBy(KcalSpacing.medium),
         ) {
-            OutlinedTextField(
-                value = uiState.text,
-                onValueChange = onTextChange,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !busy,
-                label = { Text(text = stringResource(R.string.entry_text_label)) },
-                supportingText = {
-                    Text(
-                        text =
-                        stringResource(
-                            if (uiState.textMissing) R.string.entry_text_required else R.string.entry_text_hint,
-                        ),
-                    )
-                },
-                isError = uiState.textMissing,
-                minLines = 3,
-            )
-            PhotoSection(
-                uiState = uiState,
-                enabled = !busy,
-                canTakePhoto = canTakePhoto,
-                onPickPhoto = onPickPhoto,
-                onTakePhoto = onTakePhoto,
-                onRemovePhoto = onRemovePhoto,
-            )
-            if (uiState.clarificationQuestion != null) {
-                ClarificationCard(
-                    question = uiState.clarificationQuestion,
-                    answer = uiState.clarificationAnswer,
+            uiState.inputs.forEachIndexed { index, input ->
+                EntryInputCard(
+                    number = index + 1,
+                    input = input,
+                    canRemove = uiState.inputs.size > 1 && !busy,
                     enabled = !busy,
-                    onAnswerChange = onClarificationAnswerChange,
-                    onSubmit = onSubmitClarification,
+                    canTakePhoto = canTakePhoto,
+                    onTextChange = { onTextChange(input.key, it) },
+                    onRemove = { onRemoveInput(input.key) },
+                    onPickPhoto = { onPickPhoto(input.key) },
+                    onTakePhoto = { onTakePhoto(input.key) },
+                    onRemovePhoto = { onRemovePhoto(input.key) },
+                    onClarificationAnswerChange = { onClarificationAnswerChange(input.key, it) },
+                    onSubmitClarification = { onSubmitClarification(input.key) },
+                    onRetry = { onRetry(input.key) },
                 )
             }
-            if (uiState.failure != null) {
-                FailureCard(reason = uiState.failure, enabled = !busy, onRetry = onRetry)
+            OutlinedButton(onClick = onAddInput, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                Icon(imageVector = Icons.Filled.Add, contentDescription = null)
+                Text(text = stringResource(R.string.action_add_item))
             }
-            if (uiState.isParsing) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(KcalSpacing.small),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    CircularProgressIndicator()
-                    Text(text = stringResource(R.string.entry_parsing))
-                }
-            } else {
-                Button(onClick = onParse, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = stringResource(R.string.action_parse))
-                }
+            Button(onClick = onParse, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                Text(text = stringResource(R.string.action_parse))
             }
             TextButton(onClick = onLogManually, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                 Text(text = stringResource(R.string.action_log_manually))
@@ -228,9 +213,109 @@ fun EntryScreen(
     }
 }
 
+/** One described item: its text, its own transient photo, and its own answer from the parser. */
+@Composable
+private fun EntryInputCard(
+    number: Int,
+    input: EntryInputUiState,
+    canRemove: Boolean,
+    enabled: Boolean,
+    canTakePhoto: Boolean,
+    onTextChange: (String) -> Unit,
+    onRemove: () -> Unit,
+    onPickPhoto: () -> Unit,
+    onTakePhoto: () -> Unit,
+    onRemovePhoto: () -> Unit,
+    onClarificationAnswerChange: (String) -> Unit,
+    onSubmitClarification: () -> Unit,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedCard(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(KcalSpacing.medium),
+            verticalArrangement = Arrangement.spacedBy(KcalSpacing.small),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.manual_entry_item_number, number),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                IconButton(onClick = onRemove, enabled = canRemove) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = stringResource(R.string.action_remove_item),
+                    )
+                }
+            }
+            OutlinedTextField(
+                value = input.text,
+                onValueChange = onTextChange,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = enabled,
+                label = { Text(text = stringResource(R.string.entry_text_label)) },
+                supportingText = {
+                    Text(
+                        text =
+                        stringResource(
+                            if (input.textMissing) R.string.entry_text_required else R.string.entry_text_hint,
+                        ),
+                    )
+                },
+                isError = input.textMissing,
+                minLines = 2,
+            )
+            when {
+                input.isParsing ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(KcalSpacing.small),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator()
+                        Text(text = stringResource(R.string.entry_parsing))
+                    }
+
+                // A read item has already given up its photo, so only its result is shown.
+                input.isParsed ->
+                    Text(
+                        text = stringResource(R.string.entry_item_parsed),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+
+                else ->
+                    PhotoSection(
+                        input = input,
+                        enabled = enabled,
+                        canTakePhoto = canTakePhoto,
+                        onPickPhoto = onPickPhoto,
+                        onTakePhoto = onTakePhoto,
+                        onRemovePhoto = onRemovePhoto,
+                    )
+            }
+            if (input.clarificationQuestion != null) {
+                ClarificationCard(
+                    question = input.clarificationQuestion,
+                    answer = input.clarificationAnswer,
+                    enabled = enabled,
+                    onAnswerChange = onClarificationAnswerChange,
+                    onSubmit = onSubmitClarification,
+                )
+            }
+            if (input.failure != null) {
+                FailureCard(reason = input.failure, enabled = enabled, onRetry = onRetry)
+            }
+        }
+    }
+}
+
 @Composable
 private fun PhotoSection(
-    uiState: EntryUiState,
+    input: EntryInputUiState,
     enabled: Boolean,
     canTakePhoto: Boolean,
     onPickPhoto: () -> Unit,
@@ -240,7 +325,7 @@ private fun PhotoSection(
 ) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(KcalSpacing.small)) {
         when {
-            uiState.isAttachingPhoto ->
+            input.isAttachingPhoto ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(KcalSpacing.small),
@@ -250,20 +335,18 @@ private fun PhotoSection(
                     Text(text = stringResource(R.string.entry_photo_preparing))
                 }
 
-            uiState.photoPath != null ->
-                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.padding(start = KcalSpacing.medium),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = stringResource(R.string.entry_photo_attached),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(onClick = onRemovePhoto, enabled = enabled) {
-                            Text(text = stringResource(R.string.entry_photo_remove))
-                        }
+            input.photoPath != null ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.entry_photo_attached),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onRemovePhoto, enabled = enabled) {
+                        Text(text = stringResource(R.string.entry_photo_remove))
                     }
                 }
 
@@ -282,7 +365,7 @@ private fun PhotoSection(
                     }
                 }
         }
-        if (uiState.photoFailed) {
+        if (input.photoFailed) {
             Text(
                 text = stringResource(R.string.entry_photo_failed),
                 style = MaterialTheme.typography.bodyMedium,
@@ -301,45 +384,41 @@ private fun ClarificationCard(
     onSubmit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    OutlinedCard(modifier = modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(KcalSpacing.medium),
-            verticalArrangement = Arrangement.spacedBy(KcalSpacing.small),
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(KcalSpacing.small),
+    ) {
+        Text(text = question, style = MaterialTheme.typography.bodyLarge)
+        OutlinedTextField(
+            value = answer,
+            onValueChange = onAnswerChange,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = enabled,
+            label = { Text(text = stringResource(R.string.entry_clarification_answer_label)) },
+        )
+        Button(
+            onClick = onSubmit,
+            enabled = enabled && answer.isNotBlank(),
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(text = question, style = MaterialTheme.typography.bodyLarge)
-            OutlinedTextField(
-                value = answer,
-                onValueChange = onAnswerChange,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = enabled,
-                label = { Text(text = stringResource(R.string.entry_clarification_answer_label)) },
-            )
-            Button(
-                onClick = onSubmit,
-                enabled = enabled && answer.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(text = stringResource(R.string.action_send_answer))
-            }
+            Text(text = stringResource(R.string.action_send_answer))
         }
     }
 }
 
 @Composable
 private fun FailureCard(reason: FailureReason, enabled: Boolean, onRetry: () -> Unit, modifier: Modifier = Modifier) {
-    OutlinedCard(modifier = modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(KcalSpacing.medium),
-            verticalArrangement = Arrangement.spacedBy(KcalSpacing.small),
-        ) {
-            Text(
-                text = stringResource(reason.messageRes()),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
-            OutlinedButton(onClick = onRetry, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
-                Text(text = stringResource(R.string.action_retry))
-            }
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(KcalSpacing.small),
+    ) {
+        Text(
+            text = stringResource(reason.messageRes()),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+        )
+        OutlinedButton(onClick = onRetry, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+            Text(text = stringResource(R.string.action_retry))
         }
     }
 }
@@ -425,9 +504,11 @@ private fun EntryPreview(themeMode: ThemeMode, uiState: EntryUiState) {
             uiState = uiState,
             onBackClick = {},
             onLogManually = {},
-            onTextChange = {},
+            onTextChange = { _, _ -> },
+            onAddInput = {},
+            onRemoveInput = {},
             onParse = {},
-            onClarificationAnswerChange = {},
+            onClarificationAnswerChange = { _, _ -> },
             onSubmitClarification = {},
             onRetry = {},
             onItemChange = { _, _, _ -> },
@@ -439,63 +520,71 @@ private fun EntryPreview(themeMode: ThemeMode, uiState: EntryUiState) {
     }
 }
 
-@Preview(name = "Entry idle White")
+@Preview(name = "Entry idle White", heightDp = 1000)
 @Composable
 private fun EntryIdleWhitePreview() = EntryPreview(ThemeMode.WHITE, EntryUiState())
 
-@Preview(name = "Entry idle Black")
+@Preview(name = "Entry idle Black", heightDp = 1000)
 @Composable
 private fun EntryIdleBlackPreview() = EntryPreview(ThemeMode.BLACK, EntryUiState())
 
-@Preview(name = "Entry typed White")
+@Preview(name = "Entry typed White", heightDp = 1000)
 @Composable
 private fun EntryTypedWhitePreview() = EntryPreview(ThemeMode.WHITE, entryIdlePreviewState)
 
-@Preview(name = "Entry parsing White")
+@Preview(name = "Entry parsing White", heightDp = 1000)
 @Composable
 private fun EntryParsingWhitePreview() = EntryPreview(ThemeMode.WHITE, entryParsingPreviewState)
 
-@Preview(name = "Entry parsing Black")
+@Preview(name = "Entry parsing Black", heightDp = 1000)
 @Composable
 private fun EntryParsingBlackPreview() = EntryPreview(ThemeMode.BLACK, entryParsingPreviewState)
 
-@Preview(name = "Entry failure White")
+@Preview(name = "Entry failure White", heightDp = 1000)
 @Composable
 private fun EntryFailureWhitePreview() = EntryPreview(ThemeMode.WHITE, entryFailurePreviewState)
 
-@Preview(name = "Entry failure Black")
+@Preview(name = "Entry failure Black", heightDp = 1000)
 @Composable
 private fun EntryFailureBlackPreview() = EntryPreview(ThemeMode.BLACK, entryFailurePreviewState)
 
-@Preview(name = "Entry photo attached White")
+@Preview(name = "Entry several items White", heightDp = 1400)
+@Composable
+private fun EntryMultipleInputsWhitePreview() = EntryPreview(ThemeMode.WHITE, entryMultipleInputsPreviewState)
+
+@Preview(name = "Entry several items Black", heightDp = 1400)
+@Composable
+private fun EntryMultipleInputsBlackPreview() = EntryPreview(ThemeMode.BLACK, entryMultipleInputsPreviewState)
+
+@Preview(name = "Entry photo attached White", heightDp = 1000)
 @Composable
 private fun EntryPhotoAttachedWhitePreview() = EntryPreview(ThemeMode.WHITE, entryPhotoAttachedPreviewState)
 
-@Preview(name = "Entry photo attached Black")
+@Preview(name = "Entry photo attached Black", heightDp = 1000)
 @Composable
 private fun EntryPhotoAttachedBlackPreview() = EntryPreview(ThemeMode.BLACK, entryPhotoAttachedPreviewState)
 
-@Preview(name = "Entry photo preparing White")
+@Preview(name = "Entry photo preparing White", heightDp = 1000)
 @Composable
 private fun EntryPhotoPreparingWhitePreview() = EntryPreview(ThemeMode.WHITE, entryPhotoPreparingPreviewState)
 
-@Preview(name = "Entry photo preparing Black")
+@Preview(name = "Entry photo preparing Black", heightDp = 1000)
 @Composable
 private fun EntryPhotoPreparingBlackPreview() = EntryPreview(ThemeMode.BLACK, entryPhotoPreparingPreviewState)
 
-@Preview(name = "Entry photo failed White")
+@Preview(name = "Entry photo failed White", heightDp = 1000)
 @Composable
 private fun EntryPhotoFailedWhitePreview() = EntryPreview(ThemeMode.WHITE, entryPhotoFailedPreviewState)
 
-@Preview(name = "Entry photo failed Black")
+@Preview(name = "Entry photo failed Black", heightDp = 1000)
 @Composable
 private fun EntryPhotoFailedBlackPreview() = EntryPreview(ThemeMode.BLACK, entryPhotoFailedPreviewState)
 
-@Preview(name = "Entry clarification White", heightDp = 1000)
+@Preview(name = "Entry clarification White", heightDp = 1200)
 @Composable
 private fun EntryClarificationWhitePreview() = EntryPreview(ThemeMode.WHITE, entryClarificationPreviewState)
 
-@Preview(name = "Entry clarification Black", heightDp = 1000)
+@Preview(name = "Entry clarification Black", heightDp = 1200)
 @Composable
 private fun EntryClarificationBlackPreview() = EntryPreview(ThemeMode.BLACK, entryClarificationPreviewState)
 

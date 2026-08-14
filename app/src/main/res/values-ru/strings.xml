@@ -66,6 +66,7 @@
     <string name="entry_text_hint">Пишите на любом языке. Порции помогают: «два яйца и 200 г риса».</string>
     <string name="entry_text_required">Сначала опишите приём пищи.</string>
     <string name="entry_parsing">Читаем ваше описание…</string>
+    <string name="entry_item_parsed">Успешно прочитано.</string>
     <string name="entry_clarification_answer_label">Ваш ответ</string>
     <string name="entry_photo_add">Добавить фото</string>
     <string name="entry_photo_take">Сделать фото</string>

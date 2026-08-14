@@ -76,7 +76,7 @@ class EntryViewModelTest {
         viewModel.onParse()
         runCurrent()
 
-        assertTrue(viewModel.uiState.value.textMissing)
+        assertTrue(viewModel.input.textMissing)
         assertTrue(parser.inputs.isEmpty())
     }
 
@@ -169,8 +169,8 @@ class EntryViewModelTest {
 
         viewModel.onParse()
         runCurrent()
-        assertEquals("How large was the serving?", viewModel.uiState.value.clarificationQuestion)
-        assertEquals("chicken with rice", viewModel.uiState.value.text)
+        assertEquals("How large was the serving?", viewModel.input.clarificationQuestion)
+        assertEquals("chicken with rice", viewModel.input.text)
         assertFalse(viewModel.uiState.value.isConfirming)
 
         viewModel.onClarificationAnswerChange("about 250 g")
@@ -185,7 +185,7 @@ class EntryViewModelTest {
             parser.inputs.last(),
         )
         assertTrue(viewModel.uiState.value.isConfirming)
-        assertNull(viewModel.uiState.value.clarificationQuestion)
+        assertNull(viewModel.input.clarificationQuestion)
     }
 
     @Test
@@ -204,9 +204,9 @@ class EntryViewModelTest {
         viewModel.onParse()
         runCurrent()
 
-        assertNull(viewModel.uiState.value.clarificationQuestion)
-        assertEquals("", viewModel.uiState.value.clarificationAnswer)
-        assertEquals(FailureReason.UNKNOWN, viewModel.uiState.value.failure)
+        assertNull(viewModel.input.clarificationQuestion)
+        assertEquals("", viewModel.input.clarificationAnswer)
+        assertEquals(FailureReason.UNKNOWN, viewModel.input.failure)
 
         viewModel.onSubmitClarification()
         runCurrent()
@@ -229,8 +229,8 @@ class EntryViewModelTest {
 
         viewModel.onTextChange("chicken with buckwheat")
 
-        assertNull(viewModel.uiState.value.clarificationQuestion)
-        assertEquals("", viewModel.uiState.value.clarificationAnswer)
+        assertNull(viewModel.input.clarificationQuestion)
+        assertEquals("", viewModel.input.clarificationAnswer)
 
         viewModel.onSubmitClarification()
         runCurrent()
@@ -290,14 +290,14 @@ class EntryViewModelTest {
 
         viewModel.onParse()
         runCurrent()
-        assertEquals(FailureReason.NO_NETWORK, viewModel.uiState.value.failure)
-        assertEquals("rice", viewModel.uiState.value.text)
+        assertEquals(FailureReason.NO_NETWORK, viewModel.input.failure)
+        assertEquals("rice", viewModel.input.text)
 
         viewModel.onRetry()
         runCurrent()
 
         assertEquals(2, parser.inputs.size)
-        assertNull(viewModel.uiState.value.failure)
+        assertNull(viewModel.input.failure)
         assertTrue(viewModel.uiState.value.isConfirming)
     }
 
@@ -316,7 +316,7 @@ class EntryViewModelTest {
         viewModel.onClarificationAnswerChange("250 g")
         viewModel.onSubmitClarification()
         runCurrent()
-        assertEquals(FailureReason.TIMEOUT, viewModel.uiState.value.failure)
+        assertEquals(FailureReason.TIMEOUT, viewModel.input.failure)
 
         viewModel.onRetry()
         runCurrent()
@@ -338,7 +338,7 @@ class EntryViewModelTest {
         viewModel.onParse()
         runCurrent()
 
-        assertEquals(FailureReason.UNKNOWN, viewModel.uiState.value.failure)
+        assertEquals(FailureReason.UNKNOWN, viewModel.input.failure)
         assertFalse(viewModel.uiState.value.isParsing)
     }
 
@@ -357,7 +357,9 @@ class EntryViewModelTest {
         assertFalse(state.isConfirming)
         assertTrue(state.items.isEmpty())
         assertNull(state.note)
-        assertEquals("oatmeal", state.text)
+        assertEquals("oatmeal", state.inputs.single().text)
+        // Reading it again is what the reopened screen offers, so the item is unread once more.
+        assertFalse(state.inputs.single().isParsed)
         assertTrue(repository.meals.value.isEmpty())
     }
 
@@ -403,7 +405,7 @@ class EntryViewModelTest {
 
         viewModel.onPhotoPicked(sourceImage())
         runCurrent()
-        val attachedPath = assertNotNull(viewModel.uiState.value.photoPath)
+        val attachedPath = assertNotNull(viewModel.input.photoPath)
         assertTrue(File(attachedPath).exists())
 
         viewModel.onParse()
@@ -412,7 +414,7 @@ class EntryViewModelTest {
         assertEquals(UserInput.TextWithPhoto("what is on the plate", attachedPath), parser.inputs.single())
         // Contract §8: a final success drops the photo, so the confirmation no longer offers one.
         assertFalse(File(attachedPath).exists())
-        assertNull(viewModel.uiState.value.photoPath)
+        assertNull(viewModel.input.photoPath)
 
         viewModel.onConfirm()
         runCurrent()
@@ -434,7 +436,7 @@ class EntryViewModelTest {
         viewModel.onTextChange("what is on the plate")
         viewModel.onPhotoPicked(sourceImage())
         runCurrent()
-        val attachedPath = assertNotNull(viewModel.uiState.value.photoPath)
+        val attachedPath = assertNotNull(viewModel.input.photoPath)
 
         viewModel.onParse()
         runCurrent()
@@ -443,7 +445,7 @@ class EntryViewModelTest {
         viewModel.onClarificationAnswerChange("about 25 cm")
         viewModel.onSubmitClarification()
         runCurrent()
-        assertEquals(FailureReason.TIMEOUT, viewModel.uiState.value.failure)
+        assertEquals(FailureReason.TIMEOUT, viewModel.input.failure)
         assertTrue(File(attachedPath).exists())
 
         viewModel.onRetry()
@@ -467,8 +469,8 @@ class EntryViewModelTest {
         viewModel.onPhotoPicked(sourceImage())
         runCurrent()
 
-        assertNull(viewModel.uiState.value.clarificationQuestion)
-        assertEquals("", viewModel.uiState.value.clarificationAnswer)
+        assertNull(viewModel.input.clarificationQuestion)
+        assertEquals("", viewModel.input.clarificationAnswer)
     }
 
     @Test
@@ -480,8 +482,8 @@ class EntryViewModelTest {
         viewModel.onPhotoPicked(Uri.fromFile(File(context.filesDir, "missing.jpg")))
         runCurrent()
 
-        assertTrue(viewModel.uiState.value.photoFailed)
-        assertNull(viewModel.uiState.value.photoPath)
+        assertTrue(viewModel.input.photoFailed)
+        assertNull(viewModel.input.photoPath)
 
         viewModel.onParse()
         runCurrent()
@@ -494,13 +496,13 @@ class EntryViewModelTest {
         viewModel.onTextChange("what is on the plate")
         viewModel.onPhotoPicked(sourceImage())
         runCurrent()
-        val attachedPath = assertNotNull(viewModel.uiState.value.photoPath)
+        val attachedPath = assertNotNull(viewModel.input.photoPath)
 
         viewModel.onRemovePhoto()
 
         assertFalse(File(attachedPath).exists())
-        assertNull(viewModel.uiState.value.photoPath)
-        assertEquals("what is on the plate", viewModel.uiState.value.text)
+        assertNull(viewModel.input.photoPath)
+        assertEquals("what is on the plate", viewModel.input.text)
     }
 
     @Test
@@ -509,7 +511,7 @@ class EntryViewModelTest {
         viewModel.onTextChange("what is on the plate")
         viewModel.onPhotoPicked(sourceImage())
         runCurrent()
-        val attachedPath = assertNotNull(viewModel.uiState.value.photoPath)
+        val attachedPath = assertNotNull(viewModel.input.photoPath)
 
         viewModel.onCleared()
 
@@ -526,8 +528,8 @@ class EntryViewModelTest {
         viewModel.onCaptureResult(captured = false)
 
         assertFalse(partial.exists())
-        assertNull(viewModel.uiState.value.photoPath)
-        assertFalse(viewModel.uiState.value.photoFailed)
+        assertNull(viewModel.input.photoPath)
+        assertFalse(viewModel.input.photoFailed)
     }
 
     @Test
@@ -551,8 +553,8 @@ class EntryViewModelTest {
         viewModel.onCaptureResult(captured = true)
         runCurrent()
 
-        assertNotNull(viewModel.uiState.value.photoPath)
-        assertFalse(viewModel.uiState.value.photoFailed)
+        assertNotNull(viewModel.input.photoPath)
+        assertFalse(viewModel.input.photoFailed)
     }
 
     @Test
@@ -561,10 +563,167 @@ class EntryViewModelTest {
 
         viewModel.onCaptureUnavailable()
 
-        assertTrue(viewModel.uiState.value.photoFailed)
-        assertNull(viewModel.uiState.value.photoPath)
-        assertFalse(viewModel.uiState.value.isAttachingPhoto)
+        assertTrue(viewModel.input.photoFailed)
+        assertNull(viewModel.input.photoPath)
+        assertFalse(viewModel.input.isAttachingPhoto)
     }
+
+    @Test
+    fun `every item is read on its own and one confirmation merges them in order`() = runTest {
+        val repository = FakeMealRepository()
+        val parser =
+            ScriptedParser(
+                ParseResult.Success(listOf(foodItem(name = "Omelette")), "first note"),
+                ParseResult.Success(listOf(foodItem(name = "Coffee")), "second note"),
+            )
+        val viewModel = viewModel(parser, repository)
+        viewModel.onTextChange("omelette")
+        viewModel.onAddInput()
+        val second = viewModel.uiState.value.inputs.last().key
+        viewModel.onTextChange(second, "coffee with milk")
+
+        viewModel.onParse()
+        runCurrent()
+
+        assertEquals<List<UserInput>>(
+            listOf(UserInput.Text("omelette"), UserInput.Text("coffee with milk")),
+            parser.inputs,
+        )
+        val state = viewModel.uiState.value
+        assertTrue(state.isConfirming)
+        assertEquals(listOf("Omelette", "Coffee"), state.items.map { it.name })
+        assertEquals("first note\nsecond note", state.note)
+
+        viewModel.onConfirm()
+        runCurrent()
+        val meal = repository.meals.value.single()
+        assertEquals("omelette\ncoffee with milk", meal.rawUserInput)
+        assertEquals(EntrySource.LLM_TEXT, meal.source)
+    }
+
+    @Test
+    fun `a photo belongs to one item and only that request carries it`() = runTest {
+        val repository = FakeMealRepository()
+        val parser =
+            ScriptedParser(
+                ParseResult.Success(listOf(foodItem()), null),
+                ParseResult.Success(listOf(foodItem()), null),
+            )
+        val viewModel = viewModel(parser, repository)
+        viewModel.onTextChange("omelette")
+        viewModel.onAddInput()
+        val second = viewModel.uiState.value.inputs.last().key
+        viewModel.onTextChange(second, "this is on the plate")
+        viewModel.onPhotoPicked(second, sourceImage())
+        runCurrent()
+        val attachedPath = assertNotNull(viewModel.uiState.value.inputs.last().photoPath)
+
+        viewModel.onParse()
+        runCurrent()
+
+        assertEquals(UserInput.Text("omelette"), parser.inputs.first())
+        assertEquals(UserInput.TextWithPhoto("this is on the plate", attachedPath), parser.inputs.last())
+        // Contract §8: that item's final answer arrived, so its photo is gone.
+        assertFalse(File(attachedPath).exists())
+
+        viewModel.onConfirm()
+        runCurrent()
+        assertEquals(EntrySource.LLM_PHOTO, repository.meals.value.single().source)
+    }
+
+    @Test
+    fun `a blank item blocks the whole parse`() = runTest {
+        val parser = ScriptedParser(ParseResult.Success(listOf(foodItem()), null))
+        val viewModel = viewModel(parser)
+        viewModel.onTextChange("omelette")
+        viewModel.onAddInput()
+
+        viewModel.onParse()
+        runCurrent()
+
+        assertTrue(viewModel.uiState.value.inputs.last().textMissing)
+        assertFalse(viewModel.input.textMissing)
+        assertTrue(parser.inputs.isEmpty())
+    }
+
+    @Test
+    fun `a failed item keeps the read ones and is the only one resent`() = runTest {
+        val parser =
+            ScriptedParser(
+                ParseResult.Success(listOf(foodItem(name = "Omelette")), null),
+                ParseResult.Failure(FailureReason.TIMEOUT),
+                ParseResult.Success(listOf(foodItem(name = "Coffee")), null),
+            )
+        val viewModel = viewModel(parser)
+        viewModel.onTextChange("omelette")
+        viewModel.onAddInput()
+        val second = viewModel.uiState.value.inputs.last().key
+        viewModel.onTextChange(second, "coffee")
+        viewModel.onParse()
+        runCurrent()
+
+        assertFalse(viewModel.uiState.value.isConfirming)
+        assertTrue(viewModel.input.isParsed)
+        assertEquals(FailureReason.TIMEOUT, viewModel.uiState.value.inputs.last().failure)
+
+        viewModel.onRetry(second)
+        runCurrent()
+
+        assertEquals(3, parser.inputs.size)
+        assertTrue(viewModel.uiState.value.isConfirming)
+        assertEquals(listOf("Omelette", "Coffee"), viewModel.uiState.value.items.map { it.name })
+    }
+
+    @Test
+    fun `removing an item deletes its photo and drops it from the confirmation`() = runTest {
+        val parser = ScriptedParser(ParseResult.Success(listOf(foodItem(name = "Omelette")), null))
+        val viewModel = viewModel(parser)
+        viewModel.onTextChange("omelette")
+        viewModel.onAddInput()
+        val second = viewModel.uiState.value.inputs.last().key
+        viewModel.onTextChange(second, "this is on the plate")
+        viewModel.onPhotoPicked(second, sourceImage())
+        runCurrent()
+        val attachedPath = assertNotNull(viewModel.uiState.value.inputs.last().photoPath)
+
+        viewModel.onRemoveInput(second)
+        viewModel.onParse()
+        runCurrent()
+
+        assertFalse(File(attachedPath).exists())
+        assertEquals<List<UserInput>>(listOf(UserInput.Text("omelette")), parser.inputs)
+        assertEquals(listOf("Omelette"), viewModel.uiState.value.items.map { it.name })
+    }
+
+    @Test
+    fun `the only item cannot be removed`() = runTest {
+        val viewModel = viewModel(ScriptedParser())
+
+        viewModel.onRemoveInput(FIRST_ITEM_KEY)
+
+        assertEquals(1, viewModel.uiState.value.inputs.size)
+    }
+
+    /** The single item most tests describe, addressed the way the screen addresses it. */
+    private val EntryViewModel.input: EntryInputUiState
+        get() = uiState.value.inputs.first()
+
+    private fun EntryViewModel.onTextChange(text: String) = onTextChange(FIRST_ITEM_KEY, text)
+
+    private fun EntryViewModel.onPhotoPicked(source: Uri) = onPhotoPicked(FIRST_ITEM_KEY, source)
+
+    private fun EntryViewModel.onRemovePhoto() = onRemovePhoto(FIRST_ITEM_KEY)
+
+    private fun EntryViewModel.onClarificationAnswerChange(answer: String) =
+        onClarificationAnswerChange(FIRST_ITEM_KEY, answer)
+
+    private fun EntryViewModel.onSubmitClarification() = onSubmitClarification(FIRST_ITEM_KEY)
+
+    private fun EntryViewModel.onRetry() = onRetry(FIRST_ITEM_KEY)
+
+    private fun EntryViewModel.onCaptureRequested() = onCaptureRequested(FIRST_ITEM_KEY)
+
+    private fun EntryViewModel.onCaptureUnavailable() = onCaptureUnavailable(FIRST_ITEM_KEY)
 
     private class ScriptedParser(vararg results: ParseResult) : NutritionParser {
         val inputs = mutableListOf<UserInput>()

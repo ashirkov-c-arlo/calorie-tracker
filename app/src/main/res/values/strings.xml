@@ -68,6 +68,7 @@
     <string name="entry_text_hint">Write it in any language. Portions help: “two eggs and 200 g of rice”.</string>
     <string name="entry_text_required">Describe the meal first.</string>
     <string name="entry_parsing">Reading your description…</string>
+    <string name="entry_item_parsed">Read successfully.</string>
     <string name="entry_clarification_answer_label">Your answer</string>
     <string name="entry_photo_add">Add photo</string>
     <string name="entry_photo_take">Take photo</string>

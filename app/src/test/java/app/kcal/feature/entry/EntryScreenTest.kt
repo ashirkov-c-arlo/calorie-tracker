@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -35,27 +36,60 @@ class EntryScreenTest {
 
         composeRule.onNodeWithText(string(R.string.entry_text_hint)).assertIsDisplayed()
         composeRule.onNodeWithText(string(R.string.action_parse)).assertIsEnabled()
+        composeRule.onNodeWithText(string(R.string.action_add_item)).assertIsEnabled()
         composeRule.onNodeWithText(string(R.string.action_log_manually)).assertIsEnabled()
     }
 
     @Test
-    fun `parsing replaces the action with progress and disables closing`() {
+    fun `the only item cannot be removed`() {
+        show(EntryUiState())
+
+        composeRule.onNodeWithContentDescription(string(R.string.action_remove_item)).assertIsNotEnabled()
+    }
+
+    @Test
+    fun `each described item gets its own card and remove action`() {
+        var removed: Long? = null
+        show(entryMultipleInputsPreviewState, onRemoveInput = { removed = it })
+
+        composeRule.onNodeWithText(string(R.string.manual_entry_item_number, 1)).assertIsDisplayed()
+        composeRule.onNodeWithText(string(R.string.entry_item_parsed)).assertIsDisplayed()
+        composeRule.onNodeWithText(string(R.string.entry_failure_timeout)).assertIsDisplayed()
+        composeRule.onAllNodesWithContentDescription(string(R.string.action_remove_item))[1].performClick()
+
+        assertEquals(entryMultipleInputsPreviewState.inputs.last().key, removed)
+    }
+
+    @Test
+    fun `adding an item is offered next to the parse action`() {
+        var added = 0
+        show(entryIdlePreviewState, onAddInput = { added++ })
+
+        composeRule.onNodeWithText(string(R.string.action_add_item)).performClick()
+
+        assertEquals(1, added)
+    }
+
+    @Test
+    fun `parsing shows progress on the item and disables every action`() {
         show(entryParsingPreviewState)
 
         composeRule.onNodeWithText(string(R.string.entry_parsing)).assertIsDisplayed()
         composeRule.onNodeWithContentDescription(string(R.string.action_cancel)).assertIsNotEnabled()
+        composeRule.onNodeWithText(string(R.string.action_parse)).assertIsNotEnabled()
+        composeRule.onNodeWithText(string(R.string.action_add_item)).assertIsNotEnabled()
         composeRule.onNodeWithText(string(R.string.action_log_manually)).assertIsNotEnabled()
     }
 
     @Test
     fun `a failure explains itself and offers retry plus manual logging`() {
-        var retries = 0
-        show(entryFailurePreviewState, onRetry = { retries++ })
+        var retried: Long? = null
+        show(entryFailurePreviewState, onRetry = { retried = it })
 
         composeRule.onNodeWithText(string(R.string.entry_failure_no_network)).assertIsDisplayed()
         composeRule.onNodeWithText(string(R.string.action_retry)).performClick()
         composeRule.onNodeWithText(string(R.string.action_log_manually)).assertIsEnabled()
-        assertEquals(1, retries)
+        assertEquals(entryFailurePreviewState.inputs.single().key, retried)
     }
 
     @Test
@@ -63,14 +97,14 @@ class EntryScreenTest {
         show(entryIdlePreviewState)
 
         FailureReason.entries.forEach { reason ->
-            composeRule.runOnIdle { state = entryIdlePreviewState.copy(failure = reason) }
+            composeRule.runOnIdle { state = entryIdlePreviewState.withFirstInput { it.copy(failure = reason) } }
             composeRule.onNodeWithText(string(R.string.action_retry)).assertIsDisplayed()
         }
     }
 
     @Test
     fun `an unanswered clarification cannot be sent`() {
-        show(entryClarificationPreviewState.copy(clarificationAnswer = ""))
+        show(entryClarificationPreviewState.withFirstInput { it.copy(clarificationAnswer = "") })
 
         composeRule.onNodeWithText("Approximately how large was the serving?").assertIsDisplayed()
         composeRule.onNodeWithText(string(R.string.action_send_answer)).assertIsNotEnabled()
@@ -87,16 +121,17 @@ class EntryScreenTest {
     }
 
     @Test
-    fun `both photo sources are offered and launch their picker`() {
-        var picked = 0
-        var captured = 0
-        show(entryIdlePreviewState, onPickPhoto = { picked++ }, onTakePhoto = { captured++ })
+    fun `both photo sources are offered for the item that asked for them`() {
+        var picked: Long? = null
+        var captured: Long? = null
+        show(entryIdlePreviewState, onPickPhoto = { picked = it }, onTakePhoto = { captured = it })
 
         composeRule.onNodeWithText(string(R.string.entry_photo_add)).performClick()
         composeRule.onNodeWithText(string(R.string.entry_photo_take)).performClick()
 
-        assertEquals(1, picked)
-        assertEquals(1, captured)
+        val key = entryIdlePreviewState.inputs.single().key
+        assertEquals(key, picked)
+        assertEquals(key, captured)
     }
 
     @Test
@@ -109,13 +144,13 @@ class EntryScreenTest {
 
     @Test
     fun `an attached photo says it is not saved and can be removed`() {
-        var removals = 0
-        show(entryPhotoAttachedPreviewState, onRemovePhoto = { removals++ })
+        var removed: Long? = null
+        show(entryPhotoAttachedPreviewState, onRemovePhoto = { removed = it })
 
         composeRule.onNodeWithText(string(R.string.entry_photo_attached)).assertIsDisplayed()
         composeRule.onNodeWithText(string(R.string.entry_photo_remove)).performClick()
 
-        assertEquals(1, removals)
+        assertEquals(entryPhotoAttachedPreviewState.inputs.single().key, removed)
     }
 
     @Test
@@ -138,11 +173,13 @@ class EntryScreenTest {
 
     private fun show(
         uiState: EntryUiState,
-        onRetry: () -> Unit = {},
+        onAddInput: () -> Unit = {},
+        onRemoveInput: (Long) -> Unit = {},
+        onRetry: (Long) -> Unit = {},
         canTakePhoto: Boolean = true,
-        onPickPhoto: () -> Unit = {},
-        onTakePhoto: () -> Unit = {},
-        onRemovePhoto: () -> Unit = {},
+        onPickPhoto: (Long) -> Unit = {},
+        onTakePhoto: (Long) -> Unit = {},
+        onRemovePhoto: (Long) -> Unit = {},
     ) {
         state = uiState
         composeRule.setContent {
@@ -151,9 +188,11 @@ class EntryScreenTest {
                     uiState = state,
                     onBackClick = {},
                     onLogManually = {},
-                    onTextChange = {},
+                    onTextChange = { _, _ -> },
+                    onAddInput = onAddInput,
+                    onRemoveInput = onRemoveInput,
                     onParse = {},
-                    onClarificationAnswerChange = {},
+                    onClarificationAnswerChange = { _, _ -> },
                     onSubmitClarification = {},
                     onRetry = onRetry,
                     onItemChange = { _, _, _ -> },
@@ -171,4 +210,9 @@ class EntryScreenTest {
     }
 
     private fun string(resId: Int): String = composeRule.activity.getString(resId)
+
+    private fun string(resId: Int, vararg formatArgs: Any): String = composeRule.activity.getString(resId, *formatArgs)
 }
+
+private fun EntryUiState.withFirstInput(transform: (EntryInputUiState) -> EntryInputUiState): EntryUiState =
+    copy(inputs = inputs.replacingAt(0, transform(inputs.first())))

@@ -17,6 +17,7 @@ import app.kcal.feature.entry.entryConfirmationPreviewState
 import app.kcal.feature.entry.entryConfirmationRussianPreviewState
 import app.kcal.feature.entry.entryFailurePreviewState
 import app.kcal.feature.entry.entryIdlePreviewState
+import app.kcal.feature.entry.entryMultipleInputsPreviewState
 import app.kcal.feature.entry.entryParsingPreviewState
 import app.kcal.feature.entry.entryPhotoAttachedPreviewState
 import app.kcal.feature.entry.entryPhotoFailedPreviewState
@@ -188,6 +189,18 @@ class ScreenshotTest {
     @Test
     @Config(qualifiers = "+ru")
     fun entryFailureWhiteRussian() = capture(ThemeMode.WHITE) { EntryFixture(entryFailurePreviewState) }
+
+    @Test
+    @Config(qualifiers = "+h1200dp")
+    fun entryMultipleInputsWhite() = capture(ThemeMode.WHITE) { EntryFixture(entryMultipleInputsPreviewState) }
+
+    @Test
+    @Config(qualifiers = "+h1200dp")
+    fun entryMultipleInputsBlack() = capture(ThemeMode.BLACK) { EntryFixture(entryMultipleInputsPreviewState) }
+
+    @Test
+    @Config(qualifiers = "+ru-h1200dp")
+    fun entryMultipleInputsWhiteRussian() = capture(ThemeMode.WHITE) { EntryFixture(entryMultipleInputsPreviewState) }
 
     @Test
     fun entryPhotoAttachedWhite() = capture(ThemeMode.WHITE) { EntryFixture(entryPhotoAttachedPreviewState) }
@@ -439,9 +452,11 @@ class ScreenshotTest {
             uiState = uiState,
             onBackClick = {},
             onLogManually = {},
-            onTextChange = {},
+            onTextChange = { _, _ -> },
+            onAddInput = {},
+            onRemoveInput = {},
             onParse = {},
-            onClarificationAnswerChange = {},
+            onClarificationAnswerChange = { _, _ -> },
             onSubmitClarification = {},
             onRetry = {},
             onItemChange = { _, _, _ -> },

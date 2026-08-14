@@ -7,6 +7,7 @@ import app.kcal.core.common.AppLocaleProvider
 import app.kcal.core.common.TransientCapture
 import app.kcal.core.common.TransientPhotoStore
 import app.kcal.domain.model.EntrySource
+import app.kcal.domain.model.FoodItem
 import app.kcal.domain.usecase.SaveMeal
 import app.kcal.domain.usecase.SaveMealResult
 import app.kcal.llm.ClarificationAnswer
@@ -16,6 +17,7 @@ import app.kcal.llm.ParseResult
 import app.kcal.llm.UserInput
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,10 +28,11 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Text parsing and its confirmation, optionally about a photo of the plate. The typed text
- * survives every clarification, failure, and retry, and only an explicit confirmation writes to
- * storage. The photo is transient: it is uploaded, never persisted, and deleted as soon as the
- * flow no longer needs it.
+ * Parsing of one or more described items and the single confirmation that follows them. Each item
+ * is one request, because the contract carries one text and at most one image, so each keeps its
+ * own clarification, failure, and retry. Typed text survives all of them and only an explicit
+ * confirmation writes to storage. Photos are transient: they are uploaded, never persisted, and
+ * deleted as soon as the flow no longer needs them.
  */
 @HiltViewModel
 class EntryViewModel @Inject constructor(
@@ -45,122 +48,169 @@ class EntryViewModel @Inject constructor(
     private val eventChannel = Channel<EntryEvent>(Channel.BUFFERED)
     val events = eventChannel.receiveAsFlow()
 
+    private var nextInputKey = FIRST_ITEM_KEY + 1
     private var nextItemKey = FIRST_ITEM_KEY
 
-    /** What Retry resends: the contract requires the exact previous request, nothing rebuilt. */
-    private var lastInput: UserInput? = null
-
-    /** Which source the confirmed meal records, kept because the photo is dropped on success. */
-    private var parsedSource = EntrySource.LLM_TEXT
+    /** What each input parsed into, kept until the confirmation merges all of them. */
+    private val parsed = mutableMapOf<Long, ParsedInput>()
 
     /**
-     * The capture the camera app is writing to. It is owned here rather than in the composable so
-     * that a result that arrives after the screen was recreated still finds its target.
+     * The capture the camera app is writing to, and the input it belongs to. It is owned here
+     * rather than in the composable so that a result that arrives after the screen was recreated
+     * still finds its target.
      */
-    private var pendingCapture: TransientCapture? = null
+    private var pendingCapture: PendingCapture? = null
+
+    private data class ParsedInput(val items: List<FoodItem>, val note: String?, val fromPhoto: Boolean)
+
+    private data class PendingCapture(val inputKey: Long, val capture: TransientCapture)
 
     /**
-     * A question belongs to the text it was asked about, so editing the description drops the
-     * pending clarification instead of letting it be attached to a different meal.
+     * A question and a parsed result belong to the text they were about, so editing one item's
+     * description drops both instead of letting them describe different food.
      */
-    fun onTextChange(text: String) {
-        val state = _uiState.value
-        if (state.text == text) return
-        lastInput = null
-        _uiState.value =
-            state.copy(
+    fun onTextChange(key: Long, text: String) {
+        val input = input(key) ?: return
+        if (input.text == text) return
+        parsed -= key
+        replace(
+            input.copy(
                 text = text,
                 textMissing = false,
+                isParsed = false,
                 failure = null,
                 clarificationQuestion = null,
                 clarificationAnswer = "",
-            )
+            ),
+        )
     }
 
-    fun onClarificationAnswerChange(answer: String) {
-        _uiState.value = _uiState.value.copy(clarificationAnswer = answer)
+    fun onAddInput() {
+        val state = _uiState.value
+        if (!state.canSubmit) return
+        _uiState.value = state.copy(inputs = state.inputs.adding(EntryInputUiState(key = nextInputKey++)))
+    }
+
+    fun onRemoveInput(key: Long) {
+        val state = _uiState.value
+        if (!state.canSubmit || state.inputs.size == 1) return
+        val input = input(key) ?: return
+        input.photoPath?.let(photoStore::discard)
+        parsed -= key
+        _uiState.value = state.copy(inputs = state.inputs.removing(input))
+    }
+
+    fun onClarificationAnswerChange(key: Long, answer: String) {
+        input(key)?.let { replace(it.copy(clarificationAnswer = answer)) }
     }
 
     /**
-     * Creates the capture the camera app will write to. The value is kept here, so a result that
-     * arrives after the screen was recreated still finds its target.
+     * Creates the capture the camera app will write to for one input. The value is kept here, so a
+     * result that arrives after the screen was recreated still finds its target.
      */
-    fun onCaptureRequested(): TransientCapture {
+    fun onCaptureRequested(key: Long): TransientCapture {
         // Anything still pending at this point never arrived, so it cannot be waited for.
         discardPendingCapture()
         val capture = photoStore.newCapture()
-        pendingCapture = capture
+        pendingCapture = PendingCapture(inputKey = key, capture = capture)
         return capture
     }
 
     /** A capture that did not happen leaves nothing behind, whatever the camera app wrote. */
     fun onCaptureResult(captured: Boolean) {
-        val capture = pendingCapture ?: return
+        val pending = pendingCapture ?: return
         pendingCapture = null
-        if (captured) onPhotoPicked(capture.uri) else photoStore.discard(capture)
+        if (captured) {
+            onPhotoPicked(pending.inputKey, pending.capture.uri)
+        } else {
+            photoStore.discard(pending.capture.path)
+        }
     }
 
     /** No camera app could handle the request; reported like any other unusable image. */
-    fun onCaptureUnavailable() {
+    fun onCaptureUnavailable(key: Long) {
         discardPendingCapture()
-        _uiState.value = _uiState.value.copy(isAttachingPhoto = false, photoFailed = true)
+        input(key)?.let { replace(it.copy(isAttachingPhoto = false, photoFailed = true)) }
     }
 
     /**
-     * Turns the picked or captured image into the single upload candidate. A new photo is a new
-     * request, so any pending clarification is dropped with it.
+     * Turns the picked or captured image into this input's upload candidate. A new photo is a new
+     * request, so the input's pending clarification and parsed result go with it.
      */
-    fun onPhotoPicked(source: Uri) {
-        lastInput = null
-        _uiState.value =
-            _uiState.value.copy(
+    fun onPhotoPicked(key: Long, source: Uri) {
+        val input = input(key) ?: return
+        input.photoPath?.let(photoStore::discard)
+        parsed -= key
+        replace(
+            input.copy(
                 isAttachingPhoto = true,
+                photoPath = null,
                 photoFailed = false,
+                isParsed = false,
                 failure = null,
                 clarificationQuestion = null,
                 clarificationAnswer = "",
-            )
+            ),
+        )
         viewModelScope.launch {
             val path = photoStore.prepareForUpload(source)
-            _uiState.value =
-                _uiState.value.copy(isAttachingPhoto = false, photoPath = path, photoFailed = path == null)
+            val current = input(key)
+            if (current == null) {
+                // The row was removed while the image was being encoded; nobody owns the file.
+                path?.let(photoStore::discard)
+                return@launch
+            }
+            replace(current.copy(isAttachingPhoto = false, photoPath = path, photoFailed = path == null))
         }
     }
 
-    fun onRemovePhoto() {
-        lastInput = null
-        photoStore.clear()
-        pendingCapture = null
-        _uiState.value =
-            _uiState.value.copy(
+    fun onRemovePhoto(key: Long) {
+        val input = input(key) ?: return
+        input.photoPath?.let(photoStore::discard)
+        parsed -= key
+        replace(
+            input.copy(
                 photoPath = null,
                 photoFailed = false,
+                isParsed = false,
                 clarificationQuestion = null,
                 clarificationAnswer = "",
-            )
+            ),
+        )
     }
 
+    /** Sends every item that has not been read yet, then confirms once all of them succeeded. */
     fun onParse() {
         val state = _uiState.value
         if (!state.canSubmit) return
-        if (state.text.isBlank()) {
-            _uiState.value = state.copy(textMissing = true)
+        if (state.inputs.any { it.text.isBlank() }) {
+            _uiState.value =
+                state.copy(
+                    inputs = state.inputs.map { it.copy(textMissing = it.text.isBlank()) }.toPersistentList(),
+                )
             return
         }
-        parse(inputWith(clarification = null))
+        val pending = state.inputs.filterNot { it.isParsed }
+        pending.forEach { markParsing(it, clarification = null) }
+        viewModelScope.launch {
+            pending.forEach { parseOne(it.key, clarification = null) }
+            confirmWhenEveryItemIsRead()
+        }
     }
 
-    /** Resubmits the original text and photo together with the answer; the proxy keeps no session. */
-    fun onSubmitClarification() {
-        val state = _uiState.value
-        val question = state.clarificationQuestion ?: return
-        if (!state.canSubmit || state.clarificationAnswer.isBlank()) return
-        parse(inputWith(ClarificationAnswer(question = question, answer = state.clarificationAnswer)))
+    /** Resubmits one item's text and photo together with the answer; the proxy keeps no session. */
+    fun onSubmitClarification(key: Long) {
+        val input = input(key) ?: return
+        val question = input.clarificationQuestion ?: return
+        if (!_uiState.value.canSubmit || input.clarificationAnswer.isBlank()) return
+        resend(input, ClarificationAnswer(question = question, answer = input.clarificationAnswer))
     }
 
-    fun onRetry() {
+    /** Repeats one item's last request, including the answer it carried. */
+    fun onRetry(key: Long) {
+        val input = input(key) ?: return
         if (!_uiState.value.canSubmit) return
-        lastInput?.let(::parse) ?: onParse()
+        resend(input, input.pendingClarification())
     }
 
     fun onItemChange(key: Long, field: MealItemField, value: String) {
@@ -179,12 +229,19 @@ class EntryViewModel @Inject constructor(
         _uiState.value = state.copy(items = state.items.removingItem(key), saveFailed = false)
     }
 
-    /** Dismissing the sheet discards the parsed draft; the text stays so it can be parsed again. */
+    /** Dismissing the sheet discards the parsed draft; the texts stay so they can be parsed again. */
     fun onDismissConfirmation() {
         val state = _uiState.value
         if (state.isSaving) return
+        parsed.clear()
         _uiState.value =
-            state.copy(isConfirming = false, items = persistentListOf(), note = null, saveFailed = false)
+            state.copy(
+                isConfirming = false,
+                items = persistentListOf(),
+                note = null,
+                saveFailed = false,
+                inputs = state.inputs.map { it.copy(isParsed = false) }.toPersistentList(),
+            )
     }
 
     fun onConfirm() {
@@ -199,6 +256,8 @@ class EntryViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(saveFailed = true)
             return
         }
+        val source =
+            if (parsed.values.any { it.fromPhoto }) EntrySource.LLM_PHOTO else EntrySource.LLM_TEXT
         _uiState.value = _uiState.value.copy(isSaving = true)
         viewModelScope.launch {
             try {
@@ -206,8 +265,8 @@ class EntryViewModel @Inject constructor(
                     saveMeal(
                         mealId = null,
                         items = foodItems,
-                        source = parsedSource,
-                        rawUserInput = state.text,
+                        source = source,
+                        rawUserInput = state.inputs.joinToString(separator = "\n") { it.text },
                     )
                 when (result) {
                     is SaveMealResult.Saved -> eventChannel.send(EntryEvent.Saved)
@@ -225,81 +284,126 @@ class EntryViewModel @Inject constructor(
         }
     }
 
+    private fun input(key: Long): EntryInputUiState? = _uiState.value.inputs.firstOrNull { it.key == key }
+
+    private fun replace(input: EntryInputUiState) {
+        val state = _uiState.value
+        val index = state.inputs.indexOfFirst { it.key == input.key }
+        if (index < 0) return
+        _uiState.value = state.copy(inputs = state.inputs.replacingAt(index, input))
+    }
+
+    /**
+     * The answer that still belongs to the last request of this input, which is what a retry has
+     * to resend. An edited description clears both fields, so this is null exactly when the text
+     * was submitted on its own.
+     */
+    private fun EntryInputUiState.pendingClarification(): ClarificationAnswer? {
+        val question = clarificationQuestion ?: return null
+        return clarificationAnswer.takeIf { it.isNotBlank() }?.let { ClarificationAnswer(question, it) }
+    }
+
+    private fun resend(input: EntryInputUiState, clarification: ClarificationAnswer?) {
+        markParsing(input, clarification)
+        viewModelScope.launch {
+            parseOne(input.key, clarification)
+            confirmWhenEveryItemIsRead()
+        }
+    }
+
+    private fun markParsing(input: EntryInputUiState, clarification: ClarificationAnswer?) {
+        replace(
+            input.copy(
+                isParsing = true,
+                textMissing = false,
+                failure = null,
+                // The contract only allows the question from the immediately preceding response,
+                // so a question-free submission drops any earlier clarification.
+                clarificationQuestion = clarification?.question,
+                clarificationAnswer = clarification?.answer.orEmpty(),
+            ),
+        )
+    }
+
+    private suspend fun parseOne(key: Long, clarification: ClarificationAnswer?) {
+        val input = input(key) ?: return
+        val request =
+            if (input.photoPath == null) {
+                UserInput.Text(text = input.text, clarification = clarification)
+            } else {
+                UserInput.TextWithPhoto(
+                    text = input.text,
+                    temporaryPhotoPath = input.photoPath,
+                    clarification = clarification,
+                )
+            }
+        val result =
+            try {
+                nutritionParser.parse(request)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (unexpected: Exception) {
+                ParseResult.Failure(FailureReason.UNKNOWN, unexpected)
+            }
+        val current = input(key) ?: return
+        when (result) {
+            is ParseResult.Success -> {
+                parsed[key] =
+                    ParsedInput(
+                        items = result.items,
+                        note = result.note,
+                        fromPhoto = request is UserInput.TextWithPhoto,
+                    )
+                // Contract §8: the photo is deleted as soon as a final answer arrives. A
+                // clarification or a failure is not final, so those keep it for the resubmission.
+                current.photoPath?.let(photoStore::discard)
+                replace(
+                    current.copy(
+                        isParsing = false,
+                        isParsed = true,
+                        photoPath = null,
+                        failure = null,
+                        clarificationQuestion = null,
+                        clarificationAnswer = "",
+                    ),
+                )
+            }
+
+            is ParseResult.NeedsClarification ->
+                replace(
+                    current.copy(
+                        isParsing = false,
+                        failure = null,
+                        clarificationQuestion = result.question,
+                        clarificationAnswer = "",
+                    ),
+                )
+
+            is ParseResult.Failure -> replace(current.copy(isParsing = false, failure = result.reason))
+        }
+    }
+
+    /** One sheet confirms the whole meal, so it opens only once no item is left unread. */
+    private fun confirmWhenEveryItemIsRead() {
+        val state = _uiState.value
+        if (state.inputs.any { !it.isParsed }) return
+        val results = state.inputs.mapNotNull { parsed[it.key] }
+        val items = results.flatMap { it.items }.toItemStates(localeProvider.current())
+        nextItemKey = items.size.toLong() + FIRST_ITEM_KEY
+        _uiState.value =
+            state.copy(
+                isConfirming = true,
+                note = results.mapNotNull { it.note }.distinct().joinToString("\n").ifBlank { null },
+                items = items,
+            )
+    }
+
     private fun discardPendingCapture() {
-        pendingCapture?.let(photoStore::discard)
+        pendingCapture?.let { photoStore.discard(it.capture.path) }
         pendingCapture = null
     }
 
-    private fun inputWith(clarification: ClarificationAnswer?): UserInput {
-        val state = _uiState.value
-        return if (state.photoPath == null) {
-            UserInput.Text(text = state.text, clarification = clarification)
-        } else {
-            UserInput.TextWithPhoto(
-                text = state.text,
-                temporaryPhotoPath = state.photoPath,
-                clarification = clarification,
-            )
-        }
-    }
-
-    private fun parse(input: UserInput) {
-        lastInput = input
-        parsedSource = if (input is UserInput.TextWithPhoto) EntrySource.LLM_PHOTO else EntrySource.LLM_TEXT
-        _uiState.value =
-            _uiState.value.copy(
-                isParsing = true,
-                failure = null,
-                textMissing = false,
-                // The contract only allows the question from the immediately preceding response,
-                // so a question-free submission drops any earlier clarification.
-                clarificationQuestion = input.clarification?.question,
-                clarificationAnswer = input.clarification?.answer.orEmpty(),
-            )
-        viewModelScope.launch {
-            val result =
-                try {
-                    nutritionParser.parse(input)
-                } catch (cancellation: CancellationException) {
-                    throw cancellation
-                } catch (unexpected: Exception) {
-                    ParseResult.Failure(FailureReason.UNKNOWN, unexpected)
-                }
-            _uiState.value = _uiState.value.applyParseResult(result)
-            // Contract §8: the photo is deleted as soon as a final answer arrives. A clarification
-            // or a failure is not final, so those keep it for the resubmission.
-            if (result is ParseResult.Success) photoStore.clear()
-        }
-    }
-
-    private fun EntryUiState.applyParseResult(result: ParseResult): EntryUiState = when (result) {
-        is ParseResult.Success -> {
-            val items = result.items.toItemStates(localeProvider.current())
-            nextItemKey = items.size.toLong() + FIRST_ITEM_KEY
-            copy(
-                isParsing = false,
-                failure = null,
-                clarificationQuestion = null,
-                clarificationAnswer = "",
-                isConfirming = true,
-                note = result.note,
-                items = items,
-                photoPath = null,
-            )
-        }
-
-        is ParseResult.NeedsClarification ->
-            copy(
-                isParsing = false,
-                failure = null,
-                clarificationQuestion = result.question,
-                clarificationAnswer = "",
-            )
-
-        is ParseResult.Failure -> copy(isParsing = false, failure = result.reason)
-    }
-
-    /** Leaving the flow, by Back, by navigation, or by a saved meal, takes the photo with it. */
+    /** Leaving the flow, by Back, by navigation, or by a saved meal, takes the photos with it. */
     public override fun onCleared() {
         pendingCapture = null
         photoStore.clear()
