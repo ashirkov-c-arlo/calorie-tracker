@@ -107,7 +107,7 @@ class ProfileRepositoryImplTest {
     }
 
     @Test
-    fun `the weight series is chronological and one upsert replaces its own date`() = runTest {
+    fun `the weight series supports chronological upsert and deletion`() = runTest {
         val yesterday = today.minusDays(1)
         repository.logWeight(WeightEntry(localDate = today, kg = 81.0))
         repository.logWeight(WeightEntry(localDate = yesterday, kg = 83.0))
@@ -124,6 +124,11 @@ class ProfileRepositoryImplTest {
             repository.weights.first().map { it.localDate to it.kg },
         )
         assertEquals(80.4, repository.preferences.first().profile.currentWeightKg)
+
+        repository.deleteWeight(today)
+
+        assertEquals(listOf(WeightEntry(yesterday, 83.0)), repository.weights.first())
+        assertEquals(83.0, repository.preferences.first().profile.currentWeightKg)
     }
 
     @Test

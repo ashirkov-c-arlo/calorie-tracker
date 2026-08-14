@@ -103,6 +103,20 @@ class TrendsViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(weightInput = text, inputError = null, saveFailed = false)
     }
 
+    fun onDeleteEntry(localDate: LocalDate) {
+        viewModelScope.launch {
+            try {
+                profileRepository.deleteWeight(localDate)
+                // If we were editing the deleted date, go back to today
+                if (selectedDate.value == localDate) editDate(null)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                // Ignored; the entry stays visible and the user can retry
+            }
+        }
+    }
+
     private fun editDate(localDate: LocalDate?) {
         isDraftEdited = false
         draftRevision++

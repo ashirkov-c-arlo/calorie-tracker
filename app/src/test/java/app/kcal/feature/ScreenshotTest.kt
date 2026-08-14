@@ -488,6 +488,7 @@ class ScreenshotTest {
             onWeightChange = {},
             onSave = {},
             onEntryClick = {},
+            onDeleteEntry = {},
             onLogTodayClick = {},
             onRetry = {},
         )

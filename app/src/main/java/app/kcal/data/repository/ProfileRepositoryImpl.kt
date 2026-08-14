@@ -58,6 +58,10 @@ class ProfileRepositoryImpl @Inject constructor(
         )
     }
 
+    override suspend fun deleteWeight(localDate: LocalDate) {
+        weightEntryDao.deleteByDate(localDate.toEpochDay().toInt())
+    }
+
     override suspend fun setUnitSystem(unitSystem: UnitSystem) {
         preferencesDataSource.setUnitSystem(unitSystem)
     }

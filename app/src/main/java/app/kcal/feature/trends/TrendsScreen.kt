@@ -13,11 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
@@ -79,6 +81,7 @@ fun TrendsRoute(viewModel: TrendsViewModel = hiltViewModel()) {
         onWeightChange = viewModel::onWeightChange,
         onSave = viewModel::onSave,
         onEntryClick = viewModel::onEntryClick,
+        onDeleteEntry = viewModel::onDeleteEntry,
         onLogTodayClick = viewModel::onLogTodayClick,
         onRetry = viewModel::onRetry,
         snackbarHostState = snackbarHostState,
@@ -92,6 +95,7 @@ fun TrendsScreen(
     onWeightChange: (String) -> Unit,
     onSave: () -> Unit,
     onEntryClick: (LocalDate) -> Unit,
+    onDeleteEntry: (LocalDate) -> Unit,
     onLogTodayClick: () -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
@@ -118,6 +122,7 @@ fun TrendsScreen(
                     onWeightChange = onWeightChange,
                     onSave = onSave,
                     onEntryClick = onEntryClick,
+                    onDeleteEntry = onDeleteEntry,
                     onLogTodayClick = onLogTodayClick,
                     modifier = Modifier.padding(contentPadding),
                 )
@@ -131,6 +136,7 @@ private fun TrendsContent(
     onWeightChange: (String) -> Unit,
     onSave: () -> Unit,
     onEntryClick: (LocalDate) -> Unit,
+    onDeleteEntry: (LocalDate) -> Unit,
     onLogTodayClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -155,12 +161,11 @@ private fun TrendsContent(
             WeightSeriesCard(uiState = uiState)
             LoggedWeightsCard(
                 uiState = uiState,
-                // The editor is the first card, so every row tap has to bring it back into view,
-                // including a tap on the day that is already selected.
                 onEntryClick = { date ->
                     onEntryClick(date)
                     scope.launch { scrollState.animateScrollTo(0) }
                 },
+                onDeleteEntry = onDeleteEntry,
             )
         }
     }
@@ -244,11 +249,13 @@ private fun WeightSeriesCard(uiState: TrendsUiState, modifier: Modifier = Modifi
 private fun LoggedWeightsCard(
     uiState: TrendsUiState,
     onEntryClick: (LocalDate) -> Unit,
+    onDeleteEntry: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val locale = currentLocale()
     val unit = stringResource(uiState.unitSystem.weightUnitRes())
     val editLabel = stringResource(R.string.trends_edit_entry_content_description)
+    val deleteLabel = stringResource(R.string.trends_delete_entry_content_description)
     OutlinedCard(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(KcalSpacing.medium),
@@ -286,7 +293,12 @@ private fun LoggedWeightsCard(
                         stringResource(R.string.trends_entry_value, DecimalText.format(point.value, locale), unit),
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    Icon(imageVector = Icons.Filled.Edit, contentDescription = null)
+                    IconButton(onClick = { onEntryClick(point.localDate) }) {
+                        Icon(imageVector = Icons.Filled.Edit, contentDescription = editLabel)
+                    }
+                    IconButton(onClick = { onDeleteEntry(point.localDate) }) {
+                        Icon(imageVector = Icons.Filled.Delete, contentDescription = deleteLabel)
+                    }
                 }
             }
         }
@@ -331,6 +343,7 @@ private fun TrendsPreview(themeMode: ThemeMode, uiState: TrendsUiState) {
             onWeightChange = {},
             onSave = {},
             onEntryClick = {},
+            onDeleteEntry = {},
             onLogTodayClick = {},
             onRetry = {},
         )

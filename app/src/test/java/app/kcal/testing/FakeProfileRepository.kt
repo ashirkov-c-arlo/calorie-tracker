@@ -70,6 +70,18 @@ class FakeProfileRepository(
         state.value = state.value.copy(profile = state.value.profile.copy(currentWeightKg = latest.value))
     }
 
+    override suspend fun deleteWeight(localDate: LocalDate) {
+        if (writeFails) throw IOException("weight storage unavailable")
+        weightsByDate.value = sortedMapOf<LocalDate, Double>().apply {
+            putAll(weightsByDate.value)
+            remove(localDate)
+        }
+        val latest = weightsByDate.value.entries.lastOrNull()
+        state.value = state.value.copy(
+            profile = state.value.profile.copy(currentWeightKg = latest?.value),
+        )
+    }
+
     override suspend fun setUnitSystem(unitSystem: UnitSystem) {
         state.value = state.value.copy(unitSystem = unitSystem)
     }

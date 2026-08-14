@@ -191,6 +191,7 @@ private fun PreviewNavHost() {
                 onWeightChange = {},
                 onSave = {},
                 onEntryClick = {},
+                onDeleteEntry = {},
                 onLogTodayClick = {},
                 onRetry = {},
             )

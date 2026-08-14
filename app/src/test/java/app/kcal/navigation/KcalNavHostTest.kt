@@ -159,6 +159,7 @@ class KcalNavHostTest {
                             onWeightChange = {},
                             onSave = {},
                             onEntryClick = {},
+                            onDeleteEntry = {},
                             onLogTodayClick = {},
                             onRetry = {},
                         )
