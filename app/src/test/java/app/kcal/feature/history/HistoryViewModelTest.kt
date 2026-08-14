@@ -72,6 +72,7 @@ class HistoryViewModelTest {
 
         val week = viewModel.uiState.value.weeks.single()
         assertFalse(viewModel.uiState.value.isLoading)
+        assertEquals(1, week.weekOfYear)
         assertEquals(1_500L, week.consumed.kcal)
         assertEquals(listOf(tuesday, monday), week.days.map { it.localDate })
         assertNull(week.days.first().progress)

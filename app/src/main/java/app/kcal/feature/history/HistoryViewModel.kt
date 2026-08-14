@@ -78,12 +78,15 @@ class HistoryViewModel @Inject constructor(
                         dailyTargetRepository.observeAll(),
                         expandedDay,
                     ) { meals, targets, expanded ->
+                        val weeks = buildHistory(meals, targets)
+                        // Number weeks from the user's first logged week, not ISO week-of-year.
+                        val total = weeks.size
                         HistoryUiState(
                             isLoading = false,
                             weeks =
-                            buildHistory(meals, targets)
-                                .map { week -> week.toUiState(expanded) }
-                                .toPersistentList(),
+                            weeks.mapIndexed { index, week ->
+                                week.toUiState(expanded, relativeWeek = total - index)
+                            }.toPersistentList(),
                         )
                     }.collect { _uiState.value = it }
                 } catch (cancellation: CancellationException) {
@@ -94,8 +97,8 @@ class HistoryViewModel @Inject constructor(
             }
     }
 
-    private fun HistoryWeek.toUiState(expanded: LocalDate?): HistoryWeekUiState = HistoryWeekUiState(
-        weekOfYear = weekOfYear,
+    private fun HistoryWeek.toUiState(expanded: LocalDate?, relativeWeek: Int): HistoryWeekUiState = HistoryWeekUiState(
+        weekOfYear = relativeWeek,
         start = start,
         end = end,
         consumed = consumed,
