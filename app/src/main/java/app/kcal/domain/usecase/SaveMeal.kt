@@ -27,13 +27,15 @@ class SaveMeal(
 ) {
     /**
      * [source] and [rawUserInput] describe how a *new* meal was produced. Editing keeps the
-     * origin of the stored meal, because the user only changed its numbers.
+     * origin of the stored meal, because the user only changed its numbers. [summary] is the
+     * user-confirmed one-line name and is therefore updated on every save.
      */
     suspend operator fun invoke(
         mealId: Long?,
         items: List<FoodItem>,
         source: EntrySource = EntrySource.MANUAL,
         rawUserInput: String? = null,
+        summary: String? = null,
     ): SaveMealResult {
         val normalizedItems = items.map { it.copy(name = it.name.trim()) }
         val validation = validateMeal(normalizedItems)
@@ -44,13 +46,15 @@ class SaveMeal(
         val existing = mealId?.let { mealRepository.findById(it) }
         if (mealId != null && existing == null) return SaveMealResult.NotFound
 
-        val meal = existing?.copy(items = normalizedItems) ?: MealEntry(
+        val cleanedSummary = summary?.trim()?.takeIf { it.isNotBlank() }
+        val meal = existing?.copy(items = normalizedItems, summary = cleanedSummary) ?: MealEntry(
             id = 0,
             localDate = today,
             at = instant,
             items = normalizedItems,
             rawUserInput = rawUserInput?.takeIf { it.isNotBlank() },
             source = source,
+            summary = cleanedSummary,
         )
         val targetIfMissing = if (meal.localDate == today) currentTarget(today) else null
         return SaveMealResult.Saved(mealRepository.save(meal, targetIfMissing))

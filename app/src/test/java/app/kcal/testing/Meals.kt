@@ -27,6 +27,7 @@ fun mealEntry(
     localDate: LocalDate = LocalDate.of(2026, 3, 15),
     at: Instant = Instant.parse("2026-03-15T09:00:00Z"),
     items: List<FoodItem> = listOf(foodItem()),
+    summary: String? = null,
 ): MealEntry = MealEntry(
     id = id,
     localDate = localDate,
@@ -34,4 +35,5 @@ fun mealEntry(
     items = items,
     rawUserInput = null,
     source = EntrySource.MANUAL,
+    summary = summary,
 )

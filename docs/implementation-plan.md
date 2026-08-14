@@ -104,6 +104,7 @@ Use `--offline` when required and do not run `clean` without cause.
 | `at_epoch_millis` | Long | UTC instant |
 | `raw_user_input` | String? | Nullable for manual entries |
 | `source` | String | `MANUAL`, `LLM_TEXT`, or `LLM_PHOTO` |
+| `summary` | String? | Schema v2: one-line meal name; `NULL` falls back to item names |
 
 #### `food_items`
 
@@ -522,7 +523,7 @@ Before code, extend `docs/llm-proxy-contract.md` with the exact
 - Add `InsightGenerator` fake and fixtures first, then remote transport.
 - Add an explicit Generate action for completed day/week periods.
 - Persist localized text, period, prompt version, token usage, and generation timestamp.
-- Add Room v1→v2 migration and migration test.
+- Add the insights Room migration (v2→v3) and its migration test.
 - Render the medical disclaimer beneath every insight.
 - Never schedule WorkManager/background generation.
 

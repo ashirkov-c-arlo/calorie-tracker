@@ -11,8 +11,8 @@ import html
 from pathlib import Path
 from typing import Any
 
-PROMPT_VERSION = "parse-v1"
-TOOLS_VERSION = "tools-v1"
+PROMPT_VERSION = "parse-v2"
+TOOLS_VERSION = "tools-v2"
 
 CANARY = "KCAL-SYS-7F3A"
 LANGUAGE_NAME = {"en": "English", "ru": "Russian"}
@@ -37,18 +37,20 @@ PHOTO
 # Schema limits the validator re-checks after the model answers.
 MAX_ITEMS = 12
 MAX_QUESTION_CHARS = 200
+MAX_SUMMARY_CHARS = 80
+MAX_SUMMARY_WORDS = 10
 
 TOOL_CONFIG: dict[str, Any] = {
     "tools": [
         {
             "toolSpec": {
                 "name": "log_food",
-                "description": "Return the structured nutrition breakdown of the described meal (schema v1).",
+                "description": "Return the structured nutrition breakdown of the described meal (schema v2).",
                 "inputSchema": {
                     "json": {
                         "type": "object",
                         "additionalProperties": False,
-                        "required": ["items", "note"],
+                        "required": ["items", "summary", "note"],
                         "properties": {
                             "items": {
                                 "type": "array",
@@ -72,6 +74,7 @@ TOOL_CONFIG: dict[str, Any] = {
                                     },
                                 },
                             },
+                            "summary": {"type": "string", "minLength": 3, "maxLength": MAX_SUMMARY_CHARS},
                             "note": {"type": ["string", "null"], "maxLength": 300},
                         },
                     }

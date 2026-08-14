@@ -140,6 +140,25 @@ class EntryViewModelTest {
     }
 
     @Test
+    fun `the proposed summary is editable and a dismissed draft forgets it`() = runTest {
+        val repository = FakeMealRepository()
+        val parser = ScriptedParser(ParseResult.Success(listOf(foodItem()), null, "oatmeal with milk"))
+        val viewModel = viewModel(parser, repository)
+        viewModel.onTextChange("oatmeal with milk")
+        viewModel.onParse()
+        runCurrent()
+        assertEquals("oatmeal with milk", viewModel.uiState.value.summary)
+
+        viewModel.onSummaryChange("porridge and coffee")
+        viewModel.onConfirm()
+        runCurrent()
+        assertEquals("porridge and coffee", repository.meals.value.single().summary)
+
+        viewModel.onDismissConfirmation()
+        assertEquals("", viewModel.uiState.value.summary)
+    }
+
+    @Test
     fun `an incomplete added row blocks the save`() = runTest {
         val repository = FakeMealRepository()
         val parser = ScriptedParser(ParseResult.Success(listOf(foodItem()), null))
@@ -573,8 +592,8 @@ class EntryViewModelTest {
         val repository = FakeMealRepository()
         val parser =
             ScriptedParser(
-                ParseResult.Success(listOf(foodItem(name = "Omelette")), "first note"),
-                ParseResult.Success(listOf(foodItem(name = "Coffee")), "second note"),
+                ParseResult.Success(listOf(foodItem(name = "Omelette")), "first note", "three-egg omelette"),
+                ParseResult.Success(listOf(foodItem(name = "Coffee")), "second note", "coffee with milk"),
             )
         val viewModel = viewModel(parser, repository)
         viewModel.onTextChange("omelette")
@@ -593,11 +612,13 @@ class EntryViewModelTest {
         assertTrue(state.isConfirming)
         assertEquals(listOf("Omelette", "Coffee"), state.items.map { it.name })
         assertEquals("first note\nsecond note", state.note)
+        assertEquals("three-egg omelette, coffee with milk", state.summary)
 
         viewModel.onConfirm()
         runCurrent()
         val meal = repository.meals.value.single()
         assertEquals("omelette\ncoffee with milk", meal.rawUserInput)
+        assertEquals("three-egg omelette, coffee with milk", meal.summary)
         assertEquals(EntrySource.LLM_TEXT, meal.source)
     }
 

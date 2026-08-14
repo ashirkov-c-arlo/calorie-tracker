@@ -13,6 +13,7 @@ import app.kcal.data.db.DailyTargetSnapshotDao
 import app.kcal.data.db.KcalDatabase
 import app.kcal.data.db.MealEntryDao
 import app.kcal.data.db.WeightEntryDao
+import app.kcal.data.db.migrations.MIGRATION_1_2
 import app.kcal.data.repository.DailyTargetRepositoryImpl
 import app.kcal.data.repository.MealRepositoryImpl
 import app.kcal.data.repository.ProfileRepositoryImpl
@@ -37,7 +38,9 @@ object DataModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): KcalDatabase =
-        Room.databaseBuilder(context, KcalDatabase::class.java, KcalDatabase.NAME).build()
+        Room.databaseBuilder(context, KcalDatabase::class.java, KcalDatabase.NAME)
+            .addMigrations(MIGRATION_1_2)
+            .build()
 
     @Provides
     fun provideMealEntryDao(database: KcalDatabase): MealEntryDao = database.mealEntryDao()

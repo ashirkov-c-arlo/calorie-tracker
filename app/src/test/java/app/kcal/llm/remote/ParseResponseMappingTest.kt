@@ -29,7 +29,26 @@ class ParseResponseMappingTest {
         assertEquals(297, success.items.first().macros.kcal)
         assertEquals(0.91f, success.items.first().confidence)
         assertNull(success.note)
+        assertEquals("chicken breast with boiled rice", success.summary)
         assertFalse(success.items.any { it.needsReview() })
+    }
+
+    @Test
+    fun `the localized one-line summary survives mapping, a blank or absent one becomes null`() {
+        assertEquals(
+            "куриная грудка с отварным рисом",
+            (parse("parse_text_success_ru.json") as ParseResult.Success).summary,
+        )
+
+        val item =
+            """{"name":"Rice","grams":200.0,"kcal":260,"protein_g":5.4,"fat_g":0.6,"carbs_g":57.2,"confidence":0.8}"""
+        assertNull((parseText("""{"type":"success","items":[$item],"note":null}""") as ParseResult.Success).summary)
+        assertNull(
+            (
+                parseText("""{"type":"success","items":[$item],"note":null,"summary":"   "}""")
+                    as ParseResult.Success
+                ).summary,
+        )
     }
 
     @Test

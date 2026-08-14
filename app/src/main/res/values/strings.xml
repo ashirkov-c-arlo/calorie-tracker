@@ -49,7 +49,7 @@
     <string name="nutrient_progress_kcal">%1$s / %2$s kcal</string>
     <string name="nutrient_progress_grams">%1$s / %2$s g</string>
     <string name="meal_kcal">%1$s kcal</string>
-    <string name="meal_macros">Protein %1$s g · Fat %2$s g · Carbs %3$s g</string>
+    <string name="meal_items_separator">, </string>
 
     <string name="history_empty">Nothing logged yet. Days and ISO weeks appear here once you save a meal.</string>
     <string name="history_load_failed">Could not load your history from local storage.</string>
@@ -59,6 +59,7 @@
 
     <string name="manual_entry_item_number">Item %1$d</string>
     <string name="field_food_name">Food name</string>
+    <string name="field_meal_summary">Meal in one line (optional)</string>
     <string name="field_food_grams_optional">Weight (optional)</string>
     <string name="manual_entry_review_warning">This value is outside the usual review range. Check it before saving.</string>
     <string name="manual_entry_load_failed">Could not load this meal from local storage.</string>

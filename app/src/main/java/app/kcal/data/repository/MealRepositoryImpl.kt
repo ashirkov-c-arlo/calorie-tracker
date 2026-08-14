@@ -45,6 +45,7 @@ private fun MealEntry.toEntity(): MealEntryEntity = MealEntryEntity(
     atEpochMillis = at.toEpochMilli(),
     rawUserInput = rawUserInput,
     source = source.name,
+    summary = summary,
 )
 
 private fun FoodItem.toEntity(): FoodItemEntity = FoodItemEntity(
@@ -76,6 +77,7 @@ private fun MealEntryWithItems.toDomain(): MealEntry = MealEntry(
     items = items.sortedBy(FoodItemEntity::position).map(FoodItemEntity::toDomain),
     rawUserInput = meal.rawUserInput,
     source = EntrySource.valueOf(meal.source),
+    summary = meal.summary,
 )
 
 private fun FoodItemEntity.toDomain(): FoodItem = FoodItem(

@@ -7,7 +7,8 @@ import androidx.room.PrimaryKey
 
 /**
  * A chronological meal. There is deliberately no meal-type column and no photo reference:
- * photos are transient request inputs only.
+ * photos are transient request inputs only. [summary] is nullable because meals stored before
+ * schema v2 have none.
  */
 @Entity(
     tableName = "meal_entries",
@@ -19,4 +20,5 @@ data class MealEntryEntity(
     @ColumnInfo(name = "at_epoch_millis") val atEpochMillis: Long,
     @ColumnInfo(name = "raw_user_input") val rawUserInput: String?,
     @ColumnInfo(name = "source") val source: String,
+    @ColumnInfo(name = "summary") val summary: String? = null,
 )

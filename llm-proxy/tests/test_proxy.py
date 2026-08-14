@@ -40,6 +40,7 @@ from kcal_proxy.parse import (
     output_pieces,
     run_parse,
     sanitize_string,
+    sanitize_summary,
     validate_request,
 )
 from kcal_proxy.quota import Quota, QuotaExceeded, RateLimiter
@@ -241,6 +242,19 @@ class SanitizerTest(unittest.TestCase):
     def test_truncates_on_a_word_boundary(self):
         self.assertEqual(sanitize_string("alpha beta gamma", 12), "alpha beta")
 
+    def test_a_summary_becomes_one_short_line(self):
+        long_summary = "muesli with soy milk, chia seeds, flax seeds, hemp seeds and honey."
+        self.assertEqual(
+            sanitize_summary({"summary": long_summary}),
+            "muesli with soy milk, chia seeds, flax seeds, hemp seeds",
+        )
+        self.assertEqual(sanitize_summary({"summary": "roasted chicken\nwith  veggies."}),
+                         "roasted chicken with veggies")
+
+    def test_an_unusable_summary_is_dropped_instead_of_failing(self):
+        for payload in ({}, {"summary": None}, {"summary": 7}, {"summary": "  "}, "not an object"):
+            self.assertIsNone(sanitize_summary(payload), payload)
+
 
 class PipelineTest(unittest.TestCase):
     def _request(self, **kwargs):
@@ -254,6 +268,25 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(body["items"][0]["grams"], 180.0)
         self.assertIsNone(body["note"])
         self.assertEqual(meta.model_id, "model-text")
+        self.assertFalse(meta.repair_used)
+
+    def test_a_summary_is_returned_and_language_checked(self):
+        payload = {"items": [ITEM], "summary": "chicken breast with boiled rice", "note": None}
+        bedrock = FakeBedrock(tool_use("log_food", payload))
+        body, _ = run_parse(bedrock, cfg(), self._request(), "en")
+        self.assertEqual(body["summary"], "chicken breast with boiled rice")
+
+        # A summary in the wrong language is repaired like any other foreign string.
+        foreign = FakeBedrock(tool_use("log_food", dict(payload, summary="куриная грудка с рисом")),
+                              tool_use("log_food", payload))
+        body, meta = run_parse(foreign, cfg(), self._request(), "en")
+        self.assertEqual(body["summary"], "chicken breast with boiled rice")
+        self.assertTrue(meta.repair_used)
+
+    def test_a_missing_summary_still_returns_the_meal(self):
+        bedrock = FakeBedrock(tool_use("log_food", {"items": [ITEM], "note": None}))
+        body, meta = run_parse(bedrock, cfg(), self._request(), "en")
+        self.assertIsNone(body["summary"])
         self.assertFalse(meta.repair_used)
 
     def test_vision_path_uses_the_vision_model_and_puts_the_image_first(self):
@@ -839,6 +872,7 @@ class ContractFixtureTest(unittest.TestCase):
         bedrock = FakeBedrock(tool_use("log_food", {
             "items": [ITEM, dict(ITEM, name="Boiled rice", grams=220, kcal=286,
                                  protein_g=5.9, fat_g=0.7, carbs_g=62.9, confidence=0.84)],
+            "summary": "chicken breast with boiled rice",
             "note": None}, usage=(420, 96)))
         body, _ = run_parse(bedrock, cfg(), validate_request({"text": "chicken and rice"}, cfg()), "en")
         fixture = json.loads((FIXTURES / "parse_text_success.json").read_text(encoding="utf-8"))

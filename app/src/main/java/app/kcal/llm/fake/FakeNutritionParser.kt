@@ -37,6 +37,7 @@ class FakeNutritionParser @Inject constructor(private val localeProvider: AppLoc
                 ),
             ),
             note = if (russian) NOTE_RU else NOTE_EN,
+            summary = if (russian) SUMMARY_RU else SUMMARY_EN,
         )
     }
 
@@ -48,5 +49,7 @@ class FakeNutritionParser @Inject constructor(private val localeProvider: AppLoc
         const val ITEM_NAME_RU = "Пробное блюдо"
         const val NOTE_EN = "Sample values from the offline parser stub."
         const val NOTE_RU = "Значения-заглушки офлайн-парсера."
+        const val SUMMARY_EN = "sample dish with stub values"
+        const val SUMMARY_RU = "пробное блюдо со значениями-заглушками"
     }
 }

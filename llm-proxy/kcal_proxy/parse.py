@@ -20,7 +20,16 @@ from typing import Any
 from botocore.exceptions import ClientError, ConnectTimeoutError, ReadTimeoutError
 
 from .config import Config
-from .prompt import CANARY, MAX_ITEMS, MAX_QUESTION_CHARS, build_messages, build_system, tool_config
+from .prompt import (
+    CANARY,
+    MAX_ITEMS,
+    MAX_QUESTION_CHARS,
+    MAX_SUMMARY_CHARS,
+    MAX_SUMMARY_WORDS,
+    build_messages,
+    build_system,
+    tool_config,
+)
 
 
 class ProxyError(Exception):
@@ -363,13 +372,28 @@ def sanitize_payload(tool: str, items: list[dict], note: str | None, question: s
     return items, note, question, problems
 
 
-def output_pieces(items: list[dict], note: str | None, question: str) -> list[str]:
+def sanitize_summary(payload: Any) -> str | None:
+    """The one-line meal name the app shows in its journal, or None when it is unusable.
+
+    The schema requires it, but it only ever feeds a display line: a model that omits it
+    must not turn an otherwise valid meal into a transport failure, so this never adds a
+    problem. The word cap is enforced here rather than trusted to the model.
+    """
+    value = payload.get("summary") if isinstance(payload, dict) else None
+    if not isinstance(value, str):
+        return None
+    # sanitize_string collapses whitespace, which is what keeps the result a single line.
+    words = sanitize_string(value, MAX_SUMMARY_CHARS).split()
+    return " ".join(words[:MAX_SUMMARY_WORDS]).rstrip(".") or None
+
+
+def output_pieces(items: list[dict], note: str | None, question: str, summary: str | None = None) -> list[str]:
     """Every human-readable string of a response, one piece each.
 
-    The contract localizes `items[].name`, `note` and `question` individually, so they are
-    language-checked individually: a long localized name must not mask a foreign one.
+    The contract localizes `items[].name`, `summary`, `note` and `question` individually, so
+    they are language-checked individually: a long localized name must not mask a foreign one.
     """
-    return [str(item["name"]) for item in items] + [note or "", question]
+    return [str(item["name"]) for item in items] + [note or "", question, summary or ""]
 
 
 def _piece_language_ok(piece: str, lang: str) -> bool | None:
@@ -458,6 +482,7 @@ def run_parse(
         payload = uses[0].get("input") if uses else None
         items: list[dict] = []
         note: str | None = None
+        summary: str | None = None
         question = ""
 
         if len(uses) != 1:
@@ -468,17 +493,18 @@ def run_parse(
             problems.append("the tool call was truncated, answer with fewer items")
         elif tool == "log_food":
             items, note, problems = normalize_log_food(payload)
+            summary = sanitize_summary(payload)
         else:
             question, problems = normalize_ask_clarification(payload, bool(req.question))
 
         if not problems:
             items, note, question, problems = sanitize_payload(tool, items, note, question)
-            problems += check_output_text(output_pieces(items, note, question), lang)
+            problems += check_output_text(output_pieces(items, note, question, summary), lang)
 
         if not problems:
             meta.flags = _soft_flags(items) if tool == "log_food" else []
             body: dict[str, Any] = (
-                {"type": "success", "items": items, "note": note}
+                {"type": "success", "items": items, "summary": summary, "note": note}
                 if tool == "log_food"
                 else {"type": "clarification", "question": question}
             )

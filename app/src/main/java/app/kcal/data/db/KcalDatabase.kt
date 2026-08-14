@@ -10,7 +10,7 @@ import androidx.room.RoomDatabase
         WeightEntryEntity::class,
         DailyTargetSnapshotEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class KcalDatabase : RoomDatabase() {

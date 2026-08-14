@@ -52,6 +52,7 @@ import app.kcal.core.designsystem.KcalSpacing
 import app.kcal.core.designsystem.KcalTheme
 import app.kcal.domain.model.ThemeMode
 import app.kcal.feature.entry.components.MealItemCard
+import app.kcal.feature.entry.components.MealItemTextField
 import app.kcal.llm.FailureReason
 
 /**
@@ -90,6 +91,7 @@ fun EntryRoute(onClose: () -> Unit, onLogManually: () -> Unit, viewModel: EntryV
         onClarificationAnswerChange = viewModel::onClarificationAnswerChange,
         onSubmitClarification = viewModel::onSubmitClarification,
         onRetry = viewModel::onRetry,
+        onSummaryChange = viewModel::onSummaryChange,
         onItemChange = viewModel::onItemChange,
         onAddItem = viewModel::onAddItem,
         onRemoveItem = viewModel::onRemoveItem,
@@ -127,6 +129,7 @@ fun EntryScreen(
     onClarificationAnswerChange: (Long, String) -> Unit,
     onSubmitClarification: (Long) -> Unit,
     onRetry: (Long) -> Unit,
+    onSummaryChange: (String) -> Unit,
     onItemChange: (Long, MealItemField, String) -> Unit,
     onAddItem: () -> Unit,
     onRemoveItem: (Long) -> Unit,
@@ -203,6 +206,7 @@ fun EntryScreen(
         ) {
             ConfirmationSheetContent(
                 uiState = uiState,
+                onSummaryChange = onSummaryChange,
                 onItemChange = onItemChange,
                 onAddItem = onAddItem,
                 onRemoveItem = onRemoveItem,
@@ -426,6 +430,7 @@ private fun FailureCard(reason: FailureReason, enabled: Boolean, onRetry: () -> 
 @Composable
 private fun ConfirmationSheetContent(
     uiState: EntryUiState,
+    onSummaryChange: (String) -> Unit,
     onItemChange: (Long, MealItemField, String) -> Unit,
     onAddItem: () -> Unit,
     onRemoveItem: (Long) -> Unit,
@@ -447,6 +452,13 @@ private fun ConfirmationSheetContent(
         if (uiState.note != null) {
             Text(text = uiState.note, style = MaterialTheme.typography.bodyMedium)
         }
+        MealItemTextField(
+            value = uiState.summary,
+            label = stringResource(R.string.field_meal_summary),
+            error = null,
+            enabled = !uiState.isSaving,
+            onValueChange = onSummaryChange,
+        )
         uiState.items.forEachIndexed { index, item ->
             MealItemCard(
                 number = index + 1,
@@ -511,6 +523,7 @@ private fun EntryPreview(themeMode: ThemeMode, uiState: EntryUiState) {
             onClarificationAnswerChange = { _, _ -> },
             onSubmitClarification = {},
             onRetry = {},
+            onSummaryChange = {},
             onItemChange = { _, _, _ -> },
             onAddItem = {},
             onRemoveItem = {},

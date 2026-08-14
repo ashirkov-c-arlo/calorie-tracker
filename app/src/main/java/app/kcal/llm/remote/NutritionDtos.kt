@@ -39,8 +39,17 @@ internal data class ClarificationDto(val question: String, val answer: String)
 @Serializable(with = ParseResponseSerializer::class)
 internal sealed interface ParseResponseDto {
 
+    /**
+     * `summary` is display-only text, so an older proxy that omits it must not fail the whole
+     * response: contract §4 lets the app fall back to listing item names.
+     */
     @Serializable
-    data class Success(val items: List<FoodItemDto>, val note: String?, val usage: UsageDto? = null) : ParseResponseDto
+    data class Success(
+        val items: List<FoodItemDto>,
+        val note: String?,
+        val summary: String? = null,
+        val usage: UsageDto? = null,
+    ) : ParseResponseDto
 
     @Serializable
     data class Clarification(val question: String, val usage: UsageDto? = null) : ParseResponseDto

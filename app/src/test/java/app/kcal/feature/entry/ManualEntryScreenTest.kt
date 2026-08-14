@@ -43,6 +43,7 @@ class ManualEntryScreenTest {
                 ManualEntryScreen(
                     uiState = uiState,
                     onBackClick = { closeCount++ },
+                    onSummaryChange = {},
                     onItemChange = { _, _, _ -> },
                     onAddItem = {},
                     onRemoveItem = {},

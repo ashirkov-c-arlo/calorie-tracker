@@ -36,6 +36,7 @@ import app.kcal.core.ui.ErrorScreen
 import app.kcal.core.ui.LoadingScreen
 import app.kcal.domain.model.ThemeMode
 import app.kcal.feature.entry.components.MealItemCard
+import app.kcal.feature.entry.components.MealItemTextField
 
 @Composable
 fun ManualEntryRoute(mealId: Long?, onClose: () -> Unit, viewModel: ManualEntryViewModel = hiltViewModel()) {
@@ -49,6 +50,7 @@ fun ManualEntryRoute(mealId: Long?, onClose: () -> Unit, viewModel: ManualEntryV
     ManualEntryScreen(
         uiState = uiState,
         onBackClick = onClose,
+        onSummaryChange = viewModel::onSummaryChange,
         onItemChange = viewModel::onItemChange,
         onAddItem = viewModel::onAddItem,
         onRemoveItem = viewModel::onRemoveItem,
@@ -62,6 +64,7 @@ fun ManualEntryRoute(mealId: Long?, onClose: () -> Unit, viewModel: ManualEntryV
 fun ManualEntryScreen(
     uiState: ManualEntryUiState,
     onBackClick: () -> Unit,
+    onSummaryChange: (String) -> Unit,
     onItemChange: (Long, MealItemField, String) -> Unit,
     onAddItem: () -> Unit,
     onRemoveItem: (Long) -> Unit,
@@ -112,6 +115,7 @@ fun ManualEntryScreen(
                 ManualEntryForm(
                     uiState = uiState,
                     onBackClick = close,
+                    onSummaryChange = onSummaryChange,
                     onItemChange = onItemChange,
                     onAddItem = onAddItem,
                     onRemoveItem = onRemoveItem,
@@ -126,6 +130,7 @@ fun ManualEntryScreen(
 private fun ManualEntryForm(
     uiState: ManualEntryUiState,
     onBackClick: () -> Unit,
+    onSummaryChange: (String) -> Unit,
     onItemChange: (Long, MealItemField, String) -> Unit,
     onAddItem: () -> Unit,
     onRemoveItem: (Long) -> Unit,
@@ -140,6 +145,13 @@ private fun ManualEntryForm(
             .padding(KcalSpacing.medium),
         verticalArrangement = Arrangement.spacedBy(KcalSpacing.medium),
     ) {
+        MealItemTextField(
+            value = uiState.summary,
+            label = stringResource(R.string.field_meal_summary),
+            error = null,
+            enabled = !uiState.isSaving,
+            onValueChange = onSummaryChange,
+        )
         uiState.items.forEachIndexed { index, item ->
             MealItemCard(
                 number = index + 1,
@@ -185,6 +197,7 @@ private fun ManualEntryPreview(themeMode: ThemeMode, uiState: ManualEntryUiState
         ManualEntryScreen(
             uiState = uiState,
             onBackClick = {},
+            onSummaryChange = {},
             onItemChange = { _, _, _ -> },
             onAddItem = {},
             onRemoveItem = {},

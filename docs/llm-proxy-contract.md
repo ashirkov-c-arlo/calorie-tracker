@@ -139,6 +139,7 @@ HTTP status: `200 OK`.
       "confidence": 0.91
     }
   ],
+  "summary": "chicken breast with boiled rice",
   "note": null,
   "usage": {
     "input_tokens": 420,
@@ -160,6 +161,7 @@ HTTP status: `200 OK`.
 | `items[].fat_g` | number | yes | Non-negative |
 | `items[].carbs_g` | number | yes | Non-negative |
 | `items[].confidence` | number | yes | Inclusive range `0.0..1.0` |
+| `summary` | string or null | yes | One line naming the meal, at most 10 words; localized to `Accept-Language` |
 | `note` | string or null | yes | Localized to `Accept-Language` |
 | `usage` | object | no | Omitted when the provider does not return usage |
 | `usage.input_tokens` | integer | with usage | Non-negative |
@@ -171,6 +173,11 @@ infinity.
 The proxy enforces schema validity. The app independently validates the response. App-side
 sanity bounds such as `kcal > 5000` remain editable `needs review` warnings rather than
 transport failures.
+
+`summary` is display-only: it names the meal in the app's journal and never carries numbers.
+The proxy caps it at 10 words and collapses whitespace, so the app can render it on one line.
+Because nothing numeric depends on it, a response whose `summary` is missing or unusable stays
+a `success` with `summary = null`, and the app falls back to listing item names.
 
 ---
 
@@ -256,6 +263,7 @@ Tool input shapes:
 log_food:
 {
   items: [{ name, grams, kcal, protein_g, fat_g, carbs_g, confidence }],
+  summary,
   note
 }
 

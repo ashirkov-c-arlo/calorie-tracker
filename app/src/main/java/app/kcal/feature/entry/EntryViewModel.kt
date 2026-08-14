@@ -61,7 +61,12 @@ class EntryViewModel @Inject constructor(
      */
     private var pendingCapture: PendingCapture? = null
 
-    private data class ParsedInput(val items: List<FoodItem>, val note: String?, val fromPhoto: Boolean)
+    private data class ParsedInput(
+        val items: List<FoodItem>,
+        val note: String?,
+        val summary: String?,
+        val fromPhoto: Boolean,
+    )
 
     private data class PendingCapture(val inputKey: Long, val capture: TransientCapture)
 
@@ -213,6 +218,10 @@ class EntryViewModel @Inject constructor(
         resend(input, input.pendingClarification())
     }
 
+    fun onSummaryChange(summary: String) {
+        _uiState.value = _uiState.value.copy(summary = summary, saveFailed = false)
+    }
+
     fun onItemChange(key: Long, field: MealItemField, value: String) {
         val state = _uiState.value
         _uiState.value = state.copy(items = state.items.changingItem(key, field, value), saveFailed = false)
@@ -239,6 +248,7 @@ class EntryViewModel @Inject constructor(
                 isConfirming = false,
                 items = persistentListOf(),
                 note = null,
+                summary = "",
                 saveFailed = false,
                 inputs = state.inputs.map { it.copy(isParsed = false) }.toPersistentList(),
             )
@@ -267,6 +277,7 @@ class EntryViewModel @Inject constructor(
                         items = foodItems,
                         source = source,
                         rawUserInput = state.inputs.joinToString(separator = "\n") { it.text },
+                        summary = state.summary,
                     )
                 when (result) {
                     is SaveMealResult.Saved -> eventChannel.send(EntryEvent.Saved)
@@ -352,6 +363,7 @@ class EntryViewModel @Inject constructor(
                     ParsedInput(
                         items = result.items,
                         note = result.note,
+                        summary = result.summary,
                         fromPhoto = request is UserInput.TextWithPhoto,
                     )
                 // Contract §8: the photo is deleted as soon as a final answer arrives. A
@@ -394,6 +406,7 @@ class EntryViewModel @Inject constructor(
             state.copy(
                 isConfirming = true,
                 note = results.mapNotNull { it.note }.distinct().joinToString("\n").ifBlank { null },
+                summary = results.mapNotNull { it.summary }.distinct().joinToString(SUMMARY_SEPARATOR),
                 items = items,
             )
     }
@@ -407,5 +420,10 @@ class EntryViewModel @Inject constructor(
     public override fun onCleared() {
         pendingCapture = null
         photoStore.clear()
+    }
+
+    private companion object {
+        /** Several described items produce several one-line summaries; the meal keeps them all. */
+        const val SUMMARY_SEPARATOR = ", "
     }
 }

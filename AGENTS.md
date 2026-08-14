@@ -219,6 +219,7 @@ data class MealEntry(
     val items: List<FoodItem>,
     val rawUserInput: String?,
     val source: EntrySource,
+    val summary: String?,   // one-line meal name for the journal; null = fall back to item names
 )
 
 data class WeightEntry(val localDate: LocalDate, val kg: Double)
@@ -394,7 +395,7 @@ sealed interface UserInput {
 }
 
 sealed interface ParseResult {
-    data class Success(val items: List<FoodItem>, val note: String?) : ParseResult
+    data class Success(val items: List<FoodItem>, val note: String?, val summary: String?) : ParseResult
     data class NeedsClarification(val question: String) : ParseResult
     data class Failure(val reason: FailureReason, val cause: Throwable? = null) : ParseResult
 }
@@ -470,7 +471,7 @@ Free-form model text is never parsed. The backend obtains structured output thro
 Converse **tool use**. It declares both versioned tools and requires one tool call with
 `toolChoice = any`; it accepts exactly one known tool-use block:
 
-- `log_food` → `{ items: [{ name, grams, kcal, protein_g, fat_g, carbs_g, confidence }], note }`
+- `log_food` → `{ items: [{ name, grams, kcal, protein_g, fat_g, carbs_g, confidence }], summary, note }`
 - `ask_clarification` → `{ question }` (used instead of guessing wildly)
 
 The backend extracts the selected tool input and wraps it in the contract's required

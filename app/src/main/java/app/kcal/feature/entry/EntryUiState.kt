@@ -33,6 +33,8 @@ data class EntryUiState(
     val inputs: PersistentList<EntryInputUiState> = persistentListOf(EntryInputUiState(key = FIRST_ITEM_KEY)),
     val isConfirming: Boolean = false,
     val note: String? = null,
+    /** The one-line meal name the parser proposed; editable before it is stored. */
+    val summary: String = "",
     val items: PersistentList<MealItemUiState> = persistentListOf(),
     val isSaving: Boolean = false,
     val saveFailed: Boolean = false,
@@ -86,6 +88,7 @@ internal val entryMultipleInputsPreviewState = entryState(
 internal val entryConfirmationPreviewState = entryIdlePreviewState.copy(
     isConfirming = true,
     note = "Weights are estimated from a typical serving.",
+    summary = "omelette with coffee and milk",
     items =
     persistentListOf(
         MealItemUiState(
@@ -118,6 +121,7 @@ internal val entryConfirmationPreviewState = entryIdlePreviewState.copy(
  */
 internal val entryConfirmationRussianPreviewState = entryConfirmationPreviewState.copy(
     note = "Вес порций оценён по типичной подаче.",
+    summary = "омлет и кофе с молоком",
     items =
     persistentListOf(
         MealItemUiState(

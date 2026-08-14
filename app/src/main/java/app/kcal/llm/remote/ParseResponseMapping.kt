@@ -31,7 +31,13 @@ private fun ParseResponseDto.Success.toSuccess(validateMeal: ValidateMeal): Pars
     if (!usage.isContractValid()) return ParseResult.Failure(FailureReason.INVALID_RESPONSE)
     val foodItems = items.map { it.toFoodItem() }
     return when (validateMeal(foodItems)) {
-        MealValidationResult.Valid -> ParseResult.Success(items = foodItems, note = note?.takeIf { it.isNotBlank() })
+        MealValidationResult.Valid ->
+            ParseResult.Success(
+                items = foodItems,
+                note = note?.takeIf { it.isNotBlank() },
+                summary = summary?.trim()?.takeIf { it.isNotBlank() },
+            )
+
         is MealValidationResult.Invalid -> ParseResult.Failure(FailureReason.INVALID_RESPONSE)
     }
 }

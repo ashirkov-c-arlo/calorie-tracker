@@ -63,6 +63,7 @@ class TodayViewModelTest {
                         id = 1,
                         at = Instant.parse("2026-03-15T08:00:00Z"),
                         items = listOf(foodItem(name = "Breakfast", kcal = 300)),
+                        summary = "oatmeal with a banana",
                     ),
                 ),
             )
@@ -78,6 +79,8 @@ class TodayViewModelTest {
         val loaded = states.last()
         assertFalse(loaded.isLoading)
         assertEquals(listOf("Breakfast", "Lunch"), loaded.meals.map { it.itemNames.single() })
+        // The journal shows the stored summary and falls back to item names when there is none.
+        assertEquals(listOf("oatmeal with a banana", null), loaded.meals.map { it.summary })
         assertEquals(800L, loaded.consumed.kcal)
         val target = assertNotNull(targets.snapshots.value[today])
         assertEquals(800f / target.targets.kcal, loaded.progress?.kcalFraction)

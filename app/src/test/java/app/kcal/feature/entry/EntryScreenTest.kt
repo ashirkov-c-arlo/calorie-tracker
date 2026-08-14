@@ -195,6 +195,7 @@ class EntryScreenTest {
                     onClarificationAnswerChange = { _, _ -> },
                     onSubmitClarification = {},
                     onRetry = onRetry,
+                    onSummaryChange = {},
                     onItemChange = { _, _, _ -> },
                     onAddItem = {},
                     onRemoveItem = {},

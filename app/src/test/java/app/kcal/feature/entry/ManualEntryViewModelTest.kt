@@ -137,6 +137,7 @@ class ManualEntryViewModelTest {
             mealEntry(
                 id = 8,
                 items = listOf(foodItem(name = "Rice", grams = 125.5, proteinG = 4.5)),
+                summary = "rice with chicken",
             )
         val repository = FakeMealRepository(listOf(original))
         val viewModel = viewModel(repository, Locale.forLanguageTag("ru"))
@@ -147,10 +148,14 @@ class ManualEntryViewModelTest {
         assertEquals("125,5", item.grams)
         assertEquals("4,5", item.protein)
 
+        assertEquals("rice with chicken", viewModel.uiState.value.summary)
+
         viewModel.onItemChange(item.key, MealItemField.NAME, "Brown rice")
+        viewModel.onSummaryChange("brown rice with chicken")
         viewModel.onSave()
         runCurrent()
 
+        assertEquals("brown rice with chicken", repository.meals.value.single().summary)
         assertEquals(8, repository.meals.value.single().id)
         assertEquals("Brown rice", repository.meals.value.single().items.single().name)
         assertEquals(original.at, repository.meals.value.single().at)

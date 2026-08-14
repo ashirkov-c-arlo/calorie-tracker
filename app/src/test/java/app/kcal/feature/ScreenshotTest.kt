@@ -438,6 +438,7 @@ class ScreenshotTest {
         ManualEntryScreen(
             uiState = uiState,
             onBackClick = {},
+            onSummaryChange = {},
             onItemChange = { _, _, _ -> },
             onAddItem = {},
             onRemoveItem = {},
@@ -459,6 +460,7 @@ class ScreenshotTest {
             onClarificationAnswerChange = { _, _ -> },
             onSubmitClarification = {},
             onRetry = {},
+            onSummaryChange = {},
             onItemChange = { _, _, _ -> },
             onAddItem = {},
             onRemoveItem = {},

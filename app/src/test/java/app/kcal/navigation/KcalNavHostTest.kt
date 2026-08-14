@@ -114,6 +114,7 @@ class KcalNavHostTest {
                         ManualEntryScreen(
                             uiState = manualEntryEmptyPreviewState.copy(mealId = mealId),
                             onBackClick = onClose,
+                            onSummaryChange = {},
                             onItemChange = { _, _, _ -> },
                             onAddItem = {},
                             onRemoveItem = {},
@@ -133,6 +134,7 @@ class KcalNavHostTest {
                             onClarificationAnswerChange = { _, _ -> },
                             onSubmitClarification = {},
                             onRetry = {},
+                            onSummaryChange = {},
                             onItemChange = { _, _, _ -> },
                             onAddItem = {},
                             onRemoveItem = {},

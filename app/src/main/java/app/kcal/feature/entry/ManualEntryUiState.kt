@@ -6,6 +6,8 @@ import kotlinx.collections.immutable.persistentListOf
 data class ManualEntryUiState(
     val isLoading: Boolean = true,
     val mealId: Long? = null,
+    /** The one-line meal name; empty means the journal falls back to item names. */
+    val summary: String = "",
     val items: PersistentList<MealItemUiState> = persistentListOf(),
     val isSaving: Boolean = false,
     val loadFailed: Boolean = false,
@@ -23,6 +25,7 @@ internal val manualEntryEmptyPreviewState = ManualEntryUiState(
 
 internal val manualEntryContentPreviewState = ManualEntryUiState(
     isLoading = false,
+    summary = "roasted chicken with rice",
     items =
     persistentListOf(
         MealItemUiState(

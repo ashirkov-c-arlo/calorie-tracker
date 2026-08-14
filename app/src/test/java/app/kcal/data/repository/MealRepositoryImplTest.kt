@@ -49,12 +49,18 @@ class MealRepositoryImplTest {
             )
         val id =
             repository.save(
-                mealEntry(id = 0, localDate = date, items = listOf(foodItem(kcal = 5001))),
+                mealEntry(
+                    id = 0,
+                    localDate = date,
+                    items = listOf(foodItem(kcal = 5001)),
+                    summary = "one very large pizza",
+                ),
                 target,
             )
 
         val stored = repository.observeByDate(date).first().single()
         assertEquals(id, stored.id)
+        assertEquals("one very large pizza", stored.summary)
         assertEquals(5001, stored.items.single().macros.kcal)
         assertTrue(database.mealEntryDao().findFoodItems(id).single().needsReview)
         assertEquals(2000, database.dailyTargetSnapshotDao().findByDate(date.toEpochDay().toInt())?.kcal)
