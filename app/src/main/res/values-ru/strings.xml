@@ -152,7 +152,6 @@
 
     <string name="warning_rate_limited">Темп ограничен до 1 кг в неделю и 1 процента массы тела.</string>
     <string name="warning_deficit_capped">Дефицит ограничен 20 процентами суточного расхода энергии и 750 ккал.</string>
-    <string name="warning_intake_floor">Минимальное потребление для выбранного варианта формулы ограничило дефицит.</string>
     <string name="warning_target_reached">Текущий вес уже достиг целевого, поэтому цель — поддержание веса.</string>
 
     <string name="unavailable_missing_inputs">Заполните все поля, чтобы увидеть оценку.</string>

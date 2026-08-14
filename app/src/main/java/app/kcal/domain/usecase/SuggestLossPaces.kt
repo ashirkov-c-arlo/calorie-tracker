@@ -9,8 +9,8 @@ import kotlin.math.round
  *
  * Each pace is a share of body weight per week, which is the same quantity the approved
  * `1% of body weight` guardrail uses, so the fastest option never exceeds it. The remaining
- * guardrails, the 20% of energy expenditure deficit cap, the 750 kcal cap and the minimum
- * intake floor, are deliberately *not* pre-applied: the selected pace is stored as the
+ * guardrails, the 20% of energy expenditure deficit cap and the 750 kcal cap, are
+ * deliberately *not* pre-applied: the selected pace is stored as the
  * user's intent and [CalculateDailyTargets] reports the effective pace together with the
  * reason it differs.
  *

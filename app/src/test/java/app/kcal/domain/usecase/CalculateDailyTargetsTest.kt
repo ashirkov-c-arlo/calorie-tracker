@@ -188,30 +188,18 @@ class CalculateDailyTargetsTest {
     }
 
     @Test
-    fun `the minimum intake floor is applied and reported`() {
-        // RMR = 550 + 1031.25 - 225 + 5 = 1361.25; TDEE = 1633.5, floor 1500 for this variant.
-        val result =
-            available(
+    fun `low energy estimates use the percentage deficit cap`() {
+        val cases =
+            listOf(
                 ProfileInputs(
-                    currentWeightKg = 55.0,
+                    currentWeightKg = 69.0,
                     heightCm = 165.0,
-                    ageYears = 45,
+                    ageYears = 35,
                     energyEquationSex = EnergyEquationSex.MALE,
                     activityLevel = ActivityLevel.SEDENTARY,
-                    targetWeightKg = 50.0,
-                    requestedLossRateKgPerWeek = 1.0,
-                ),
-            )
-
-        assertEquals(EnergyEquationSex.MALE.minimumIntakeKcal, result.targets.kcal)
-        assertTrue(DailyTargetWarning.INTAKE_FLOOR_APPLIED in result.warnings)
-    }
-
-    @Test
-    fun `the intake floor never pushes the target above maintenance`() {
-        // TDEE 1171.8 is below the female floor of 1200, so the target stays at maintenance.
-        val result =
-            available(
+                    targetWeightKg = 60.0,
+                    requestedLossRateKgPerWeek = 0.34,
+                ) to 1489,
                 ProfileInputs(
                     currentWeightKg = 50.0,
                     heightCm = 150.0,
@@ -220,12 +208,14 @@ class CalculateDailyTargetsTest {
                     activityLevel = ActivityLevel.SEDENTARY,
                     targetWeightKg = 45.0,
                     requestedLossRateKgPerWeek = 0.5,
-                ),
+                ) to 937,
             )
 
-        assertEquals(1172, result.targets.kcal)
-        assertEquals(0.0, result.effectiveLossRateKgPerWeek, TOLERANCE)
-        assertTrue(DailyTargetWarning.INTAKE_FLOOR_APPLIED in result.warnings)
+        cases.forEach { (input, expectedKcal) ->
+            val result = available(input)
+            assertEquals(expectedKcal, result.targets.kcal)
+            assertEquals(setOf(DailyTargetWarning.DEFICIT_CAPPED), result.warnings)
+        }
     }
 
     @Test

@@ -307,18 +307,17 @@ guardrails:
 safeRateKgPerWeek = min(requestedRateKgPerWeek, 1.0, currentWeightKg × 0.01)
 requestedDeficit = safeRateKgPerWeek × 7700 / 7
 cappedDeficit = min(requestedDeficit, TDEE × 0.20, 750)
-minimumIntake = 1200 for FEMALE, 1500 for MALE
 
 if currentWeightKg <= targetWeightKg:
     targetKcal = TDEE
 else:
-    targetKcal = min(TDEE, max(TDEE - cappedDeficit, minimumIntake))
+    targetKcal = TDEE - cappedDeficit
 
 effectiveRateKgPerWeek = max(0, TDEE - targetKcal) × 7 / 7700
 ```
 
-The `7700 kcal/kg` conversion is an initial approximation, not a promise. If a rate,
-deficit cap, or intake floor changes the requested pace, preserve the user's input but
+The `7700 kcal/kg` conversion is an initial approximation, not a promise. If a rate limit
+or deficit cap changes the requested pace, preserve the user's input but
 show the effective estimated pace and a localized explanation. Recalculate from the
 latest weight. Round only the final displayed/stored targets, not intermediate values.
 
@@ -355,7 +354,7 @@ require explicit future approval.
   an unavailable result, never guessed defaults or partially calculated targets.
 - Calculated calories and macro grams must be finite and non-negative. Their energy sum
   must match the calorie target within the documented final-rounding tolerance.
-- Rate, deficit, and intake guardrails are never silent: return the requested and effective
+- Rate and deficit guardrails are never silent: return the requested and effective
   rates plus a warning whenever they differ.
 - A parsed meal must contain at least one item. Missing fields, non-finite/negative values,
   invalid confidence, and empty items are hard-invalid LLM responses.
@@ -668,7 +667,7 @@ Rules:
   current date is a bug.
 - Locale and unit system are explicit test inputs; tests never depend on machine defaults.
 - Cover both Mifflin–St Jeor branches, all four PAL values, target reached, rate/deficit
-  caps, intake floors, and an under-18 unavailable result.
+  caps, and an under-18 unavailable result.
 - Assert macro energy sums within rounding tolerance and protein/fat/carbohydrate shares
   remain in the specified ranges.
 - Cover decimal comma/dot input and metric ↔ imperial round trips within a stated tolerance.

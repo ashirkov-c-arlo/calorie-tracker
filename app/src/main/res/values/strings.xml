@@ -154,7 +154,6 @@
 
     <string name="warning_rate_limited">The pace is limited to at most 1 kg per week and 1 percent of your body weight.</string>
     <string name="warning_deficit_capped">The deficit is capped at 20 percent of your daily energy use and at 750 kcal.</string>
-    <string name="warning_intake_floor">The minimum intake for the selected formula variant limited the deficit.</string>
     <string name="warning_target_reached">Your current weight already reached the target, so the goal is maintenance.</string>
 
     <string name="unavailable_missing_inputs">Fill in every field to see an estimate.</string>

@@ -304,7 +304,6 @@ internal fun ActivityLevel.labelRes(): Int = when (this) {
 internal fun DailyTargetWarning.messageRes(): Int = when (this) {
     DailyTargetWarning.RATE_LIMITED -> R.string.warning_rate_limited
     DailyTargetWarning.DEFICIT_CAPPED -> R.string.warning_deficit_capped
-    DailyTargetWarning.INTAKE_FLOOR_APPLIED -> R.string.warning_intake_floor
     DailyTargetWarning.TARGET_WEIGHT_REACHED -> R.string.warning_target_reached
 }
 

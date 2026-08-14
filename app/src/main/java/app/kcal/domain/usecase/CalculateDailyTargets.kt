@@ -23,9 +23,6 @@ enum class DailyTargetWarning {
     /** The deficit was capped at 20% of TDEE or 750 kcal. */
     DEFICIT_CAPPED,
 
-    /** The minimum intake floor for the selected formula variant was applied. */
-    INTAKE_FLOOR_APPLIED,
-
     /** Current weight already reached the target weight, so the target is maintenance. */
     TARGET_WEIGHT_REACHED,
 }
@@ -45,7 +42,7 @@ sealed interface DailyTargetResult {
 /**
  * Deterministic daily calorie and macro estimate for generally healthy adults aged 18+.
  * Mifflin-St Jeor resting metabolic rate, one habitual activity multiplier, conservative
- * rate/deficit/intake guardrails, weight-based protein, fat at 25% of energy, and
+ * rate and deficit guardrails, weight-based protein, fat at 25% of energy, and
  * carbohydrates as the remainder. An LLM never performs this arithmetic.
  */
 class CalculateDailyTargets {
@@ -94,17 +91,8 @@ class CalculateDailyTargets {
             warnings += DailyTargetWarning.DEFICIT_CAPPED
         }
 
-        val minimumIntake = inputs.energyEquationSex.minimumIntakeKcal.toDouble()
         val targetKcalExact =
-            if (targetReached) {
-                totalDailyEnergyExpenditure
-            } else {
-                val floored = max(totalDailyEnergyExpenditure - cappedDeficit, minimumIntake)
-                if (floored > totalDailyEnergyExpenditure - cappedDeficit) {
-                    warnings += DailyTargetWarning.INTAKE_FLOOR_APPLIED
-                }
-                min(totalDailyEnergyExpenditure, floored)
-            }
+            if (targetReached) totalDailyEnergyExpenditure else totalDailyEnergyExpenditure - cappedDeficit
 
         val targets = macrosFor(targetKcalExact, inputs)
         val effectiveLossRateKgPerWeek =

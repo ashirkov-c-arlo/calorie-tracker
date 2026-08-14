@@ -104,7 +104,6 @@ data class ProfileFormUiState(
 private val WARNING_ORDER =
     persistentListOf(
         DailyTargetWarning.TARGET_WEIGHT_REACHED,
-        DailyTargetWarning.INTAKE_FLOOR_APPLIED,
         DailyTargetWarning.DEFICIT_CAPPED,
         DailyTargetWarning.RATE_LIMITED,
     )

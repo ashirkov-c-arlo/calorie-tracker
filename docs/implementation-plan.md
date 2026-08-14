@@ -247,7 +247,7 @@ next collection instead of pretending cross-store atomicity.
 - Implement `CalculateDailyTargets` exactly as specified in `AGENTS.md`:
   - Mifflin–St Jeor;
   - PAL;
-  - requested-rate, deficit, and intake guardrails;
+  - requested-rate and deficit guardrails;
   - effective loss rate;
   - weight-based protein with percentage bounds;
   - fat at 25%;
@@ -281,7 +281,7 @@ next collection instead of pretending cross-store atomicity.
 - All PAL values.
 - Missing fields and age below 18.
 - Target reached and zero requested loss.
-- 1%/week, 20% TDEE, 750 kcal, and intake-floor guards.
+- 1%/week, 20% TDEE, and 750 kcal guards.
 - Macro ranges and energy sum.
 - Metric/imperial round trips.
 - Dot/comma parsing.
