@@ -37,7 +37,7 @@ class EntryScreenTest {
         composeRule.onNodeWithText(string(R.string.entry_text_hint)).assertIsDisplayed()
         composeRule.onNodeWithText(string(R.string.action_parse)).assertIsEnabled()
         composeRule.onNodeWithText(string(R.string.action_add_item)).assertIsEnabled()
-        composeRule.onNodeWithText(string(R.string.action_log_manually)).assertIsEnabled()
+        composeRule.onNodeWithContentDescription(string(R.string.action_log_manually)).assertIsEnabled()
     }
 
     @Test
@@ -78,7 +78,7 @@ class EntryScreenTest {
         composeRule.onNodeWithContentDescription(string(R.string.action_cancel)).assertIsNotEnabled()
         composeRule.onNodeWithText(string(R.string.action_parse)).assertIsNotEnabled()
         composeRule.onNodeWithText(string(R.string.action_add_item)).assertIsNotEnabled()
-        composeRule.onNodeWithText(string(R.string.action_log_manually)).assertIsNotEnabled()
+        composeRule.onNodeWithContentDescription(string(R.string.action_log_manually)).assertIsNotEnabled()
     }
 
     @Test
@@ -88,7 +88,7 @@ class EntryScreenTest {
 
         composeRule.onNodeWithText(string(R.string.entry_failure_no_network)).assertIsDisplayed()
         composeRule.onNodeWithText(string(R.string.action_retry)).performClick()
-        composeRule.onNodeWithText(string(R.string.action_log_manually)).assertIsEnabled()
+        composeRule.onNodeWithContentDescription(string(R.string.action_log_manually)).assertIsEnabled()
         assertEquals(entryFailurePreviewState.inputs.single().key, retried)
     }
 

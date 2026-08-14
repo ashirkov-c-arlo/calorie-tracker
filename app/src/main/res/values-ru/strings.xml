@@ -9,7 +9,6 @@
     <string name="history_title">История</string>
     <string name="settings_title">Настройки</string>
     <string name="profile_setup_title">Ваш профиль</string>
-    <string name="manual_entry_add_title">Добавить приём пищи</string>
     <string name="manual_entry_edit_title">Изменить приём пищи</string>
     <string name="entry_title">Запись еды</string>
 
@@ -85,9 +84,10 @@
     <string name="entry_failure_unavailable">Автоматическое чтение недоступно. Запишите приём пищи вручную.</string>
     <string name="entry_failure_unknown">Не удалось прочитать описание. Повторите попытку или запишите вручную.</string>
 
-    <string name="action_parse">Прочитать описание</string>
+    <string name="action_parse">Записать</string>
     <string name="action_send_answer">Отправить ответ</string>
     <string name="action_log_manually">Записать вручную</string>
+    <string name="action_switch_to_auto">Переключить на автоматическую запись</string>
     <string name="action_confirm">Сохранить приём пищи</string>
 
     <string name="profile_intro">Введите данные один раз. Все поля обязательны, позже их можно изменить в настройках.</string>

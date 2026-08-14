@@ -43,6 +43,7 @@ class ManualEntryScreenTest {
                 ManualEntryScreen(
                     uiState = uiState,
                     onBackClick = { closeCount++ },
+                    onSwitchToAuto = {},
                     onSummaryChange = {},
                     onItemChange = { _, _, _ -> },
                     onAddItem = {},
@@ -55,7 +56,6 @@ class ManualEntryScreenTest {
 
         val cancel = composeRule.activity.getString(R.string.action_cancel)
         composeRule.onNodeWithContentDescription(cancel).assertIsNotEnabled()
-        composeRule.onNodeWithText(cancel).assertIsNotEnabled()
         composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
         assertEquals(0, closeCount)
         assertEquals(0, fallbackBackCount)

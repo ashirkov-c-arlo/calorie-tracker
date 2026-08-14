@@ -438,6 +438,7 @@ class ScreenshotTest {
         ManualEntryScreen(
             uiState = uiState,
             onBackClick = {},
+            onSwitchToAuto = {},
             onSummaryChange = {},
             onItemChange = { _, _, _ -> },
             onAddItem = {},

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -156,6 +157,14 @@ fun EntryScreen(
                         )
                     }
                 },
+                actions = {
+                    IconButton(onClick = onLogManually, enabled = !busy) {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = stringResource(R.string.action_log_manually),
+                        )
+                    }
+                },
             )
         },
     ) { contentPadding ->
@@ -191,9 +200,6 @@ fun EntryScreen(
             }
             Button(onClick = onParse, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                 Text(text = stringResource(R.string.action_parse))
-            }
-            TextButton(onClick = onLogManually, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                Text(text = stringResource(R.string.action_log_manually))
             }
         }
     }

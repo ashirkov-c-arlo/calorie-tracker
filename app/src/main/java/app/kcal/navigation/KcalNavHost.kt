@@ -70,9 +70,10 @@ fun KcalNavHost(
             onEditMealClick = onEditMealClick,
         )
     },
-    entryContent: @Composable (mealId: Long?, onClose: () -> Unit) -> Unit = { mealId, onClose ->
-        ManualEntryRoute(mealId = mealId, onClose = onClose)
-    },
+    entryContent: @Composable (mealId: Long?, onClose: () -> Unit, onSwitchToAuto: (() -> Unit)?) -> Unit =
+        { mealId, onClose, onSwitchToAuto ->
+            ManualEntryRoute(mealId = mealId, onClose = onClose, onSwitchToAuto = onSwitchToAuto)
+        },
     foodTextContent: @Composable (onClose: () -> Unit, onLogManually: () -> Unit) -> Unit =
         { onClose, onLogManually ->
             EntryRoute(onClose = onClose, onLogManually = onLogManually)
@@ -135,11 +136,19 @@ fun KcalNavHost(
                 )
             }
             composable<ManualEntryDestination> {
-                entryContent(null) { navController.popBackStack() }
+                entryContent(
+                    null,
+                    { navController.popBackStack() },
+                    {
+                        navController.navigate(EntryDestination) {
+                            popUpTo(ManualEntryDestination) { inclusive = true }
+                        }
+                    },
+                )
             }
             composable<EditMealDestination> { backStackEntry ->
                 val destination = backStackEntry.toRoute<EditMealDestination>()
-                entryContent(destination.mealId) { navController.popBackStack() }
+                entryContent(destination.mealId, { navController.popBackStack() }, null)
             }
         }
     }
