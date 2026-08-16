@@ -3,9 +3,12 @@ package app.kcal.feature.today
 import app.kcal.core.common.TimeProvider
 import app.kcal.domain.model.DailyTargetSnapshot
 import app.kcal.domain.model.Macros
+import app.kcal.domain.model.UserPreferences
 import app.kcal.domain.usecase.AggregateMealMacros
+import app.kcal.domain.usecase.LogWeight
 import app.kcal.testing.FakeDailyTargetRepository
 import app.kcal.testing.FakeMealRepository
+import app.kcal.testing.FakeProfileRepository
 import app.kcal.testing.foodItem
 import app.kcal.testing.mealEntry
 import kotlinx.coroutines.Dispatchers
@@ -180,14 +183,18 @@ class TodayViewModelTest {
         assertFalse(viewModel.uiState.value.isLoading)
     }
 
-    private fun viewModel(meals: FakeMealRepository, targets: FakeDailyTargetRepository): TodayViewModel =
-        TodayViewModel(
+    private fun viewModel(meals: FakeMealRepository, targets: FakeDailyTargetRepository): TodayViewModel {
+        val profileRepo = FakeProfileRepository(UserPreferences())
+        return TodayViewModel(
             mealRepository = meals,
             dailyTargetRepository = targets,
+            profileRepository = profileRepo,
+            logWeight = LogWeight(profileRepo),
             aggregateMealMacros = AggregateMealMacros(),
             timeProvider = timeProvider,
             localeProvider = { java.util.Locale.ENGLISH },
         )
+    }
 
     private fun targetSnapshot(localDate: LocalDate) = DailyTargetSnapshot(
         localDate = localDate,

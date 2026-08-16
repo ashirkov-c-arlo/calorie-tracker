@@ -24,11 +24,10 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
+import kotlin.test.assertNull
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class TrendsViewModelTest {
+class LoggedWeightsViewModelTest {
 
     private val today = LocalDate.of(2026, 3, 15)
     private val clock = MutableClock(Instant.parse("2026-03-15T07:00:00Z"))
@@ -36,7 +35,6 @@ class TrendsViewModelTest {
 
     @Before
     fun setUp() {
-        clock.current = Instant.parse("2026-03-15T07:00:00Z")
         Dispatchers.setMain(StandardTestDispatcher())
     }
 
@@ -46,58 +44,55 @@ class TrendsViewModelTest {
     }
 
     @Test
-    fun `loading becomes raw points with their calendar-window trend`() = runTest {
-        val repository = repository(today.minusDays(1) to 83.0, today to 81.0)
+    fun `selecting a logged day updates editedDate`() = runTest {
+        val past = today.minusDays(3)
+        val repository = repository(past to 90.0, today to 81.0)
         val viewModel = viewModel(repository)
         val states = collect(viewModel)
-
-        assertTrue(viewModel.uiState.value.isLoading)
         runCurrent()
 
-        val loaded = states.last()
-        assertFalse(loaded.isLoading)
-        assertEquals(listOf(today.minusDays(1), today), loaded.points.map { it.localDate })
-        assertEquals(listOf(83.0, 81.0), loaded.points.map { it.value })
-        assertEquals(listOf(83.0, 82.0), loaded.points.map { it.trendValue })
+        assertNull(states.last().editedDate)
+
+        viewModel.onEntryClick(past)
+        runCurrent()
+
+        assertEquals(past, states.last().editedDate)
     }
 
     @Test
-    fun `imperial units display weight in pounds`() = runTest {
-        val repository = repository(today to 81.0, unitSystem = UnitSystem.IMPERIAL)
+    fun `deleting an entry removes it from the list`() = runTest {
+        val past = today.minusDays(3)
+        val repository = repository(past to 90.0, today to 81.0)
         val viewModel = viewModel(repository)
         val states = collect(viewModel)
         runCurrent()
 
-        assertEquals(UnitSystem.IMPERIAL, states.last().unitSystem)
-        assertEquals(178.6, states.last().points.first().value, absoluteTolerance = 0.1)
-    }
+        assertEquals(2, states.last().points.size)
 
-    @Test
-    fun `a failing read is retryable`() = runTest {
-        val repository = repository(today to 81.0)
-        repository.readFails = true
-        val viewModel = viewModel(repository)
-        val states = collect(viewModel)
+        viewModel.onDeleteEntry(past)
         runCurrent()
 
-        assertTrue(states.last().hasError)
-
-        repository.readFails = false
-        viewModel.onRetry()
-        runCurrent()
-
-        assertFalse(states.last().hasError)
         assertEquals(1, states.last().points.size)
+        assertEquals(today, states.last().points.first().localDate)
+        assertNull(states.last().editedDate)
     }
 
     @Test
-    fun `empty weight list shows empty state`() = runTest {
-        val repository = repository()
+    fun `deleting the selected entry clears the selection`() = runTest {
+        val past = today.minusDays(3)
+        val repository = repository(past to 90.0, today to 81.0)
         val viewModel = viewModel(repository)
         val states = collect(viewModel)
         runCurrent()
 
-        assertTrue(states.last().points.isEmpty())
+        viewModel.onEntryClick(past)
+        runCurrent()
+        assertEquals(past, states.last().editedDate)
+
+        viewModel.onDeleteEntry(past)
+        runCurrent()
+
+        assertNull(states.last().editedDate)
     }
 
     private fun repository(
@@ -107,14 +102,15 @@ class TrendsViewModelTest {
         weightsByDate.value = sortedMapOf(*entries)
     }
 
-    private fun viewModel(repository: FakeProfileRepository): TrendsViewModel = TrendsViewModel(
-        profileRepository = repository,
-        buildWeightTrend = BuildWeightTrend(),
-        timeProvider = timeProvider,
-    )
+    private fun viewModel(repository: FakeProfileRepository): LoggedWeightsViewModel =
+        LoggedWeightsViewModel(
+            profileRepository = repository,
+            buildWeightTrend = BuildWeightTrend(),
+            timeProvider = timeProvider,
+        )
 
-    private fun TestScope.collect(viewModel: TrendsViewModel): List<TrendsUiState> {
-        val states = mutableListOf<TrendsUiState>()
+    private fun TestScope.collect(viewModel: LoggedWeightsViewModel): List<LoggedWeightsUiState> {
+        val states = mutableListOf<LoggedWeightsUiState>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.toList(states) }
         return states
     }

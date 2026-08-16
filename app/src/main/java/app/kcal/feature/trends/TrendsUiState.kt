@@ -21,7 +21,6 @@ data class TrendsUiState(
     val isLoading: Boolean = true,
     val hasError: Boolean = false,
     val unitSystem: UnitSystem = UnitSystem.METRIC,
-    val editedDate: LocalDate? = null,
     val points: PersistentList<WeightPointUiState> = persistentListOf(),
 ) {
     val latest: WeightPointUiState? get() = points.lastOrNull()
@@ -54,12 +53,6 @@ internal val trendsImperialPreviewState = trendsManyPointsPreviewState.let { sta
         unitSystem = UnitSystem.IMPERIAL,
         points = state.points.map { it.inPounds() }.toPersistentList(),
     )
-}
-
-/** Selecting a past entry. */
-internal val trendsEditingPastPreviewState = trendsManyPointsPreviewState.let { state ->
-    val corrected = state.points[state.points.size - 4]
-    state.copy(editedDate = corrected.localDate)
 }
 
 private fun WeightPointUiState.inPounds(): WeightPointUiState = copy(

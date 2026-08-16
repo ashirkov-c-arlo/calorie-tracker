@@ -19,10 +19,6 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
 
-/**
- * Weight trend viewing only. Weight input moved to Today screen.
- * This ViewModel now only displays the chart and handles deletion of entries.
- */
 @HiltViewModel
 class TrendsViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
@@ -40,34 +36,12 @@ class TrendsViewModel @Inject constructor(
         load()
     }
 
-    /** Picks up a day change after navigation or app resume. */
     fun onVisible() {
         currentDate.value = timeProvider.today()
     }
 
     fun onRetry() {
         load()
-    }
-
-    /** Selects a logged day for viewing (for potential deletion). */
-    fun onEntryClick(localDate: LocalDate) {
-        _uiState.value = _uiState.value.copy(editedDate = localDate)
-    }
-
-    fun onDeleteEntry(localDate: LocalDate) {
-        viewModelScope.launch {
-            try {
-                profileRepository.deleteWeight(localDate)
-                // Clear selection if the deleted date was selected
-                if (_uiState.value.editedDate == localDate) {
-                    _uiState.value = _uiState.value.copy(editedDate = null)
-                }
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (_: Exception) {
-                // Ignored; the entry stays visible and the user can retry
-            }
-        }
     }
 
     private fun load() {
@@ -85,7 +59,7 @@ class TrendsViewModel @Inject constructor(
                     }.collect { inputs -> _uiState.value = reduce(inputs) }
                 } catch (cancellation: CancellationException) {
                     throw cancellation
-                } catch (storageFailure: Exception) {
+                } catch (_: Exception) {
                     _uiState.value = _uiState.value.copy(isLoading = false, hasError = true)
                 }
             }
@@ -95,7 +69,6 @@ class TrendsViewModel @Inject constructor(
         return TrendsUiState(
             isLoading = false,
             unitSystem = inputs.unitSystem,
-            editedDate = null,
             points =
             buildWeightTrend(inputs.weights)
                 .map { point ->

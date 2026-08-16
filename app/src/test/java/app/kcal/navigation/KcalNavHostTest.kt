@@ -50,7 +50,7 @@ class KcalNavHostTest {
         showNavHost()
 
         composeRule.onNodeWithText(string(R.string.nav_trends)).performClick()
-        composeRule.onNodeWithText(string(R.string.trends_log_title)).assertIsDisplayed()
+        composeRule.onNodeWithText(string(R.string.trends_chart_title)).assertIsDisplayed()
 
         composeRule.onNodeWithText(string(R.string.nav_today)).performClick()
         composeRule.onNodeWithText(string(R.string.today_progress_title)).assertIsDisplayed()
@@ -140,11 +140,10 @@ class KcalNavHostTest {
                             onConfirm = {},
                         )
                     },
-                    trendsContent = {
+                    trendsContent = { _ ->
                         TrendsScreen(
                             uiState = trendsManyPointsPreviewState,
-                            onEntryClick = {},
-                            onDeleteEntry = {},
+                            onChartClick = {},
                             onRetry = {},
                         )
                     },

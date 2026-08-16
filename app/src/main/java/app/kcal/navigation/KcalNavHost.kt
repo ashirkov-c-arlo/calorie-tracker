@@ -33,6 +33,8 @@ import app.kcal.feature.settings.SettingsRoute
 import app.kcal.feature.today.TodayRoute
 import app.kcal.feature.today.TodayScreen
 import app.kcal.feature.today.todayContentPreviewState
+import app.kcal.feature.trends.LoggedWeightsRoute
+import app.kcal.feature.trends.LoggedWeightsScreen
 import app.kcal.feature.trends.TrendsRoute
 import app.kcal.feature.trends.TrendsScreen
 import app.kcal.feature.trends.trendsManyPointsPreviewState
@@ -78,7 +80,12 @@ fun KcalNavHost(
     settingsContent: @Composable (onBackClick: () -> Unit) -> Unit = { onBackClick ->
         SettingsRoute(onBackClick = onBackClick)
     },
-    trendsContent: @Composable () -> Unit = { TrendsRoute() },
+    trendsContent: @Composable (onLoggedWeightsClick: () -> Unit) -> Unit = { onLoggedWeightsClick ->
+        TrendsRoute(onLoggedWeightsClick = onLoggedWeightsClick)
+    },
+    loggedWeightsContent: @Composable (onBackClick: () -> Unit) -> Unit = { onBackClick ->
+        LoggedWeightsRoute(onBackClick = onBackClick)
+    },
 ) {
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = currentBackStackEntry?.destination
@@ -112,7 +119,12 @@ fun KcalNavHost(
                     { mealId -> navController.navigate(EditMealDestination(mealId)) },
                 )
             }
-            composable<TrendsDestination> { trendsContent() }
+            composable<TrendsDestination> {
+                trendsContent { navController.navigate(LoggedWeightsDestination) }
+            }
+            composable<LoggedWeightsDestination> {
+                loggedWeightsContent { navController.popBackStack() }
+            }
             composable<SettingsDestination> {
                 settingsContent { navController.popBackStack() }
             }
@@ -178,11 +190,10 @@ private fun PreviewNavHost() {
                 onRetry = {},
             )
         },
-        trendsContent = {
+        trendsContent = { _ ->
             TrendsScreen(
                 uiState = trendsManyPointsPreviewState,
-                onEntryClick = {},
-                onDeleteEntry = {},
+                onChartClick = {},
                 onRetry = {},
             )
         },

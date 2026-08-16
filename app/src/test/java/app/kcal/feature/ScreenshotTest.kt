@@ -50,11 +50,10 @@ import app.kcal.feature.today.todayErrorPreviewState
 import app.kcal.feature.today.todayNoTargetPreviewState
 import app.kcal.feature.trends.TrendsScreen
 import app.kcal.feature.trends.TrendsUiState
-import app.kcal.feature.trends.trendsEditingPastPreviewState
+import app.kcal.feature.trends.loggedWeightsEditingPreviewState
 import app.kcal.feature.trends.trendsEmptyPreviewState
 import app.kcal.feature.trends.trendsErrorPreviewState
 import app.kcal.feature.trends.trendsImperialPreviewState
-import app.kcal.feature.trends.trendsInvalidInputPreviewState
 import app.kcal.feature.trends.trendsManyPointsPreviewState
 import app.kcal.feature.trends.trendsSinglePointPreviewState
 import app.kcal.feature.trends.trendsTwoPointsPreviewState
@@ -260,7 +259,7 @@ class ScreenshotTest {
 
     @Test
     @Config(qualifiers = "+h2400dp")
-    fun trendsEditingPastWhite() = capture(ThemeMode.WHITE) { TrendsFixture(trendsEditingPastPreviewState) }
+    fun trendsEditingPastWhite() = capture(ThemeMode.WHITE) { LoggedWeightsFixture(loggedWeightsEditingPreviewState) }
 
     @Test
     @Config(qualifiers = "+h2400dp")
@@ -293,9 +292,6 @@ class ScreenshotTest {
     @Test
     @Config(qualifiers = "+h1200dp")
     fun trendsTwoPointsBlack() = capture(ThemeMode.BLACK) { TrendsFixture(trendsTwoPointsPreviewState) }
-
-    @Test
-    fun trendsInvalidInputWhite() = capture(ThemeMode.WHITE) { TrendsFixture(trendsInvalidInputPreviewState) }
 
     @Test
     fun trendsErrorWhite() = capture(ThemeMode.WHITE) { TrendsFixture(trendsErrorPreviewState) }
@@ -492,9 +488,18 @@ class ScreenshotTest {
     private fun TrendsFixture(uiState: TrendsUiState) {
         TrendsScreen(
             uiState = uiState,
+            onChartClick = {},
+            onRetry = {},
+        )
+    }
+
+    @Composable
+    private fun LoggedWeightsFixture(uiState: app.kcal.feature.trends.LoggedWeightsUiState) {
+        app.kcal.feature.trends.LoggedWeightsScreen(
+            uiState = uiState,
+            onBackClick = {},
             onEntryClick = {},
             onDeleteEntry = {},
-            onRetry = {},
         )
     }
 
@@ -513,7 +518,7 @@ class ScreenshotTest {
                     onRetry = {},
                 )
             },
-            trendsContent = { TrendsFixture(trendsManyPointsPreviewState) },
+            trendsContent = { _ -> TrendsFixture(trendsManyPointsPreviewState) },
         )
     }
 

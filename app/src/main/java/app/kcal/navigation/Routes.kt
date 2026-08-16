@@ -23,3 +23,6 @@ data object ManualEntryDestination
 
 @Serializable
 data class EditMealDestination(val mealId: Long)
+
+@Serializable
+data object LoggedWeightsDestination
