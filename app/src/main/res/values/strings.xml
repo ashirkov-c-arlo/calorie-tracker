@@ -11,7 +11,6 @@
     <string name="history_title">History</string>
     <string name="settings_title">Settings</string>
     <string name="profile_setup_title">Your profile</string>
-    <string name="manual_entry_add_title">Add meal</string>
     <string name="manual_entry_edit_title">Edit meal</string>
     <string name="entry_title">Log food</string>
 
@@ -27,7 +26,8 @@
     <string name="trends_log_today">Log today instead</string>
     <string name="trends_entries_title">Logged weights</string>
     <string name="trends_entry_value">%1$s %2$s</string>
-    <string name="trends_edit_entry_content_description">Edit this day’s weight</string>
+    <string name="trends_edit_entry_content_description">Edit this day\'s weight</string>
+    <string name="trends_delete_entry_content_description">Delete this day\'s weight</string>
     <string name="trends_save_failed_for_date">Could not save the weight for %1$s.</string>
     <string name="trends_chart_title">Weight and 7-day average</string>
     <string name="trends_chart_legend">Dots are logged weights. The line averages the entries dated within the seven days up to each point, so missing days are left out instead of filled in.</string>
@@ -49,7 +49,7 @@
     <string name="nutrient_progress_kcal">%1$s / %2$s kcal</string>
     <string name="nutrient_progress_grams">%1$s / %2$s g</string>
     <string name="meal_kcal">%1$s kcal</string>
-    <string name="meal_macros">Protein %1$s g · Fat %2$s g · Carbs %3$s g</string>
+    <string name="meal_items_separator">, </string>
 
     <string name="history_empty">Nothing logged yet. Days and ISO weeks appear here once you save a meal.</string>
     <string name="history_load_failed">Could not load your history from local storage.</string>
@@ -59,6 +59,7 @@
 
     <string name="manual_entry_item_number">Item %1$d</string>
     <string name="field_food_name">Food name</string>
+    <string name="field_meal_summary">Meal in one line (optional)</string>
     <string name="field_food_grams_optional">Weight (optional)</string>
     <string name="manual_entry_review_warning">This value is outside the usual review range. Check it before saving.</string>
     <string name="manual_entry_load_failed">Could not load this meal from local storage.</string>
@@ -68,6 +69,7 @@
     <string name="entry_text_hint">Write it in any language. Portions help: “two eggs and 200 g of rice”.</string>
     <string name="entry_text_required">Describe the meal first.</string>
     <string name="entry_parsing">Reading your description…</string>
+    <string name="entry_item_parsed">Read successfully.</string>
     <string name="entry_clarification_answer_label">Your answer</string>
     <string name="entry_photo_add">Add photo</string>
     <string name="entry_photo_take">Take photo</string>
@@ -85,9 +87,10 @@
     <string name="entry_failure_unavailable">Automatic reading is unavailable. Log the meal manually.</string>
     <string name="entry_failure_unknown">The description could not be read. Try again or log the meal manually.</string>
 
-    <string name="action_parse">Read the description</string>
+    <string name="action_parse">Log</string>
     <string name="action_send_answer">Send answer</string>
     <string name="action_log_manually">Log manually</string>
+    <string name="action_switch_to_auto">Switch to automatic logging</string>
     <string name="action_confirm">Save meal</string>
 
     <string name="profile_intro">Enter your data once. Every field is required, and you can change it later in Settings.</string>
@@ -103,8 +106,9 @@
     <string name="loss_pace_slow">Slow</string>
     <string name="loss_pace_moderate">Moderate</string>
     <string name="loss_pace_fast">Fast</string>
-    <string name="loss_pace_option">%1$s · %2$s %3$s</string>
-    <string name="loss_pace_unavailable">Enter your current weight to see the available paces.</string>
+    <string name="loss_pace_option">%1$s · ~%2$s %3$s</string>
+    <string name="loss_pace_unavailable">Enter your current weight and height to see the available paces.</string>
+    <string name="loss_pace_no_deficit">Your body mass index is below the reference range, so the goal is maintenance and no deficit is applied.</string>
     <string name="target_weight_unset">Not selected</string>
     <string name="target_weight_needs_height">Enter your height to choose a target weight.</string>
     <string name="target_weight_range_hint">Body mass index %1$s–%2$s at your height means %3$s–%4$s %5$s.</string>
@@ -148,12 +152,11 @@
     <string name="target_kcal">%1$s kcal</string>
     <string name="target_macros">Protein %1$s g · Fat %2$s g · Carbs %3$s g</string>
     <string name="target_rate_effective">Estimated pace: %1$s per week</string>
-    <string name="target_rate_requested">You asked for %1$s per week</string>
+    <string name="target_deficit">Daily deficit: %1$s kcal</string>
 
-    <string name="warning_rate_limited">The pace is limited to at most 1 kg per week and 1 percent of your body weight.</string>
-    <string name="warning_deficit_capped">The deficit is capped at 20 percent of your daily energy use and at 750 kcal.</string>
-    <string name="warning_intake_floor">The minimum intake for the selected formula variant limited the deficit.</string>
+    <string name="warning_deficit_capped">The deficit reached the cap for your body mass index, so the estimated pace is lower.</string>
     <string name="warning_target_reached">Your current weight already reached the target, so the goal is maintenance.</string>
+    <string name="warning_no_deficit_below_reference_bmi">Your body mass index is below the reference range, so the goal is maintenance.</string>
 
     <string name="unavailable_missing_inputs">Fill in every field to see an estimate.</string>
     <string name="unavailable_age_below_minimum">The estimate is available from age 18 only.</string>

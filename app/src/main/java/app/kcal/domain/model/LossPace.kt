@@ -1,8 +1,10 @@
 package app.kcal.domain.model
 
-import kotlin.math.abs
-
-/** How aggressively the user wants to lose weight. The kilograms per week are derived. */
+/**
+ * Which position of the offered deficit range the user picked: its low bound, its midpoint or
+ * its high bound. The percentage and the resulting weekly loss are derived from
+ * [DeficitBand], so a stored position stays valid when the body-mass band changes.
+ */
 enum class LossPace {
     SLOW,
     MODERATE,
@@ -10,25 +12,14 @@ enum class LossPace {
 }
 
 /**
- * The three paces offered for a profile, in kilograms per week. They are the user's intent:
- * the domain guardrails are applied afterwards and any difference is explained, exactly as
- * for a hand-entered rate.
+ * The estimated weekly weight loss for each offered position, in kilograms per week. It is a
+ * reference value derived from the calculated deficit, and it is null while the profile cannot
+ * produce an energy estimate yet, so no rate is ever fabricated.
  */
-data class LossPaceOptions(val slowKgPerWeek: Double, val moderateKgPerWeek: Double, val fastKgPerWeek: Double) {
-    fun rateFor(pace: LossPace): Double = when (pace) {
+data class LossPaceOptions(val slowKgPerWeek: Double?, val moderateKgPerWeek: Double?, val fastKgPerWeek: Double?) {
+    fun rateFor(pace: LossPace): Double? = when (pace) {
         LossPace.SLOW -> slowKgPerWeek
         LossPace.MODERATE -> moderateKgPerWeek
         LossPace.FAST -> fastKgPerWeek
-    }
-
-    /**
-     * The pace that stores exactly [rateKgPerWeek], or null when the stored rate is a value
-     * the offered options do not produce. A stored rate is never rewritten to fit an option.
-     */
-    fun paceFor(rateKgPerWeek: Double): LossPace? =
-        LossPace.entries.firstOrNull { abs(rateFor(it) - rateKgPerWeek) < MATCH_TOLERANCE_KG_PER_WEEK }
-
-    private companion object {
-        const val MATCH_TOLERANCE_KG_PER_WEEK = 0.005
     }
 }

@@ -3,7 +3,6 @@ package app.kcal.feature.entry
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -36,9 +36,15 @@ import app.kcal.core.ui.ErrorScreen
 import app.kcal.core.ui.LoadingScreen
 import app.kcal.domain.model.ThemeMode
 import app.kcal.feature.entry.components.MealItemCard
+import app.kcal.feature.entry.components.MealItemTextField
 
 @Composable
-fun ManualEntryRoute(mealId: Long?, onClose: () -> Unit, viewModel: ManualEntryViewModel = hiltViewModel()) {
+fun ManualEntryRoute(
+    mealId: Long?,
+    onClose: () -> Unit,
+    onSwitchToAuto: (() -> Unit)?,
+    viewModel: ManualEntryViewModel = hiltViewModel(),
+) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     LaunchedEffect(mealId) { viewModel.load(mealId) }
     LaunchedEffect(viewModel, onClose) {
@@ -49,6 +55,8 @@ fun ManualEntryRoute(mealId: Long?, onClose: () -> Unit, viewModel: ManualEntryV
     ManualEntryScreen(
         uiState = uiState,
         onBackClick = onClose,
+        onSwitchToAuto = onSwitchToAuto,
+        onSummaryChange = viewModel::onSummaryChange,
         onItemChange = viewModel::onItemChange,
         onAddItem = viewModel::onAddItem,
         onRemoveItem = viewModel::onRemoveItem,
@@ -62,6 +70,8 @@ fun ManualEntryRoute(mealId: Long?, onClose: () -> Unit, viewModel: ManualEntryV
 fun ManualEntryScreen(
     uiState: ManualEntryUiState,
     onBackClick: () -> Unit,
+    onSwitchToAuto: (() -> Unit)?,
+    onSummaryChange: (String) -> Unit,
     onItemChange: (Long, MealItemField, String) -> Unit,
     onAddItem: () -> Unit,
     onRemoveItem: (Long) -> Unit,
@@ -80,7 +90,7 @@ fun ManualEntryScreen(
                         text =
                         stringResource(
                             if (uiState.mealId == null) {
-                                R.string.manual_entry_add_title
+                                R.string.entry_title
                             } else {
                                 R.string.manual_entry_edit_title
                             },
@@ -93,6 +103,16 @@ fun ManualEntryScreen(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.action_cancel),
                         )
+                    }
+                },
+                actions = {
+                    if (onSwitchToAuto != null) {
+                        IconButton(onClick = onSwitchToAuto, enabled = !uiState.isSaving) {
+                            Icon(
+                                imageVector = Icons.Filled.Refresh,
+                                contentDescription = stringResource(R.string.action_switch_to_auto),
+                            )
+                        }
                     }
                 },
             )
@@ -111,7 +131,7 @@ fun ManualEntryScreen(
             else ->
                 ManualEntryForm(
                     uiState = uiState,
-                    onBackClick = close,
+                    onSummaryChange = onSummaryChange,
                     onItemChange = onItemChange,
                     onAddItem = onAddItem,
                     onRemoveItem = onRemoveItem,
@@ -125,7 +145,7 @@ fun ManualEntryScreen(
 @Composable
 private fun ManualEntryForm(
     uiState: ManualEntryUiState,
-    onBackClick: () -> Unit,
+    onSummaryChange: (String) -> Unit,
     onItemChange: (Long, MealItemField, String) -> Unit,
     onAddItem: () -> Unit,
     onRemoveItem: (Long) -> Unit,
@@ -140,6 +160,13 @@ private fun ManualEntryForm(
             .padding(KcalSpacing.medium),
         verticalArrangement = Arrangement.spacedBy(KcalSpacing.medium),
     ) {
+        MealItemTextField(
+            value = uiState.summary,
+            label = stringResource(R.string.field_meal_summary),
+            error = null,
+            enabled = !uiState.isSaving,
+            onValueChange = onSummaryChange,
+        )
         uiState.items.forEachIndexed { index, item ->
             MealItemCard(
                 number = index + 1,
@@ -161,20 +188,8 @@ private fun ManualEntryForm(
                 color = MaterialTheme.colorScheme.error,
             )
         }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(KcalSpacing.small),
-        ) {
-            OutlinedButton(
-                onClick = onBackClick,
-                enabled = !uiState.isSaving,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(text = stringResource(R.string.action_cancel))
-            }
-            Button(onClick = onSave, enabled = !uiState.isSaving, modifier = Modifier.weight(1f)) {
-                Text(text = stringResource(R.string.action_save))
-            }
+        Button(onClick = onSave, enabled = !uiState.isSaving, modifier = Modifier.fillMaxWidth()) {
+            Text(text = stringResource(R.string.action_parse))
         }
     }
 }
@@ -185,6 +200,8 @@ private fun ManualEntryPreview(themeMode: ThemeMode, uiState: ManualEntryUiState
         ManualEntryScreen(
             uiState = uiState,
             onBackClick = {},
+            onSwitchToAuto = {},
+            onSummaryChange = {},
             onItemChange = { _, _, _ -> },
             onAddItem = {},
             onRemoveItem = {},

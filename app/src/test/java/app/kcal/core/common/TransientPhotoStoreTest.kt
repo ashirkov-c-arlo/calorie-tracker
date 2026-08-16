@@ -149,15 +149,17 @@ class TransientPhotoStoreTest {
     }
 
     @Test
-    fun `only the newest upload candidate survives, so a cancelled capture is cleaned up`() = runTest {
-        // What a cancelled or crashed capture leaves in the directory: a file nobody uploads.
-        val abandonedCapture = File(photoDirectory.apply { mkdirs() }, "abandoned.jpg").apply { writeText("partial") }
+    fun `several items keep their own candidate and discard removes just one of them`() = runTest {
         val first = assertNotNull(store.prepareForUpload(sourceImage(width = 600, height = 600)))
 
         val second = assertNotNull(store.prepareForUpload(sourceImage(width = 600, height = 600)))
 
+        assertTrue(File(first).exists())
+        assertTrue(File(second).exists())
+
+        store.discard(first)
+
         assertFalse(File(first).exists())
-        assertFalse(abandonedCapture.exists())
         assertEquals(listOf(File(second).name), photoDirectory.listFiles().orEmpty().map { it.name })
     }
 
@@ -180,7 +182,7 @@ class TransientPhotoStoreTest {
         assertEquals("${context.packageName}.photos", capture.uri.authority)
         assertTrue(capture.path.endsWith(".jpg"), capture.path)
 
-        store.discard(capture)
+        store.discard(capture.path)
 
         assertFalse(written.exists())
     }

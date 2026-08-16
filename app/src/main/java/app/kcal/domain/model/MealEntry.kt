@@ -12,7 +12,11 @@ enum class EntrySource {
     LLM_PHOTO,
 }
 
-/** A chronological meal on the user's local date. Photos are never part of this model. */
+/**
+ * A chronological meal on the user's local date. Photos are never part of this model.
+ * [summary] is the one-line name the journal shows; it is null for meals logged before it
+ * existed and for manual meals whose author left it empty.
+ */
 data class MealEntry(
     val id: Long,
     val localDate: LocalDate,
@@ -20,4 +24,5 @@ data class MealEntry(
     val items: List<FoodItem>,
     val rawUserInput: String?,
     val source: EntrySource,
+    val summary: String? = null,
 )

@@ -2,6 +2,7 @@ package app.kcal.feature.profile
 
 import app.kcal.core.common.DecimalText
 import app.kcal.domain.model.ActivityLevel
+import app.kcal.domain.model.DeficitBand
 import app.kcal.domain.model.EnergyEquationSex
 import app.kcal.domain.model.LossPace
 import app.kcal.domain.model.StoredProfile
@@ -11,11 +12,11 @@ import app.kcal.domain.usecase.SuggestLossPaces
 import java.util.Locale
 
 /**
- * Preview and screenshot fixtures. The offered paces and the shown estimate are produced by
+ * Preview and screenshot fixtures. The offered positions and the shown estimate are produced by
  * the real use cases, so a preview can never display invented numbers.
  */
 private val calculate = CalculateDailyTargets()
-private val suggestLossPaces = SuggestLossPaces()
+private val suggestLossPaces = SuggestLossPaces(calculate)
 
 private const val CURRENT_WEIGHT_KG = 82.4
 private const val HEIGHT_CM = 176.0
@@ -26,9 +27,14 @@ internal val emptyProfileFormUiState = ProfileFormUiState(isLoading = false)
 
 internal val filledProfileFormUiState = previewState(LossPace.MODERATE)
 
-internal val guardedProfileFormUiState = previewState(LossPace.FAST)
+/** 130 kg at 176 cm asks for 25% of energy expenditure and is capped at 750 kcal. */
+internal val guardedProfileFormUiState = previewState(LossPace.FAST, currentWeightKg = 130.0)
 
-internal val russianProfileFormUiState = previewState(LossPace.FAST, locale = Locale.forLanguageTag("ru"))
+/** 50 kg at 176 cm is below the reference body mass index, so no position is offered. */
+internal val noDeficitProfileFormUiState = previewState(pace = null, currentWeightKg = 50.0)
+
+internal val russianProfileFormUiState =
+    previewState(LossPace.FAST, currentWeightKg = 130.0, locale = Locale.forLanguageTag("ru"))
 
 /** The state a user sees after pressing Save on an invalid form. */
 internal val invalidProfileFormUiState =
@@ -45,24 +51,27 @@ internal val invalidProfileFormUiState =
         ),
     )
 
-private fun previewState(pace: LossPace, locale: Locale = Locale.US): ProfileFormUiState {
-    val withoutRate =
+private fun previewState(
+    pace: LossPace?,
+    currentWeightKg: Double = CURRENT_WEIGHT_KG,
+    locale: Locale = Locale.US,
+): ProfileFormUiState {
+    val profile =
         StoredProfile(
-            currentWeightKg = CURRENT_WEIGHT_KG,
+            currentWeightKg = currentWeightKg,
             heightCm = HEIGHT_CM,
             ageYears = AGE_YEARS,
             energyEquationSex = EnergyEquationSex.MALE,
             activityLevel = ActivityLevel.LIGHT,
             targetWeightKg = TARGET_WEIGHT_KG,
-            requestedLossRateKgPerWeek = 0.0,
+            lossPace = pace,
         )
-    val paceOptions = suggestLossPaces(withoutRate)
-    val profile = withoutRate.copy(requestedLossRateKgPerWeek = paceOptions?.rateFor(pace))
+    val paceOptions = suggestLossPaces(profile)
     return ProfileFormUiState(
         isLoading = false,
         fields =
         ProfileFormFields(
-            currentWeight = DecimalText.format(CURRENT_WEIGHT_KG, locale),
+            currentWeight = DecimalText.format(currentWeightKg, locale),
             height = DecimalText.format(HEIGHT_CM, locale),
             age = AGE_YEARS.toString(),
             energyEquationSex = profile.energyEquationSex,
@@ -72,6 +81,7 @@ private fun previewState(pace: LossPace, locale: Locale = Locale.US): ProfileFor
         ),
         targetWeightRangeKg = BodyMetrics.targetWeightRangeKg(HEIGHT_CM),
         lossPaceOptions = paceOptions,
+        noDeficitApplies = paceOptions == null && DeficitBand.bodyMassIndex(currentWeightKg, HEIGHT_CM) != null,
         target = calculate.forStoredProfile(profile).toTargetPreview(),
     )
 }

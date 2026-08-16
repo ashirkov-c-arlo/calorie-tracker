@@ -4,9 +4,9 @@ package app.kcal.domain.model
  * Selects one of the two validated Mifflin-St Jeor branches. This is an equation
  * variant, not a gender-identity field, so the constants are never averaged.
  */
-enum class EnergyEquationSex(val rmrOffsetKcal: Double, val minimumIntakeKcal: Int) {
-    FEMALE(rmrOffsetKcal = -161.0, minimumIntakeKcal = 1200),
-    MALE(rmrOffsetKcal = 5.0, minimumIntakeKcal = 1500),
+enum class EnergyEquationSex(val rmrOffsetKcal: Double) {
+    FEMALE(rmrOffsetKcal = -161.0),
+    MALE(rmrOffsetKcal = 5.0),
 }
 
 /** Habitual physical activity level with its physical activity level (PAL) multiplier. */

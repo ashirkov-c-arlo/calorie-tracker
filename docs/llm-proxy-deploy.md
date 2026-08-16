@@ -234,11 +234,16 @@ if one already exists:
 
 kcal.example.net {
     request_body {
-        max_size 2MB
+        max_size 3MB
     }
     reverse_proxy 127.0.0.1:8080
 }
 ```
+
+The reverse-proxy cap has to stay **above** the proxy's own `MAX_BODY_BYTES` (1.5 MB by
+default). A body the proxy refuses answers `413` with contract JSON, while a body Caddy
+itself refuses fails mid-copy and reaches the app as an opaque `502`, so the two caps must
+not overlap.
 
 Replace the domain, then validate and reload:
 
@@ -269,7 +274,7 @@ install -o caddy -g caddy -m 0600 privkey.pem   /etc/caddy/tls/privkey.pem
 kcal.example.net {
     tls /etc/caddy/tls/fullchain.pem /etc/caddy/tls/privkey.pem
     request_body {
-        max_size 2MB
+        max_size 3MB
     }
     reverse_proxy 127.0.0.1:8080
 }
@@ -282,14 +287,34 @@ the certificate's subject alternative name. Renewal is a file replacement plus
 `openssl x509 -in /etc/caddy/tls/fullchain.pem -noout -dates`.
 
 Every client must trust the CA's **root** certificate, which is deliberately absent from the
-served chain. For the smoke tests in step 7, pass it through the OpenSSL environment instead
-of disabling verification:
+served chain. `llm-proxy/tls/` is gitignored, so a fresh clone does not carry it: copy the
+root from the CA host (`step ca root root-ca.pem`, or the export command your CA offers) and
+install it once for every tool, `curl` included:
 
 ```bash
-SSL_CERT_FILE=/etc/caddy/tls/root-ca.pem \
+install -m 0644 root-ca.pem /usr/local/share/ca-certificates/local-ca.crt
+update-ca-certificates
+```
+
+The file name must end in `.crt` or `update-ca-certificates` skips it. Any verifying client
+that lacks this root fails with `unable to get local issuer certificate`. For a one-off run
+that leaves the system store alone, point OpenSSL at the file instead:
+
+```bash
+SSL_CERT_FILE=/root/root-ca.pem \
   /opt/kcal-proxy-venv/bin/python scripts/smoke.py \
   --base-url https://kcal.example.net --api-key '<generated-proxy-api-key>'
 ```
+
+If verification still fails, the served chain is incomplete rather than untrusted:
+
+```bash
+openssl s_client -connect kcal.example.net:443 -servername kcal.example.net -showcerts \
+  </dev/null | grep -E '^ *[si]:'
+```
+
+That must list the leaf and the intermediate; if only the leaf appears, `fullchain.pem` was
+built from the leaf alone.
 
 ## 7. Run live smoke tests
 

@@ -34,6 +34,9 @@ interface ProfileRepository {
     /** Upserts the weight of its own local date, so re-entry replaces that day's entry. */
     suspend fun logWeight(entry: WeightEntry)
 
+    /** Deletes the weight entry for [localDate]. No-op if none exists. */
+    suspend fun deleteWeight(localDate: LocalDate)
+
     suspend fun setUnitSystem(unitSystem: UnitSystem)
 
     suspend fun setAppLanguage(appLanguage: AppLanguage)

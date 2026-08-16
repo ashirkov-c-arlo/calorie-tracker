@@ -7,7 +7,16 @@ import app.kcal.domain.model.Macros
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 
-data class TodayMealUiState(val id: Long, val itemNames: PersistentList<String>, val totals: MacroTotals)
+/**
+ * One journal row. [summary] is the confirmed one-line meal name; when it is null the row falls
+ * back to [itemNames], which is what meals logged before summaries existed have.
+ */
+data class TodayMealUiState(
+    val id: Long,
+    val itemNames: PersistentList<String>,
+    val totals: MacroTotals,
+    val summary: String? = null,
+)
 
 data class TodayUiState(
     val isLoading: Boolean = true,
@@ -37,6 +46,7 @@ internal val todayContentPreviewState = TodayUiState(
             id = 1,
             itemNames = persistentListOf("Oatmeal", "Banana"),
             totals = MacroTotals.from(Macros(kcal = 420, proteinG = 15.0, fatG = 9.0, carbsG = 70.0)),
+            summary = "oatmeal with a banana",
         ),
         TodayMealUiState(
             id = 2,

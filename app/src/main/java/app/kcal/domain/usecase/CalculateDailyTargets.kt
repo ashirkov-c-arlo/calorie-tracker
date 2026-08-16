@@ -1,9 +1,9 @@
 package app.kcal.domain.usecase
 
+import app.kcal.domain.model.DeficitBand
 import app.kcal.domain.model.Macros
 import app.kcal.domain.model.ProfileInputs
 import app.kcal.domain.model.StoredProfile
-import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -15,26 +15,25 @@ enum class DailyTargetUnavailableReason {
     NON_POSITIVE_ENERGY,
 }
 
-/** A guardrail that made the effective pace differ from the requested one. */
+/** A guardrail that changed the deficit derived from the selected position. */
 enum class DailyTargetWarning {
-    /** The requested pace exceeded 1 kg per week or 1% of body weight per week. */
-    RATE_LIMITED,
-
-    /** The deficit was capped at 20% of TDEE or 750 kcal. */
+    /** The percentage deficit exceeded the hard cap of the body-mass band. */
     DEFICIT_CAPPED,
-
-    /** The minimum intake floor for the selected formula variant was applied. */
-    INTAKE_FLOOR_APPLIED,
 
     /** Current weight already reached the target weight, so the target is maintenance. */
     TARGET_WEIGHT_REACHED,
+
+    /** The body mass index is below the reference range, so no deficit is applied. */
+    NO_DEFICIT_BELOW_REFERENCE_BMI,
 }
 
 sealed interface DailyTargetResult {
 
     data class Available(
         val targets: Macros,
-        val requestedLossRateKgPerWeek: Double,
+        /** The applied daily deficit in kilocalories; zero when the goal is maintenance. */
+        val deficitKcal: Int,
+        /** Derived from the deficit, for display only. */
         val effectiveLossRateKgPerWeek: Double,
         val warnings: Set<DailyTargetWarning>,
     ) : DailyTargetResult
@@ -44,9 +43,11 @@ sealed interface DailyTargetResult {
 
 /**
  * Deterministic daily calorie and macro estimate for generally healthy adults aged 18+.
- * Mifflin-St Jeor resting metabolic rate, one habitual activity multiplier, conservative
- * rate/deficit/intake guardrails, weight-based protein, fat at 25% of energy, and
- * carbohydrates as the remainder. An LLM never performs this arithmetic.
+ * Mifflin-St Jeor resting metabolic rate, one habitual activity multiplier, a percentage
+ * deficit taken from the body-mass band of [DeficitBand] with that band's hard cap,
+ * weight-based protein, fat at 25% of energy, and carbohydrates as the remainder. Weekly
+ * weight loss is derived from the deficit and is never an input. An LLM never performs this
+ * arithmetic.
  */
 class CalculateDailyTargets {
 
@@ -71,67 +72,47 @@ class CalculateDailyTargets {
         }
 
         val warnings = mutableSetOf<DailyTargetWarning>()
+        val band = DeficitBand.forBody(inputs.currentWeightKg, inputs.heightCm, inputs.activityLevel)
+        val pace = inputs.lossPace
+        if (band != null && pace == null) {
+            return DailyTargetResult.Unavailable(DailyTargetUnavailableReason.MISSING_PROFILE_INPUTS)
+        }
+        if (band == null) {
+            warnings += DailyTargetWarning.NO_DEFICIT_BELOW_REFERENCE_BMI
+        }
+
         val targetReached = inputs.currentWeightKg <= inputs.targetWeightKg
         if (targetReached) {
             warnings += DailyTargetWarning.TARGET_WEIGHT_REACHED
         }
 
-        val bodyWeightRateLimit = inputs.currentWeightKg * MAX_WEEKLY_BODY_WEIGHT_FRACTION
-        val safeRateKgPerWeek =
-            minOf(inputs.requestedLossRateKgPerWeek, MAX_WEEKLY_LOSS_KG, bodyWeightRateLimit)
-        if (!targetReached && safeRateKgPerWeek < inputs.requestedLossRateKgPerWeek) {
-            warnings += DailyTargetWarning.RATE_LIMITED
-        }
-
-        val requestedDeficit = safeRateKgPerWeek * KCAL_PER_KG_OF_BODY_MASS / DAYS_PER_WEEK
-        val cappedDeficit =
-            minOf(
-                requestedDeficit,
-                totalDailyEnergyExpenditure * MAX_DEFICIT_FRACTION_OF_TDEE,
-                MAX_DEFICIT_KCAL,
-            )
-        if (!targetReached && cappedDeficit < requestedDeficit) {
+        // The selected position is a share of energy expenditure; the band's cap is absolute.
+        val requestedDeficit =
+            if (band == null || pace == null || targetReached) {
+                0.0
+            } else {
+                totalDailyEnergyExpenditure * band.fractionFor(pace)
+            }
+        val deficit = min(requestedDeficit, band?.capKcal ?: 0.0)
+        if (deficit < requestedDeficit) {
             warnings += DailyTargetWarning.DEFICIT_CAPPED
         }
 
-        val minimumIntake = inputs.energyEquationSex.minimumIntakeKcal.toDouble()
-        val targetKcalExact =
-            if (targetReached) {
-                totalDailyEnergyExpenditure
-            } else {
-                val floored = max(totalDailyEnergyExpenditure - cappedDeficit, minimumIntake)
-                if (floored > totalDailyEnergyExpenditure - cappedDeficit) {
-                    warnings += DailyTargetWarning.INTAKE_FLOOR_APPLIED
-                }
-                min(totalDailyEnergyExpenditure, floored)
-            }
-
+        val targetKcalExact = totalDailyEnergyExpenditure - deficit
         val targets = macrosFor(targetKcalExact, inputs)
-        val effectiveLossRateKgPerWeek =
-            max(0.0, totalDailyEnergyExpenditure - targetKcalExact) * DAYS_PER_WEEK /
-                KCAL_PER_KG_OF_BODY_MASS
 
         return DailyTargetResult.Available(
             targets = targets,
-            requestedLossRateKgPerWeek = inputs.requestedLossRateKgPerWeek,
-            effectiveLossRateKgPerWeek = effectiveLossRateKgPerWeek,
+            deficitKcal = deficit.roundToInt(),
+            effectiveLossRateKgPerWeek = deficit * DAYS_PER_WEEK / KCAL_PER_KG_OF_BODY_MASS,
             warnings = warnings,
         )
     }
 
     private fun validate(inputs: ProfileInputs): DailyTargetUnavailableReason? {
-        val measurements =
-            listOf(
-                inputs.currentWeightKg,
-                inputs.heightCm,
-                inputs.targetWeightKg,
-                inputs.requestedLossRateKgPerWeek,
-            )
+        val measurements = listOf(inputs.currentWeightKg, inputs.heightCm, inputs.targetWeightKg)
         if (measurements.any { !it.isFinite() }) return DailyTargetUnavailableReason.INVALID_MEASUREMENTS
-        if (inputs.currentWeightKg <= 0.0 || inputs.heightCm <= 0.0 || inputs.targetWeightKg <= 0.0) {
-            return DailyTargetUnavailableReason.INVALID_MEASUREMENTS
-        }
-        if (inputs.requestedLossRateKgPerWeek < 0.0) return DailyTargetUnavailableReason.INVALID_MEASUREMENTS
+        if (measurements.any { it <= 0.0 }) return DailyTargetUnavailableReason.INVALID_MEASUREMENTS
         if (inputs.ageYears <= 0) return DailyTargetUnavailableReason.INVALID_MEASUREMENTS
         if (inputs.ageYears < MIN_AGE_YEARS) return DailyTargetUnavailableReason.AGE_BELOW_MINIMUM
         return null
@@ -174,10 +155,6 @@ class CalculateDailyTargets {
         private const val AGE_FACTOR = 5.0
         private const val DAYS_PER_WEEK = 7.0
         private const val KCAL_PER_KG_OF_BODY_MASS = 7700.0
-        private const val MAX_WEEKLY_LOSS_KG = 1.0
-        private const val MAX_WEEKLY_BODY_WEIGHT_FRACTION = 0.01
-        private const val MAX_DEFICIT_FRACTION_OF_TDEE = 0.20
-        private const val MAX_DEFICIT_KCAL = 750.0
         private const val PROTEIN_G_PER_KG = 1.2
         private const val MIN_PROTEIN_ENERGY_FRACTION = 0.10
         private const val MAX_PROTEIN_ENERGY_FRACTION = 0.30

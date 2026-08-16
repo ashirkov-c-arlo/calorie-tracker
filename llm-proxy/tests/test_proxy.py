@@ -37,9 +37,11 @@ from kcal_proxy.parse import (
     map_client_error,
     normalize_ask_clarification,
     normalize_log_food,
+    normalize_read_portion,
     output_pieces,
     run_parse,
     sanitize_string,
+    sanitize_summary,
     validate_request,
 )
 from kcal_proxy.quota import Quota, QuotaExceeded, RateLimiter
@@ -91,8 +93,20 @@ def text_only(text: str) -> dict:
     }
 
 
-ITEM = {"name": "Chicken breast", "grams": 180, "kcal": 297,
-        "protein_g": 55.8, "fat_g": 6.5, "carbs_g": 0.0, "confidence": 0.91}
+# The model reports a density and a mass; 180 g of this scales to exactly the absolute
+# values the committed contract fixtures carry (297 kcal, 55.8 / 6.5 / 0.0 g).
+ITEM = {"name": "Chicken breast", "grams": 180,
+        "per_100g": {"kcal": 165, "protein_g": 31.0, "fat_g": 3.6, "carbs_g": 0.0},
+        "confidence": 0.91}
+
+RICE = {"name": "Boiled rice", "grams": 220,
+        "per_100g": {"kcal": 130, "protein_g": 2.7, "fat_g": 0.3, "carbs_g": 28.6},
+        "confidence": 0.84}
+
+
+def density(**overrides) -> dict:
+    """An ITEM whose per-100 g block differs, which `dict(ITEM, ...)` cannot express."""
+    return dict(ITEM, per_100g={**ITEM["per_100g"], **overrides})
 
 
 class FakeBedrock:
@@ -177,34 +191,45 @@ class RequestValidationTest(unittest.TestCase):
 
 
 class NormalizationTest(unittest.TestCase):
-    def test_coerces_numeric_strings_rounds_macros_and_keeps_null_grams(self):
-        items, note, problems = normalize_log_food({"items": [
-            dict(ITEM, grams=None, kcal="297", protein_g="55,84", confidence="0.9")
-        ], "note": "  ok  "})
+    def test_multiplies_the_density_by_the_portion(self):
+        items, note, problems = normalize_log_food({"items": [ITEM], "note": "  ok  "})
         self.assertEqual(problems, [])
-        self.assertEqual(items[0]["kcal"], 297)
-        self.assertEqual(items[0]["protein_g"], 55.8)
-        self.assertIsNone(items[0]["grams"])
+        self.assertEqual(items[0]["kcal"], 297)          # 165 * 1.8
+        self.assertEqual(items[0]["protein_g"], 55.8)    # 31.0 * 1.8
+        self.assertEqual(items[0]["fat_g"], 6.5)         # 3.6 * 1.8, rounded once
+        self.assertEqual(items[0]["grams"], 180.0)
         self.assertEqual(note, "ok")
+
+    def test_coerces_numeric_strings(self):
+        items, _, problems = normalize_log_food(
+            {"items": [dict(density(protein_g="31,0"), grams="180", confidence="0.9")], "note": None})
+        self.assertEqual(problems, [])
+        self.assertEqual((items[0]["grams"], items[0]["protein_g"]), (180.0, 55.8))
+
+    def test_the_override_replaces_the_mass_the_model_estimated(self):
+        items, _, problems = normalize_log_food({"items": [ITEM], "note": None}, grams_override=90.0)
+        self.assertEqual(problems, [])
+        # 165 * 0.9 = 148.5, rounded without the upward bias that would accumulate over a day.
+        self.assertEqual((items[0]["grams"], items[0]["kcal"]), (90.0, 148))
+        self.assertEqual(items[0]["protein_g"], 27.9)
 
     def test_merges_duplicates_and_normalizes_note(self):
         items, note, problems = normalize_log_food(
-            {"items": [ITEM, dict(ITEM, name="chicken BREAST", kcal=100, grams=20)], "note": "null"})
+            {"items": [ITEM, dict(ITEM, name="chicken BREAST", grams=20)], "note": "null"})
         self.assertEqual(problems, [])
         self.assertEqual(len(items), 1)
-        self.assertEqual((items[0]["kcal"], items[0]["grams"]), (397, 200.0))
+        self.assertEqual((items[0]["kcal"], items[0]["grams"]), (330, 200.0))  # 297 + 33
         self.assertIsNone(note)
 
-    def test_merging_duplicates_does_not_depend_on_their_order(self):
-        known = dict(ITEM, grams=100, confidence=0.9)
-        unknown = dict(ITEM, name="chicken BREAST", grams=None, confidence=0.1)
-        for pair in ((known, unknown), (unknown, known)):
-            with self.subTest(first=pair[0]["grams"]):
+    def test_merging_duplicates_keeps_the_weakest_confidence_in_any_order(self):
+        sure = dict(ITEM, grams=100, confidence=0.9)
+        unsure = dict(ITEM, name="chicken BREAST", grams=100, confidence=0.1)
+        for pair in ((sure, unsure), (unsure, sure)):
+            with self.subTest(first=pair[0]["confidence"]):
                 items, _, problems = normalize_log_food({"items": list(pair), "note": None})
                 self.assertEqual(problems, [])
                 self.assertEqual(len(items), 1)
-                self.assertIsNone(items[0]["grams"])  # one part's mass is unknown
-                self.assertEqual(items[0]["confidence"], 0.1)  # the weakest one survives
+                self.assertEqual(items[0]["confidence"], 0.1)
                 self.assertIn("low_confidence", _soft_flags(items))
 
     def test_hard_invalid_inputs(self):
@@ -213,10 +238,13 @@ class NormalizationTest(unittest.TestCase):
                         {"items": [ITEM]},                              # note key missing
                         {"items": [ITEM], "note": 7},                    # note not a string
                         {"items": [item_without("grams")], "note": None},
+                        {"items": [item_without("per_100g")], "note": None},
+                        {"items": [dict(ITEM, per_100g="165")], "note": None},
                         {"items": [dict(ITEM, name=123)], "note": None},
-                        {"items": [dict(ITEM, kcal=1.6)], "note": None},
-                        {"items": [dict(ITEM, kcal=None)], "note": None},
-                        {"items": [dict(ITEM, fat_g=-1)], "note": None},
+                        {"items": [density(kcal=1.6)], "note": None},
+                        {"items": [density(kcal=None)], "note": None},
+                        {"items": [density(fat_g=-1)], "note": None},
+                        {"items": [dict(ITEM, grams=None)], "note": None},
                         {"items": [dict(ITEM, grams=-5)], "note": None},
                         {"items": [dict(ITEM, grams="garbage")], "note": None},
                         {"items": [dict(ITEM, grams=True)], "note": None},
@@ -225,6 +253,16 @@ class NormalizationTest(unittest.TestCase):
                         {"items": [dict(ITEM, name="  ")], "note": None}):
             with self.subTest(payload=payload):
                 self.assertTrue(normalize_log_food(payload)[2])
+
+    def test_a_portion_is_read_or_explicitly_absent(self):
+        self.assertEqual(normalize_read_portion({"grams": 250}), (250.0, []))
+        self.assertEqual(normalize_read_portion({"grams": "250,5"}), (250.5, []))
+        self.assertEqual(normalize_read_portion({"grams": None}), (None, []))
+        for payload in ({}, {"grams": -1}, {"grams": "lots"}, {"grams": True}, "nope"):
+            with self.subTest(payload=payload):
+                grams, problems = normalize_read_portion(payload)
+                self.assertTrue(problems)
+                self.assertIsNone(grams)
 
     def test_too_many_items_is_hard_invalid_instead_of_truncated(self):
         many = [dict(ITEM, name=f"food {i}") for i in range(20)]
@@ -241,10 +279,28 @@ class SanitizerTest(unittest.TestCase):
     def test_truncates_on_a_word_boundary(self):
         self.assertEqual(sanitize_string("alpha beta gamma", 12), "alpha beta")
 
+    def test_a_summary_becomes_one_short_line(self):
+        long_summary = "muesli with soy milk, chia seeds, flax seeds, hemp seeds and honey."
+        self.assertEqual(
+            sanitize_summary({"summary": long_summary}),
+            "muesli with soy milk, chia seeds, flax seeds, hemp seeds",
+        )
+        self.assertEqual(sanitize_summary({"summary": "roasted chicken\nwith  veggies."}),
+                         "roasted chicken with veggies")
+
+    def test_an_unusable_summary_is_dropped_instead_of_failing(self):
+        for payload in ({}, {"summary": None}, {"summary": 7}, {"summary": "  "}, "not an object"):
+            self.assertIsNone(sanitize_summary(payload), payload)
+
 
 class PipelineTest(unittest.TestCase):
     def _request(self, **kwargs):
         return validate_request({"text": "chicken", **kwargs}, cfg())
+
+    def _photo_request(self):
+        return validate_request(
+            {"text": "plate", "image": {"media_type": "image/jpeg",
+                                        "data_base64": base64.b64encode(JPEG).decode()}}, cfg())
 
     def test_success_sums_usage_and_returns_contract_shape(self):
         bedrock = FakeBedrock(tool_use("log_food", {"items": [ITEM], "note": None}, usage=(420, 96)))
@@ -256,17 +312,79 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(meta.model_id, "model-text")
         self.assertFalse(meta.repair_used)
 
-    def test_vision_path_uses_the_vision_model_and_puts_the_image_first(self):
+    def test_a_summary_is_returned_and_language_checked(self):
+        payload = {"items": [ITEM], "summary": "chicken breast with boiled rice", "note": None}
+        bedrock = FakeBedrock(tool_use("log_food", payload))
+        body, _ = run_parse(bedrock, cfg(), self._request(), "en")
+        self.assertEqual(body["summary"], "chicken breast with boiled rice")
+
+        # A summary in the wrong language is repaired like any other foreign string.
+        foreign = FakeBedrock(tool_use("log_food", dict(payload, summary="куриная грудка с рисом")),
+                              tool_use("log_food", payload))
+        body, meta = run_parse(foreign, cfg(), self._request(), "en")
+        self.assertEqual(body["summary"], "chicken breast with boiled rice")
+        self.assertTrue(meta.repair_used)
+
+    def test_a_missing_summary_still_returns_the_meal(self):
         bedrock = FakeBedrock(tool_use("log_food", {"items": [ITEM], "note": None}))
-        request = validate_request(
-            {"text": "plate", "image": {"media_type": "image/jpeg",
-                                        "data_base64": base64.b64encode(JPEG).decode()}}, cfg())
-        _, meta = run_parse(bedrock, cfg(), request, "en")
-        content = bedrock.calls[0]["messages"][0]["content"]
-        self.assertEqual(meta.model_id, "model-vision")
+        body, meta = run_parse(bedrock, cfg(), self._request(), "en")
+        self.assertIsNone(body["summary"])
+        self.assertFalse(meta.repair_used)
+
+    def test_vision_path_uses_both_models_and_puts_the_image_first(self):
+        bedrock = FakeBedrock(
+            tool_use("read_portion", {"grams": 250}),
+            tool_use("log_food", {"items": [ITEM], "note": None}),
+        )
+        body, meta = run_parse(bedrock, cfg(), self._photo_request(), "en")
+        portion, vision = bedrock.calls
+        self.assertEqual((portion["modelId"], vision["modelId"]), ("model-text", "model-vision"))
+        # The portion is read from the words alone; only the vision call sees the picture.
+        self.assertEqual(portion["messages"][0]["content"], [{"text": "<meal_description>\nplate\n</meal_description>"}])
+        self.assertEqual([t["toolSpec"]["name"] for t in portion["toolConfig"]["tools"]], ["read_portion"])
+        content = vision["messages"][0]["content"]
         self.assertIn("image", content[0])
         self.assertIn("text", content[1])
-        self.assertIn("PHOTO", bedrock.calls[0]["system"][0]["text"])
+        system = vision["system"][0]["text"]
+        for rule in ("PHOTO", "PRIMARY", "label"):  # photo and its labels outrank priors
+            self.assertIn(rule, system)
+        # 165 kcal per 100 g of the stated 250 g, not of the 180 g the photo suggested.
+        self.assertEqual((body["items"][0]["grams"], body["items"][0]["kcal"]), (250.0, 412))
+        self.assertIn("portion_from_text", meta.flags)
+        self.assertEqual(meta.input_tokens, 20)  # both calls are paid for
+
+    def test_a_text_without_a_quantity_keeps_the_mass_from_the_photo(self):
+        bedrock = FakeBedrock(
+            tool_use("read_portion", {"grams": None}),
+            tool_use("log_food", {"items": [ITEM], "note": None}),
+        )
+        body, meta = run_parse(bedrock, cfg(), self._photo_request(), "en")
+        self.assertEqual((body["items"][0]["grams"], body["items"][0]["kcal"]), (180.0, 297))
+        self.assertIn("portion_from_photo", meta.flags)
+
+    def test_a_failing_portion_call_does_not_fail_the_photo_request(self):
+        for broken in (client_error("ThrottlingException"), tool_use("read_portion", {"grams": "lots"}),
+                       tool_use("ask_clarification", {"question": "How much of it?"})):
+            with self.subTest(broken=type(broken).__name__):
+                bedrock = FakeBedrock(broken, tool_use("log_food", {"items": [ITEM], "note": None}))
+                body, meta = run_parse(bedrock, cfg(), self._photo_request(), "en")
+                self.assertEqual(body["items"][0]["grams"], 180.0)
+                self.assertIn("portion_from_photo", meta.flags)
+
+    def test_one_photo_logs_one_dish(self):
+        bedrock = FakeBedrock(
+            tool_use("read_portion", {"grams": None}),
+            tool_use("log_food", {"items": [ITEM, RICE], "note": None}),
+        )
+        body, _ = run_parse(bedrock, cfg(), self._photo_request(), "en")
+        self.assertEqual([item["name"] for item in body["items"]], ["Chicken breast"])
+
+    def test_the_text_path_stays_a_single_call(self):
+        bedrock = FakeBedrock(tool_use("log_food", {"items": [ITEM], "note": None}))
+        _, meta = run_parse(bedrock, cfg(), self._request(), "en")
+        self.assertEqual(len(bedrock.calls), 1)
+        self.assertEqual(bedrock.calls[0]["modelId"], "model-text")
+        self.assertEqual(meta.flags, [])
 
     def test_clarification(self):
         bedrock = FakeBedrock(tool_use("ask_clarification", {"question": "How large was it?"}))
@@ -296,7 +414,7 @@ class PipelineTest(unittest.TestCase):
 
     def test_one_repair_then_success(self):
         bedrock = FakeBedrock(
-            tool_use("log_food", {"items": [dict(ITEM, kcal=None)], "note": None}),
+            tool_use("log_food", {"items": [density(kcal=None)], "note": None}),
             tool_use("log_food", {"items": [ITEM], "note": None}),
         )
         body, meta = run_parse(bedrock, cfg(), self._request(), "en")
@@ -414,8 +532,10 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual([a["toolResult"]["toolUseId"] for a in answers], ["tu-1", "tu-2"])
 
     def test_soft_findings_are_flags_not_failures(self):
+        # 2800 kcal per 100 g of a 180 g portion: past the review bound, and far past what
+        # its own protein/fat/carbohydrate grams can account for.
         bedrock = FakeBedrock(tool_use("log_food", {"items": [
-            dict(ITEM, kcal=99999, confidence=0.1)], "note": None}))
+            dict(density(kcal=2800), confidence=0.1)], "note": None}))
         body, meta = run_parse(bedrock, cfg(), self._request(), "en")
         self.assertEqual(body["type"], "success")
         self.assertEqual(meta.flags, ["kcal_out_of_range", "low_confidence", "macro_energy_mismatch"])
@@ -837,8 +957,8 @@ class ContractFixtureTest(unittest.TestCase):
 
     def test_success_matches_the_committed_fixture(self):
         bedrock = FakeBedrock(tool_use("log_food", {
-            "items": [ITEM, dict(ITEM, name="Boiled rice", grams=220, kcal=286,
-                                 protein_g=5.9, fat_g=0.7, carbs_g=62.9, confidence=0.84)],
+            "items": [ITEM, RICE],
+            "summary": "chicken breast with boiled rice",
             "note": None}, usage=(420, 96)))
         body, _ = run_parse(bedrock, cfg(), validate_request({"text": "chicken and rice"}, cfg()), "en")
         fixture = json.loads((FIXTURES / "parse_text_success.json").read_text(encoding="utf-8"))
@@ -884,11 +1004,12 @@ class SmokeTest(unittest.TestCase):
 class EvalParityTest(unittest.TestCase):
     """run_eval.py must measure the prompt and tools that production actually sends."""
 
-    def test_prompt_and_tools_have_not_drifted(self):
-        self.assertEqual(prompt.SYSTEM_PROMPT, run_eval.SYSTEM_PROMPT)
-        self.assertEqual(prompt.TOOL_CONFIG, run_eval.TOOL_CONFIG)
-        self.assertEqual(prompt.CANARY, run_eval.CANARY)
-        self.assertEqual(prompt.build_system("ru"), run_eval.build_system("ru"))
+    def test_the_eval_reuses_the_production_prompt_and_tools(self):
+        # Identity, not equality: a mirrored copy is what used to drift.
+        self.assertIs(run_eval.SYSTEM_PROMPT, prompt.SYSTEM_PROMPT)
+        self.assertIs(run_eval.TOOL_CONFIG, prompt.TOOL_CONFIG)
+        self.assertIs(run_eval.build_system, prompt.build_system)
+        self.assertIs(run_eval.CANARY, prompt.CANARY)
 
     def test_eval_rejects_what_production_rejects(self):
         def case(**overrides):
@@ -911,7 +1032,7 @@ class EvalParityTest(unittest.TestCase):
         for label, (subject, payload, expected) in payloads.items():
             with self.subTest(label):
                 tool, payload = ("ask_clarification", payload) if payload else (
-                    "log_food", {"items": [dict(ITEM, kcal=296.7)], "note": None})
+                    "log_food", {"items": [density(kcal=164.7)], "note": None})
                 result = run_eval.run_one(FakeBedrock(tool_use(tool, payload)), "m",
                                           {"invoke_id": "m"}, subject, 1)
                 self.assertEqual((result.ok, result.schema_valid), (expected, expected), result.error)

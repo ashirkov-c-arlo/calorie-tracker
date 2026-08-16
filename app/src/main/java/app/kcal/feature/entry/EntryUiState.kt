@@ -5,56 +5,90 @@ import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 
 /**
- * Text entry and the confirmation that follows a parse. [items] is only filled once the parser
- * succeeded, and [isConfirming] is what shows the editable sheet: nothing is persisted before
- * the user confirms it there. [photoPath] points at a cache file that lives only as long as this
- * flow needs it and is never stored with the meal.
+ * One described item on its way to the parser. Every item is its own request, so it carries its
+ * own text, its own optional transient photo, and its own outcome: the proxy accepts one image
+ * per request and a clarification belongs to the text it was asked about.
  */
-data class EntryUiState(
+data class EntryInputUiState(
+    val key: Long,
     val text: String = "",
     val textMissing: Boolean = false,
-    val isParsing: Boolean = false,
-    val failure: FailureReason? = null,
-    val clarificationQuestion: String? = null,
-    val clarificationAnswer: String = "",
-    val isConfirming: Boolean = false,
-    val note: String? = null,
-    val items: PersistentList<MealItemUiState> = persistentListOf(),
-    val isSaving: Boolean = false,
-    val saveFailed: Boolean = false,
     val photoPath: String? = null,
     val isAttachingPhoto: Boolean = false,
     val photoFailed: Boolean = false,
+    val isParsing: Boolean = false,
+    val isParsed: Boolean = false,
+    val failure: FailureReason? = null,
+    val clarificationQuestion: String? = null,
+    val clarificationAnswer: String = "",
+)
+
+/**
+ * The described items and the confirmation that follows their parses. [items] is only filled once
+ * every input succeeded, and [isConfirming] is what shows the editable sheet: nothing is persisted
+ * before the user confirms it there. Every [EntryInputUiState.photoPath] points at a cache file
+ * that lives only as long as this flow needs it and is never stored with the meal.
+ */
+data class EntryUiState(
+    val inputs: PersistentList<EntryInputUiState> = persistentListOf(EntryInputUiState(key = FIRST_ITEM_KEY)),
+    val isConfirming: Boolean = false,
+    val note: String? = null,
+    /** The one-line meal name the parser proposed; editable before it is stored. */
+    val summary: String = "",
+    val items: PersistentList<MealItemUiState> = persistentListOf(),
+    val isSaving: Boolean = false,
+    val saveFailed: Boolean = false,
 ) {
+    val isParsing: Boolean
+        get() = inputs.any { it.isParsing }
+
     val canSubmit: Boolean
-        get() = !isParsing && !isSaving && !isAttachingPhoto
+        get() = !isParsing && !isSaving && inputs.none { it.isAttachingPhoto }
 }
 
 sealed interface EntryEvent {
     data object Saved : EntryEvent
 }
 
-internal val entryIdlePreviewState = EntryUiState(text = "омлет из трёх яиц и кофе с молоком")
+private val typedInput = EntryInputUiState(key = FIRST_ITEM_KEY, text = "омлет из трёх яиц и кофе с молоком")
 
-internal val entryParsingPreviewState = entryIdlePreviewState.copy(isParsing = true)
+private fun entryState(vararg inputs: EntryInputUiState) = EntryUiState(inputs = persistentListOf(*inputs))
 
-internal val entryFailurePreviewState = entryIdlePreviewState.copy(failure = FailureReason.NO_NETWORK)
+internal val entryIdlePreviewState = entryState(typedInput)
+
+internal val entryParsingPreviewState = entryState(typedInput.copy(isParsing = true))
+
+internal val entryFailurePreviewState = entryState(typedInput.copy(failure = FailureReason.NO_NETWORK))
 
 internal val entryPhotoAttachedPreviewState =
-    entryIdlePreviewState.copy(text = "это на тарелке", photoPath = "/cache/entry-photos/meal.jpg")
+    entryState(typedInput.copy(text = "это на тарелке", photoPath = "/cache/entry-photos/meal.jpg"))
 
-internal val entryPhotoPreparingPreviewState = entryIdlePreviewState.copy(isAttachingPhoto = true)
+internal val entryPhotoPreparingPreviewState = entryState(typedInput.copy(isAttachingPhoto = true))
 
-internal val entryPhotoFailedPreviewState = entryIdlePreviewState.copy(photoFailed = true)
+internal val entryPhotoFailedPreviewState = entryState(typedInput.copy(photoFailed = true))
 
-internal val entryClarificationPreviewState = entryIdlePreviewState.copy(
-    clarificationQuestion = "Approximately how large was the serving?",
-    clarificationAnswer = "About 250 grams",
+internal val entryClarificationPreviewState = entryState(
+    typedInput.copy(
+        clarificationQuestion = "Approximately how large was the serving?",
+        clarificationAnswer = "About 250 grams",
+    ),
+)
+
+/** Several items at once: one already read, one still waiting for its own retry. */
+internal val entryMultipleInputsPreviewState = entryState(
+    typedInput.copy(text = "омлет из трёх яиц", isParsed = true),
+    EntryInputUiState(
+        key = FIRST_ITEM_KEY + 1,
+        text = "это на тарелке",
+        photoPath = "/cache/entry-photos/plate.jpg",
+        failure = FailureReason.TIMEOUT,
+    ),
 )
 
 internal val entryConfirmationPreviewState = entryIdlePreviewState.copy(
     isConfirming = true,
     note = "Weights are estimated from a typical serving.",
+    summary = "omelette with coffee and milk",
     items =
     persistentListOf(
         MealItemUiState(
@@ -87,6 +121,7 @@ internal val entryConfirmationPreviewState = entryIdlePreviewState.copy(
  */
 internal val entryConfirmationRussianPreviewState = entryConfirmationPreviewState.copy(
     note = "Вес порций оценён по типичной подаче.",
+    summary = "омлет и кофе с молоком",
     items =
     persistentListOf(
         MealItemUiState(

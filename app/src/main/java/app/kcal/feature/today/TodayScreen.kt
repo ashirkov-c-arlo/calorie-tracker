@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -200,21 +201,18 @@ private fun MealCard(
             modifier = Modifier.padding(KcalSpacing.medium),
             verticalArrangement = Arrangement.spacedBy(KcalSpacing.extraSmall),
         ) {
-            meal.itemNames.forEach { name ->
-                Text(text = name, style = MaterialTheme.typography.titleSmall)
-            }
+            // One line: the confirmed summary, or the item names for a meal logged without one.
             Text(
-                text =
-                stringResource(
-                    R.string.meal_kcal,
-                    DecimalText.formatLong(meal.totals.kcal, locale),
-                ),
-                style = MaterialTheme.typography.bodyMedium,
+                text = meal.summary ?: meal.itemNames.joinToString(stringResource(R.string.meal_items_separator)),
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text =
                 stringResource(
-                    R.string.meal_macros,
+                    R.string.consumed_summary,
+                    DecimalText.formatLong(meal.totals.kcal, locale),
                     DecimalText.format(meal.totals.proteinG, locale),
                     DecimalText.format(meal.totals.fatG, locale),
                     DecimalText.format(meal.totals.carbsG, locale),

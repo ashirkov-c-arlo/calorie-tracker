@@ -2,6 +2,7 @@ package app.kcal.testing
 
 import app.kcal.domain.model.ActivityLevel
 import app.kcal.domain.model.EnergyEquationSex
+import app.kcal.domain.model.LossPace
 import app.kcal.domain.model.StoredProfile
 
 /** A complete, valid profile shared by tests that only care about completeness. */
@@ -12,7 +13,7 @@ fun completeProfile(
     energyEquationSex: EnergyEquationSex? = EnergyEquationSex.MALE,
     activityLevel: ActivityLevel? = ActivityLevel.LIGHT,
     targetWeightKg: Double? = 78.0,
-    requestedLossRateKgPerWeek: Double? = 0.5,
+    lossPace: LossPace? = LossPace.MODERATE,
 ): StoredProfile = StoredProfile(
     currentWeightKg = currentWeightKg,
     heightCm = heightCm,
@@ -20,5 +21,5 @@ fun completeProfile(
     energyEquationSex = energyEquationSex,
     activityLevel = activityLevel,
     targetWeightKg = targetWeightKg,
-    requestedLossRateKgPerWeek = requestedLossRateKgPerWeek,
+    lossPace = lossPace,
 )

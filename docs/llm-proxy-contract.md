@@ -139,6 +139,7 @@ HTTP status: `200 OK`.
       "confidence": 0.91
     }
   ],
+  "summary": "chicken breast with boiled rice",
   "note": null,
   "usage": {
     "input_tokens": 420,
@@ -152,7 +153,7 @@ HTTP status: `200 OK`.
 | Field | Type | Required | Rules |
 |---|---|---:|---|
 | `type` | string | yes | Exactly `success` |
-| `items` | array | yes | At least one item |
+| `items` | array | yes | At least one item; exactly one when the request carried an image |
 | `items[].name` | string | yes | Non-blank; localized to `Accept-Language` |
 | `items[].grams` | number or null | yes | Null only when mass cannot be estimated |
 | `items[].kcal` | integer | yes | Non-negative |
@@ -160,6 +161,7 @@ HTTP status: `200 OK`.
 | `items[].fat_g` | number | yes | Non-negative |
 | `items[].carbs_g` | number | yes | Non-negative |
 | `items[].confidence` | number | yes | Inclusive range `0.0..1.0` |
+| `summary` | string or null | yes | One line naming the meal, at most 10 words; localized to `Accept-Language` |
 | `note` | string or null | yes | Localized to `Accept-Language` |
 | `usage` | object | no | Omitted when the provider does not return usage |
 | `usage.input_tokens` | integer | with usage | Non-negative |
@@ -171,6 +173,11 @@ infinity.
 The proxy enforces schema validity. The app independently validates the response. App-side
 sanity bounds such as `kcal > 5000` remain editable `needs review` warnings rather than
 transport failures.
+
+`summary` is display-only: it names the meal in the app's journal and never carries numbers.
+The proxy caps it at 10 words and collapses whitespace, so the app can render it on one line.
+Because nothing numeric depends on it, a response whose `summary` is missing or unusable stays
+a `success` with `summary = null`, and the app falls back to listing item names.
 
 ---
 
@@ -242,20 +249,23 @@ unparseable error body to `UNKNOWN` without displaying its raw contents.
 The future proxy MUST:
 
 1. use the Bedrock Converse API, never raw model-specific `InvokeModel` payloads;
-2. declare the versioned `log_food` and `ask_clarification` tools;
+2. declare the versioned `log_food`, `ask_clarification` and `read_portion` tools;
 3. require exactly one tool call with `toolChoice = any`;
 4. accept exactly one known tool-use block;
 5. validate the tool input;
 6. make at most one repair attempt for malformed or hard-invalid tool input;
-7. wrap valid tool input in the `type`-discriminated app response from §4 or §5;
-8. map service errors to §6.
+7. multiply the reported per-100 g values by the portion mass itself, so no model performs
+   nutrition arithmetic;
+8. wrap the result in the `type`-discriminated app response from §4 or §5;
+9. map service errors to §6.
 
 Tool input shapes:
 
 ```text
 log_food:
 {
-  items: [{ name, grams, kcal, protein_g, fat_g, carbs_g, confidence }],
+  items: [{ name, grams, per_100g: { kcal, protein_g, fat_g, carbs_g }, confidence }],
+  summary,
   note
 }
 
@@ -263,10 +273,36 @@ ask_clarification:
 {
   question
 }
+
+read_portion:
+{
+  grams          # null when the description states no quantity
+}
 ```
 
+`per_100g` is a density, never a portion. The proxy computes
+`absolute = per_100g / 100 * grams` and returns only the absolute values of §4, so a model
+that pre-scales its own numbers cannot double-count the portion. This is the one place where
+the tool schema and the response schema differ, and it is deliberate: identifying a food is a
+model's job, multiplying two numbers is not.
+
+### 7.1 Model routing
+
+A text-only request is answered by one model call. A request carrying an image is answered
+by two, because recognising a dish and reading a stated quantity are different skills:
+
+| Call | Model | Input | Contributes |
+|---|---|---|---|
+| portion | text model | text and clarification only, never the image | `grams` |
+| dish | vision model | image, text and clarification | `name`, `per_100g`, `confidence`, `summary`, `note` |
+
+The portion call runs first, gets one attempt with no retry, and is best effort: a failure, a
+refusal or a `grams: null` answer all mean the mass the vision model estimated from the photo
+is kept. A photo shows one meal, so the vision path keeps exactly one item.
+
 Model ID, region, prompt text, and prompt version are backend configuration and never
-appear in app requests or responses for nutrition parsing.
+appear in app requests or responses for nutrition parsing. Which model answers which
+modality is likewise backend configuration; the app sends the same request either way.
 
 ---
 

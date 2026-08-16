@@ -121,6 +121,28 @@ class TrendsViewModelTest {
     }
 
     @Test
+    fun `deleting the selected entry removes it and returns to today`() = runTest {
+        val past = today.minusDays(3)
+        val repository = repository(past to 90.0, today to 81.0)
+        val viewModel = viewModel(repository)
+        val states = collect(viewModel)
+        runCurrent()
+
+        viewModel.onEntryClick(past)
+        viewModel.onDeleteEntry(past)
+        runCurrent()
+
+        assertEquals(mapOf(today to 81.0), repository.weightsByDate.value.toMap())
+        assertEquals(today, states.last().editedDate)
+
+        repository.writeFails = true
+        viewModel.onDeleteEntry(today)
+        runCurrent()
+
+        assertEquals(mapOf(today to 81.0), repository.weightsByDate.value.toMap())
+    }
+
+    @Test
     fun `an untouched field follows a weight changed elsewhere, a typed one is kept`() = runTest {
         val repository = repository(today to 81.0)
         val viewModel = viewModel(repository)

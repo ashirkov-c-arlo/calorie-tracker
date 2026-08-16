@@ -9,7 +9,6 @@
     <string name="history_title">История</string>
     <string name="settings_title">Настройки</string>
     <string name="profile_setup_title">Ваш профиль</string>
-    <string name="manual_entry_add_title">Добавить приём пищи</string>
     <string name="manual_entry_edit_title">Изменить приём пищи</string>
     <string name="entry_title">Запись еды</string>
 
@@ -26,6 +25,7 @@
     <string name="trends_entries_title">Записанный вес</string>
     <string name="trends_entry_value">%1$s %2$s</string>
     <string name="trends_edit_entry_content_description">Изменить вес за этот день</string>
+    <string name="trends_delete_entry_content_description">Удалить вес за этот день</string>
     <string name="trends_save_failed_for_date">Не удалось сохранить вес за %1$s</string>
     <string name="trends_chart_title">Вес и среднее за 7 дней</string>
     <string name="trends_chart_legend">Точки — записанный вес. Линия — среднее по записям за семь дней до каждой точки, поэтому пропущенные дни не достраиваются.</string>
@@ -47,7 +47,7 @@
     <string name="nutrient_progress_kcal">%1$s / %2$s ккал</string>
     <string name="nutrient_progress_grams">%1$s / %2$s г</string>
     <string name="meal_kcal">%1$s ккал</string>
-    <string name="meal_macros">Белки %1$s г · Жиры %2$s г · Углеводы %3$s г</string>
+    <string name="meal_items_separator">, </string>
 
     <string name="history_empty">Записей пока нет. Дни и недели ISO появятся здесь после первого сохранённого приёма пищи.</string>
     <string name="history_load_failed">Не удалось загрузить историю из локального хранилища.</string>
@@ -57,6 +57,7 @@
 
     <string name="manual_entry_item_number">Продукт %1$d</string>
     <string name="field_food_name">Название продукта</string>
+    <string name="field_meal_summary">Приём пищи одной строкой (необязательно)</string>
     <string name="field_food_grams_optional">Масса (необязательно)</string>
     <string name="manual_entry_review_warning">Значение выходит за обычный диапазон проверки. Проверьте его перед сохранением.</string>
     <string name="manual_entry_load_failed">Не удалось загрузить этот приём пищи из локального хранилища.</string>
@@ -66,6 +67,7 @@
     <string name="entry_text_hint">Пишите на любом языке. Порции помогают: «два яйца и 200 г риса».</string>
     <string name="entry_text_required">Сначала опишите приём пищи.</string>
     <string name="entry_parsing">Читаем ваше описание…</string>
+    <string name="entry_item_parsed">Успешно прочитано.</string>
     <string name="entry_clarification_answer_label">Ваш ответ</string>
     <string name="entry_photo_add">Добавить фото</string>
     <string name="entry_photo_take">Сделать фото</string>
@@ -83,9 +85,10 @@
     <string name="entry_failure_unavailable">Автоматическое чтение недоступно. Запишите приём пищи вручную.</string>
     <string name="entry_failure_unknown">Не удалось прочитать описание. Повторите попытку или запишите вручную.</string>
 
-    <string name="action_parse">Прочитать описание</string>
+    <string name="action_parse">Записать</string>
     <string name="action_send_answer">Отправить ответ</string>
     <string name="action_log_manually">Записать вручную</string>
+    <string name="action_switch_to_auto">Переключить на автоматическую запись</string>
     <string name="action_confirm">Сохранить приём пищи</string>
 
     <string name="profile_intro">Введите данные один раз. Все поля обязательны, позже их можно изменить в настройках.</string>
@@ -101,8 +104,9 @@
     <string name="loss_pace_slow">Медленный</string>
     <string name="loss_pace_moderate">Средний</string>
     <string name="loss_pace_fast">Быстрый</string>
-    <string name="loss_pace_option">%1$s · %2$s %3$s</string>
-    <string name="loss_pace_unavailable">Укажите текущий вес, чтобы увидеть доступные темпы.</string>
+    <string name="loss_pace_option">%1$s · ~%2$s %3$s</string>
+    <string name="loss_pace_unavailable">Укажите текущий вес и рост, чтобы увидеть доступные темпы.</string>
+    <string name="loss_pace_no_deficit">Индекс массы тела ниже справочного диапазона, поэтому цель — поддержание веса без дефицита.</string>
     <string name="target_weight_unset">Не выбрано</string>
     <string name="target_weight_needs_height">Укажите рост, чтобы выбрать целевой вес.</string>
     <string name="target_weight_range_hint">Индекс массы тела %1$s–%2$s при вашем росте — это %3$s–%4$s %5$s.</string>
@@ -146,12 +150,11 @@
     <string name="target_kcal">%1$s ккал</string>
     <string name="target_macros">Белки %1$s г · Жиры %2$s г · Углеводы %3$s г</string>
     <string name="target_rate_effective">Расчетный темп: %1$s в неделю</string>
-    <string name="target_rate_requested">Вы запросили %1$s в неделю</string>
+    <string name="target_deficit">Суточный дефицит: %1$s ккал</string>
 
-    <string name="warning_rate_limited">Темп ограничен до 1 кг в неделю и 1 процента массы тела.</string>
-    <string name="warning_deficit_capped">Дефицит ограничен 20 процентами суточного расхода энергии и 750 ккал.</string>
-    <string name="warning_intake_floor">Минимальное потребление для выбранного варианта формулы ограничило дефицит.</string>
+    <string name="warning_deficit_capped">Дефицит достиг предела для вашего индекса массы тела, поэтому расчетный темп ниже.</string>
     <string name="warning_target_reached">Текущий вес уже достиг целевого, поэтому цель — поддержание веса.</string>
+    <string name="warning_no_deficit_below_reference_bmi">Индекс массы тела ниже справочного диапазона, поэтому цель — поддержание веса.</string>
 
     <string name="unavailable_missing_inputs">Заполните все поля, чтобы увидеть оценку.</string>
     <string name="unavailable_age_below_minimum">Оценка доступна только с 18 лет.</string>

@@ -88,8 +88,9 @@ class KcalNavHostTest {
         composeRule.onNodeWithText(string(R.string.entry_title)).assertIsDisplayed()
         composeRule.onAllNodesWithText(string(R.string.nav_trends)).assertCountEquals(0)
 
-        composeRule.onNodeWithText(string(R.string.action_log_manually)).performClick()
-        composeRule.onNodeWithText(string(R.string.manual_entry_add_title)).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(string(R.string.action_log_manually)).performClick()
+        // Manual entry reuses the same title as automatic logging
+        composeRule.onNodeWithContentDescription(string(R.string.action_switch_to_auto)).assertIsDisplayed()
 
         composeRule.onNodeWithContentDescription(string(R.string.action_cancel)).performClick()
         composeRule.onNodeWithText(string(R.string.today_progress_title)).assertIsDisplayed()
@@ -110,10 +111,12 @@ class KcalNavHostTest {
                             onRetry = {},
                         )
                     },
-                    entryContent = { mealId, onClose ->
+                    entryContent = { mealId, onClose, onSwitchToAuto ->
                         ManualEntryScreen(
                             uiState = manualEntryEmptyPreviewState.copy(mealId = mealId),
                             onBackClick = onClose,
+                            onSwitchToAuto = onSwitchToAuto,
+                            onSummaryChange = {},
                             onItemChange = { _, _, _ -> },
                             onAddItem = {},
                             onRemoveItem = {},
@@ -126,11 +129,14 @@ class KcalNavHostTest {
                             uiState = EntryUiState(),
                             onBackClick = onClose,
                             onLogManually = onLogManually,
-                            onTextChange = {},
+                            onTextChange = { _, _ -> },
+                            onAddInput = {},
+                            onRemoveInput = {},
                             onParse = {},
-                            onClarificationAnswerChange = {},
+                            onClarificationAnswerChange = { _, _ -> },
                             onSubmitClarification = {},
                             onRetry = {},
+                            onSummaryChange = {},
                             onItemChange = { _, _, _ -> },
                             onAddItem = {},
                             onRemoveItem = {},
@@ -153,6 +159,7 @@ class KcalNavHostTest {
                             onWeightChange = {},
                             onSave = {},
                             onEntryClick = {},
+                            onDeleteEntry = {},
                             onLogTodayClick = {},
                             onRetry = {},
                         )

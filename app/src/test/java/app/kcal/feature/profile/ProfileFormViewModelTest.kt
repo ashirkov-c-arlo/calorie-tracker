@@ -83,9 +83,8 @@ class ProfileFormViewModelTest {
     }
 
     @Test
-    fun `stored values prefill the form with the app locale and the matching pace`() = runTest {
-        val moderateRate = assertNotNull(SuggestLossPaces()(completeProfile())).moderateKgPerWeek
-        val stored = completeProfile(targetWeightKg = 72.0, requestedLossRateKgPerWeek = moderateRate)
+    fun `stored values prefill the form with the app locale and the selected position`() = runTest {
+        val stored = completeProfile(targetWeightKg = 72.0, lossPace = LossPace.MODERATE)
         profileRepository.state.value = UserPreferences(profile = stored)
         val viewModel = viewModel(locale = Locale.forLanguageTag("ru"))
         runCurrent()
@@ -97,25 +96,29 @@ class ProfileFormViewModelTest {
         assertEquals(72.0, state.fields.targetWeightKg)
         assertEquals(EnergyEquationSex.MALE, state.fields.energyEquationSex)
         assertEquals(ActivityLevel.LIGHT, state.fields.activityLevel)
-        assertEquals(moderateRate, state.fields.requestedLossRateKgPerWeek)
         assertEquals(LossPace.MODERATE, state.fields.lossPace)
     }
 
     @Test
-    fun `a stored rate that matches no option keeps its value and stays selected on save`() = runTest {
-        val stored = completeProfile(targetWeightKg = 72.0, requestedLossRateKgPerWeek = 0.5)
-        profileRepository.state.value = UserPreferences(profile = stored)
+    fun `below the reference body mass index no position is offered or required`() = runTest {
         val viewModel = viewModel()
         runCurrent()
+        fillValidMetricForm(viewModel, selectPace = false)
+        // 50 kg at 176 cm is a body mass index of 16.1, so there is no deficit to choose.
+        viewModel.onCurrentWeightChange("50")
 
-        // The intent is preserved and no option is highlighted instead of it.
-        assertEquals(0.5, viewModel.uiState.value.fields.requestedLossRateKgPerWeek)
-        assertNull(viewModel.uiState.value.fields.lossPace)
+        assertNull(viewModel.uiState.value.lossPaceOptions)
+        assertTrue(viewModel.uiState.value.noDeficitApplies)
 
         viewModel.onSave()
         runCurrent()
 
-        assertEquals(0.5, profileRepository.savedProfiles.single().requestedLossRateKgPerWeek)
+        assertNull(viewModel.uiState.value.errors.lossPace)
+        val saved = profileRepository.savedProfiles.single()
+        assertNull(saved.lossPace)
+        val preview = viewModel.uiState.value.target
+        assertTrue(preview is TargetPreview.Available)
+        assertTrue(DailyTargetWarning.NO_DEFICIT_BELOW_REFERENCE_BMI in preview.warnings)
     }
 
     @Test
@@ -164,16 +167,17 @@ class ProfileFormViewModelTest {
         fillValidMetricForm(viewModel)
 
         val options = assertNotNull(viewModel.uiState.value.lossPaceOptions)
-        assertTrue(options.slowKgPerWeek < options.moderateKgPerWeek)
-        assertTrue(options.moderateKgPerWeek < options.fastKgPerWeek)
+        assertTrue(assertNotNull(options.slowKgPerWeek) < assertNotNull(options.moderateKgPerWeek))
+        assertTrue(assertNotNull(options.moderateKgPerWeek) < assertNotNull(options.fastKgPerWeek))
 
         val previews =
             LossPace.entries.associateWith { pace ->
                 viewModel.onLossPaceSelect(pace)
-                assertEquals(options.rateFor(pace), viewModel.uiState.value.fields.requestedLossRateKgPerWeek)
                 assertEquals(pace, viewModel.uiState.value.fields.lossPace)
                 val preview = viewModel.uiState.value.target
                 assertTrue(preview is TargetPreview.Available, "expected a target for $pace")
+                // The shown estimate is the one the selector offered for that position.
+                assertEquals(options.rateFor(pace), preview.effectiveLossRateKgPerWeek)
                 preview
             }
 
@@ -181,12 +185,8 @@ class ProfileFormViewModelTest {
         val moderate = previews.getValue(LossPace.MODERATE)
         val fast = previews.getValue(LossPace.FAST)
         assertTrue(slow.targets.kcal > moderate.targets.kcal)
-        assertTrue(moderate.targets.kcal >= fast.targets.kcal)
-        // A guardrail is never silent: the requested pace is kept and the reason is shown.
-        assertEquals(options.fastKgPerWeek, fast.requestedLossRateKgPerWeek)
-        if (fast.effectiveLossRateKgPerWeek < fast.requestedLossRateKgPerWeek) {
-            assertTrue(fast.warnings.isNotEmpty())
-        }
+        assertTrue(moderate.targets.kcal > fast.targets.kcal)
+        assertTrue(slow.deficitKcal < fast.deficitKcal)
     }
 
     @Test
@@ -217,46 +217,45 @@ class ProfileFormViewModelTest {
         viewModel.onSave()
         runCurrent()
 
-        assertEquals(ProfileFieldError.REQUIRED, viewModel.uiState.value.errors.lossRate)
+        assertEquals(ProfileFieldError.REQUIRED, viewModel.uiState.value.errors.lossPace)
         assertTrue(profileRepository.savedProfiles.isEmpty())
     }
 
     @Test
-    fun `reaching the target weight keeps the chosen pace and reports maintenance`() = runTest {
+    fun `reaching the target weight keeps the chosen position and reports maintenance`() = runTest {
         val viewModel = viewModel()
         runCurrent()
         fillValidMetricForm(viewModel)
         // A target above the current weight leaves nothing to lose.
         viewModel.onCurrentWeightChange("60")
 
-        val chosenRate = assertNotNull(viewModel.uiState.value.fields.requestedLossRateKgPerWeek)
         val preview = viewModel.uiState.value.target
         assertTrue(preview is TargetPreview.Available)
         assertTrue(DailyTargetWarning.TARGET_WEIGHT_REACHED in preview.warnings)
+        assertEquals(0, preview.deficitKcal)
 
         viewModel.onSave()
         runCurrent()
 
-        assertNull(viewModel.uiState.value.errors.lossRate)
-        // The intent is stored exactly as chosen, not replaced with a fabricated zero and not
-        // remapped after the weight changed the offered options.
-        assertEquals(chosenRate, profileRepository.savedProfiles.single().requestedLossRateKgPerWeek)
-        assertTrue(chosenRate > 0.0)
+        assertNull(viewModel.uiState.value.errors.lossPace)
+        // The choice is stored as picked, not dropped because it currently changes nothing.
+        assertEquals(LossPace.MODERATE, profileRepository.savedProfiles.single().lossPace)
     }
 
     @Test
-    fun `a pace is still offered while the target itself is unavailable`() = runTest {
+    fun `a position is still offered without an estimate while the target is unavailable`() = runTest {
         val viewModel = viewModel()
         runCurrent()
         fillValidMetricForm(viewModel)
         viewModel.onAgeChange("15")
 
-        assertNotNull(viewModel.uiState.value.lossPaceOptions)
+        val options = assertNotNull(viewModel.uiState.value.lossPaceOptions)
+        LossPace.entries.forEach { pace -> assertNull(options.rateFor(pace), "no fabricated rate for $pace") }
 
         viewModel.onSave()
         runCurrent()
 
-        assertNull(viewModel.uiState.value.errors.lossRate)
+        assertNull(viewModel.uiState.value.errors.lossPace)
         assertEquals(15, profileRepository.savedProfiles.single().ageYears)
     }
 
@@ -314,8 +313,7 @@ class ProfileFormViewModelTest {
         assertEquals(EnergyEquationSex.FEMALE, saved.energyEquationSex)
         assertEquals(ActivityLevel.MODERATE, saved.activityLevel)
         assertEquals(72.0, saved.targetWeightKg)
-        val options = assertNotNull(viewModel.uiState.value.lossPaceOptions)
-        assertEquals(options.slowKgPerWeek, saved.requestedLossRateKgPerWeek)
+        assertEquals(LossPace.SLOW, saved.lossPace)
         assertEquals(LocalDate.of(2026, 3, 15), profileRepository.savedDates.single())
     }
 
@@ -477,7 +475,7 @@ class ProfileFormViewModelTest {
             profileRepository = profileRepository,
             saveProfile = SaveProfile(profileRepository, calculate, timeProvider),
             calculateDailyTargets = calculate,
-            suggestLossPaces = SuggestLossPaces(),
+            suggestLossPaces = SuggestLossPaces(calculate),
             localeProvider = AppLocaleProvider { locale },
         )
     }

@@ -82,6 +82,7 @@ class TodayViewModel @Inject constructor(
                                     id = meal.id,
                                     itemNames = meal.items.map { it.name }.toPersistentList(),
                                     totals = aggregateMealMacros.items(meal.items),
+                                    summary = meal.summary,
                                 )
                             }.toPersistentList(),
                         )

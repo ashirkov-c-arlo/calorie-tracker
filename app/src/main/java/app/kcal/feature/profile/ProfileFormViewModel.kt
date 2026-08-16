@@ -6,6 +6,7 @@ import app.kcal.core.common.AppLocaleProvider
 import app.kcal.core.common.DecimalText
 import app.kcal.domain.model.ActivityLevel
 import app.kcal.domain.model.AppLanguage
+import app.kcal.domain.model.DeficitBand
 import app.kcal.domain.model.EnergyEquationSex
 import app.kcal.domain.model.LossPace
 import app.kcal.domain.model.StoredProfile
@@ -34,8 +35,9 @@ import javax.inject.Inject
  *
  * Typed values are converted to canonical metric before validation, so limits do not depend
  * on the displayed unit system. The target weight is picked from the reference body mass
- * index range for the entered height, and the loss pace is one of three options derived from
- * the profile, so every choice visibly changes the calculated target.
+ * index range for the entered height, and the deficit is picked as one of three positions of
+ * the range that the body mass index and the habitual activity imply, so every choice visibly
+ * changes the calculated target.
  */
 @HiltViewModel
 class ProfileFormViewModel @Inject constructor(
@@ -79,10 +81,7 @@ class ProfileFormViewModel @Inject constructor(
     fun onTargetWeightChange(kilograms: Double) =
         updateFields { it.copy(targetWeightKg = kilograms.roundToStep(TARGET_WEIGHT_STEP_KG)) }
 
-    fun onLossPaceSelect(pace: LossPace) = updateFields { fields ->
-        val rate = _uiState.value.lossPaceOptions?.rateFor(pace)
-        fields.copy(lossPace = pace, requestedLossRateKgPerWeek = rate ?: fields.requestedLossRateKgPerWeek)
-    }
+    fun onLossPaceSelect(pace: LossPace) = updateFields { it.copy(lossPace = pace) }
 
     fun onFormulaVariantSelect(value: EnergyEquationSex) = updateFields { it.copy(energyEquationSex = value) }
 
@@ -141,24 +140,27 @@ class ProfileFormViewModel @Inject constructor(
 
     /**
      * Recomputes everything derived from the entered values: the reference target weight
-     * range, the three offered paces and the estimate itself.
+     * range, the offered deficit positions with their estimated weekly loss, and the estimate
+     * itself.
      */
     private fun ProfileFormUiState.withFields(fields: ProfileFormFields): ProfileFormUiState {
         val profile = fields.toStoredProfile(unitSystem)
         // Entered values are never silently changed: the reference range is advisory and the
-        // offered paces depend on body weight alone.
+        // offered positions follow from the body mass index and the habitual activity.
         val paceOptions = suggestLossPaces(profile)
         return copy(
-            fields = fields.copy(lossPace = fields.requestedLossRateKgPerWeek?.let { paceOptions?.paceFor(it) }),
+            fields = fields,
             targetWeightRangeKg = BodyMetrics.targetWeightRangeKg(profile.heightCm),
             lossPaceOptions = paceOptions,
+            noDeficitApplies =
+            paceOptions == null && DeficitBand.bodyMassIndex(profile.currentWeightKg, profile.heightCm) != null,
             target = calculateDailyTargets.forStoredProfile(profile).toTargetPreview(),
         )
     }
 
     /**
-     * One validation policy, expressed in canonical metric units. The requested pace has no
-     * numeric limit of its own: the offered options already respect the domain guardrails.
+     * One validation policy, expressed in canonical metric units. The chosen position has no
+     * numeric limit of its own: the band it belongs to already carries the range and the cap.
      */
     private fun validate(state: ProfileFormUiState): ProfileFormErrors {
         val fields = state.fields
@@ -172,19 +174,14 @@ class ProfileFormViewModel @Inject constructor(
             formulaVariant = ProfileFieldError.REQUIRED.takeIf { fields.energyEquationSex == null },
             activityLevel = ProfileFieldError.REQUIRED.takeIf { fields.activityLevel == null },
             targetWeight = targetWeightError(fields),
-            lossRate = rateError(fields),
+            // Below the reference body mass index there is no deficit to choose at all.
+            lossPace = ProfileFieldError.REQUIRED.takeIf { fields.lossPace == null && !state.noDeficitApplies },
         )
     }
 
     private fun targetWeightError(fields: ProfileFormFields): ProfileFieldError? {
         val kilograms = fields.targetWeightKg ?: return ProfileFieldError.REQUIRED
         return if (kilograms in WEIGHT_RANGE_KG) null else ProfileFieldError.OUT_OF_RANGE
-    }
-
-    /** The intended pace is required and is stored exactly as chosen. */
-    private fun rateError(fields: ProfileFormFields): ProfileFieldError? {
-        val rate = fields.requestedLossRateKgPerWeek ?: return ProfileFieldError.REQUIRED
-        return if (rate.isFinite() && rate >= 0.0) null else ProfileFieldError.OUT_OF_RANGE
     }
 
     private fun weightError(text: String, metric: Boolean): ProfileFieldError? {
@@ -234,7 +231,7 @@ class ProfileFormViewModel @Inject constructor(
             energyEquationSex = energyEquationSex,
             activityLevel = activityLevel,
             targetWeightKg = targetWeightKg,
-            requestedLossRateKgPerWeek = requestedLossRateKgPerWeek,
+            lossPace = lossPace,
         )
     }
 
@@ -267,8 +264,7 @@ class ProfileFormViewModel @Inject constructor(
             energyEquationSex = energyEquationSex ?: keepFrom?.energyEquationSex,
             activityLevel = activityLevel ?: keepFrom?.activityLevel,
             targetWeightKg = targetWeightKg ?: keepFrom?.targetWeightKg,
-            requestedLossRateKgPerWeek = requestedLossRateKgPerWeek ?: keepFrom?.requestedLossRateKgPerWeek,
-            lossPace = null,
+            lossPace = lossPace ?: keepFrom?.lossPace,
         )
     }
 

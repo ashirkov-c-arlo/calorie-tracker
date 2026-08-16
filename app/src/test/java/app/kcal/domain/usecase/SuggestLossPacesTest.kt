@@ -1,5 +1,6 @@
 package app.kcal.domain.usecase
 
+import app.kcal.domain.model.ActivityLevel
 import app.kcal.domain.model.LossPace
 import app.kcal.testing.completeProfile
 import org.junit.Test
@@ -11,89 +12,82 @@ import kotlin.test.assertTrue
 class SuggestLossPacesTest {
 
     private val calculate = CalculateDailyTargets()
-    private val suggest = SuggestLossPaces()
+    private val suggest = SuggestLossPaces(calculate)
 
     @Test
-    fun `the paces are weekly shares of body weight`() {
-        val options = assertNotNull(suggest(completeProfile(currentWeightKg = 82.4)))
+    fun `each position shows exactly the weekly loss its target will produce`() {
+        val profile = completeProfile(currentWeightKg = 82.4, targetWeightKg = 72.0)
+        val options = assertNotNull(suggest(profile))
 
-        assertEquals(0.21, options.slowKgPerWeek, 0.005)
-        assertEquals(0.41, options.moderateKgPerWeek, 0.005)
-        assertEquals(0.62, options.fastKgPerWeek, 0.005)
-    }
-
-    @Test
-    fun `the paces stay ordered and distinct down to the lowest accepted weight`() {
-        listOf(20.0, 25.0, 40.0, 82.4, 150.0, 400.0).forEach { weightKg ->
-            val options = assertNotNull(suggest(completeProfile(currentWeightKg = weightKg)))
-
-            assertTrue(options.slowKgPerWeek > 0.0, "slow must be positive at $weightKg kg")
-            assertTrue(options.slowKgPerWeek < options.moderateKgPerWeek, "ordering at $weightKg kg")
-            assertTrue(options.moderateKgPerWeek < options.fastKgPerWeek, "ordering at $weightKg kg")
+        LossPace.entries.forEach { pace ->
+            val target = calculate.forStoredProfile(profile.copy(lossPace = pace))
+            assertTrue(target is DailyTargetResult.Available, "expected a target for $pace")
+            assertEquals(target.effectiveLossRateKgPerWeek, options.rateFor(pace), "shown rate for $pace")
         }
     }
 
     @Test
-    fun `the fastest pace never exceeds the one percent of body weight guardrail`() {
-        listOf(20.0, 82.4, 400.0).forEach { weightKg ->
-            val options = assertNotNull(suggest(completeProfile(currentWeightKg = weightKg)))
+    fun `the estimates stay ordered and distinct while no cap applies`() {
+        // 82.4 kg at 176 cm is overweight: 15%, 17.5% and 20% of 2418.6 kcal stay below 600.
+        val options = assertNotNull(suggest(completeProfile(currentWeightKg = 82.4, targetWeightKg = 72.0)))
+        val slow = assertNotNull(options.slowKgPerWeek)
+        val moderate = assertNotNull(options.moderateKgPerWeek)
+        val fast = assertNotNull(options.fastKgPerWeek)
 
-            assertTrue(options.fastKgPerWeek <= weightKg * 0.01 + 0.005, "guardrail at $weightKg kg")
-        }
+        assertTrue(slow > 0.0)
+        assertTrue(slow < moderate)
+        assertTrue(moderate < fast)
     }
 
     @Test
-    fun `the paces are offered even while the target itself is unavailable`() {
-        // Below the minimum age there is no target, but the user still states an intent.
-        assertNotNull(suggest(completeProfile(ageYears = 15)))
-        // The same holds once the target weight is reached.
-        assertNotNull(suggest(completeProfile(currentWeightKg = 70.0, targetWeightKg = 78.0)))
-        // And while other inputs are still missing.
-        assertNotNull(suggest(completeProfile(activityLevel = null)))
+    fun `hard habitual activity changes the offered estimates`() {
+        val obese = completeProfile(currentWeightKg = 100.0, heightCm = 175.0, targetWeightKg = 80.0)
+
+        val moderate = assertNotNull(suggest(obese.copy(activityLevel = ActivityLevel.MODERATE)))
+        val high = assertNotNull(suggest(obese.copy(activityLevel = ActivityLevel.HIGH)))
+
+        // The override lowers the share from 25% to 20%, even though energy expenditure is higher.
+        assertTrue(assertNotNull(high.fastKgPerWeek) < assertNotNull(moderate.fastKgPerWeek))
     }
 
     @Test
-    fun `no pace is offered without a usable current weight`() {
+    fun `the positions are offered without an estimate while the energy inputs are missing`() {
+        val options = assertNotNull(suggest(completeProfile(activityLevel = null)))
+
+        LossPace.entries.forEach { pace -> assertNull(options.rateFor(pace), "no fabricated rate for $pace") }
+    }
+
+    @Test
+    fun `no position is offered below the reference body mass index`() {
+        // 50 kg at 175 cm is a body mass index of 16.3, so the goal is maintenance.
+        assertNull(suggest(completeProfile(currentWeightKg = 50.0, heightCm = 175.0)))
+    }
+
+    @Test
+    fun `no position is offered without usable measurements`() {
         assertNull(suggest(completeProfile(currentWeightKg = null)))
         assertNull(suggest(completeProfile(currentWeightKg = 0.0)))
         assertNull(suggest(completeProfile(currentWeightKg = Double.NaN)))
+        assertNull(suggest(completeProfile(heightCm = null)))
     }
 
     @Test
-    fun `slower paces change the calorie target and a capped one is explained`() {
-        val profile = completeProfile(targetWeightKg = 72.0)
-        val options = assertNotNull(suggest(profile))
+    fun `the estimate is zero once the target weight is reached`() {
+        val options = assertNotNull(suggest(completeProfile(currentWeightKg = 70.0, targetWeightKg = 78.0)))
 
-        val results =
-            LossPace.entries.associateWith { pace ->
-                calculate.forStoredProfile(profile.copy(requestedLossRateKgPerWeek = options.rateFor(pace)))
+        LossPace.entries.forEach { pace -> assertEquals(0.0, assertNotNull(options.rateFor(pace)), 1e-9) }
+    }
+
+    @Test
+    fun `slower positions leave more calories in the target`() {
+        val profile = completeProfile(targetWeightKg = 72.0)
+        val targets =
+            LossPace.entries.map { pace ->
+                val result = calculate.forStoredProfile(profile.copy(lossPace = pace))
+                assertTrue(result is DailyTargetResult.Available, "expected a target for $pace")
+                result.targets.kcal
             }
 
-        results.forEach { (pace, result) ->
-            assertTrue(result is DailyTargetResult.Available, "expected a target for $pace")
-        }
-        val slow = results.getValue(LossPace.SLOW) as DailyTargetResult.Available
-        val moderate = results.getValue(LossPace.MODERATE) as DailyTargetResult.Available
-        val fast = results.getValue(LossPace.FAST) as DailyTargetResult.Available
-
-        assertTrue(slow.targets.kcal > moderate.targets.kcal)
-        assertTrue(moderate.targets.kcal >= fast.targets.kcal)
-        // The requested intent is preserved even where a guardrail lowers the effective pace.
-        assertEquals(options.fastKgPerWeek, fast.requestedLossRateKgPerWeek)
-        if (fast.effectiveLossRateKgPerWeek < fast.requestedLossRateKgPerWeek) {
-            assertTrue(fast.warnings.isNotEmpty(), "a capped pace must be explained")
-        }
-    }
-
-    @Test
-    fun `a stored rate only matches a pace that produces it exactly`() {
-        val options = assertNotNull(suggest(completeProfile(currentWeightKg = 82.4)))
-
-        assertEquals(LossPace.SLOW, options.paceFor(options.slowKgPerWeek))
-        assertEquals(LossPace.MODERATE, options.paceFor(options.moderateKgPerWeek))
-        assertEquals(LossPace.FAST, options.paceFor(options.fastKgPerWeek))
-        // A hand-entered rate keeps its value instead of being mapped to a nearby option.
-        assertNull(options.paceFor(0.5))
-        assertNull(options.paceFor(0.0))
+        assertEquals(targets.sortedDescending(), targets)
     }
 }

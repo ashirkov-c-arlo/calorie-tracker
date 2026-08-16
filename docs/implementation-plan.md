@@ -104,6 +104,7 @@ Use `--offline` when required and do not run `clean` without cause.
 | `at_epoch_millis` | Long | UTC instant |
 | `raw_user_input` | String? | Nullable for manual entries |
 | `source` | String | `MANUAL`, `LLM_TEXT`, or `LLM_PHOTO` |
+| `summary` | String? | Schema v2: one-line meal name; `NULL` falls back to item names |
 
 #### `food_items`
 
@@ -246,7 +247,7 @@ next collection instead of pretending cross-store atomicity.
 - Implement `CalculateDailyTargets` exactly as specified in `AGENTS.md`:
   - Mifflin–St Jeor;
   - PAL;
-  - requested-rate, deficit, and intake guardrails;
+  - requested-rate and deficit guardrails;
   - effective loss rate;
   - weight-based protein with percentage bounds;
   - fat at 25%;
@@ -280,7 +281,7 @@ next collection instead of pretending cross-store atomicity.
 - All PAL values.
 - Missing fields and age below 18.
 - Target reached and zero requested loss.
-- 1%/week, 20% TDEE, 750 kcal, and intake-floor guards.
+- 1%/week, 20% TDEE, and 750 kcal guards.
 - Macro ranges and energy sum.
 - Metric/imperial round trips.
 - Dot/comma parsing.
@@ -522,7 +523,7 @@ Before code, extend `docs/llm-proxy-contract.md` with the exact
 - Add `InsightGenerator` fake and fixtures first, then remote transport.
 - Add an explicit Generate action for completed day/week periods.
 - Persist localized text, period, prompt version, token usage, and generation timestamp.
-- Add Room v1→v2 migration and migration test.
+- Add the insights Room migration (v2→v3) and its migration test.
 - Render the medical disclaimer beneath every insight.
 - Never schedule WorkManager/background generation.
 

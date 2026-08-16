@@ -103,6 +103,7 @@ fun ProfileSetupScreen(
                     onUnitSystemSelect = onUnitSystemSelect,
                     targetWeightRangeKg = uiState.targetWeightRangeKg,
                     lossPaceOptions = uiState.lossPaceOptions,
+                    noDeficitApplies = uiState.noDeficitApplies,
                 )
                 TargetPreviewCard(target = uiState.target, unitSystem = uiState.unitSystem)
                 Text(
@@ -177,4 +178,16 @@ private fun ProfileSetupFilledWhitePreview() {
 @Composable
 private fun ProfileSetupGuardrailBlackPreview() {
     KcalTheme(themeMode = ThemeMode.BLACK) { ProfileSetupScreenPreviewContent(guardedProfileFormUiState) }
+}
+
+@Preview(name = "Profile setup no deficit White", heightDp = 1400)
+@Composable
+private fun ProfileSetupNoDeficitWhitePreview() {
+    KcalTheme(themeMode = ThemeMode.WHITE) { ProfileSetupScreenPreviewContent(noDeficitProfileFormUiState) }
+}
+
+@Preview(name = "Profile setup no deficit Black", heightDp = 1400)
+@Composable
+private fun ProfileSetupNoDeficitBlackPreview() {
+    KcalTheme(themeMode = ThemeMode.BLACK) { ProfileSetupScreenPreviewContent(noDeficitProfileFormUiState) }
 }

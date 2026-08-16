@@ -15,7 +15,7 @@ logged in natural language and an LLM converts it into structured data.
 
 ### Core flows
 1. On first launch, the user must complete one profile form: current weight, height, age,
-   formula variant, habitual activity level, target weight, and intended weight-loss rate.
+   formula variant, habitual activity level, target weight, and deficit position.
    The same values remain editable in Settings.
 2. User types food in any language → LLM returns food items with weights and macros →
    user confirms/edits → persisted.
@@ -28,7 +28,7 @@ logged in natural language and an LLM converts it into structured data.
 - Calories + protein/fat/carbs tracking against a locally calculated daily goal
 - Required first-run profile form; no defaults for calculator inputs
 - Profile settings: current weight, height, age, formula variant, habitual activity level,
-  target weight, and weight-loss rate
+  target weight, and deficit position
 - Automated targets for generally healthy adults aged 18+
 - Metric and imperial body measurements; canonical metric storage
 - English and Russian UI; food input itself is not restricted by language
@@ -219,6 +219,7 @@ data class MealEntry(
     val items: List<FoodItem>,
     val rawUserInput: String?,
     val source: EntrySource,
+    val summary: String?,   // one-line meal name for the journal; null = fall back to item names
 )
 
 data class WeightEntry(val localDate: LocalDate, val kg: Double)
@@ -236,8 +237,8 @@ enum class ThemeMode { SYSTEM, WHITE, BLACK }
 
 ### Profile, defaults, and units
 - DataStore stores height in centimetres, age in whole years, `EnergyEquationSex`,
-  `ActivityLevel`, target weight in kilograms, intended loss rate in kilograms per week,
-  unit system, app language, and `ThemeMode`.
+  `ActivityLevel`, target weight in kilograms, the selected deficit position
+  (`LossPace`: `SLOW`/`MODERATE`/`FAST`), unit system, app language, and `ThemeMode`.
 - Calculator fields have no defaults. Profile completeness is derived from required values;
   do not persist a separate `onboardingComplete` flag.
 - The user-facing field is a **formula variant selector**. Internally,
@@ -247,12 +248,14 @@ enum class ThemeMode { SYSTEM, WHITE, BLACK }
   mass index of 18.5–24.9 at the entered height, quantised to 0.5 kg. The bounds are shown as
   a factual reference, never as advice, and a value outside them is never silently coerced:
   the slider widens to keep it reachable.
-- **Weight-loss rate input:** three derived options — slow, moderate and fast — equal to
-  0.25%, 0.5% and 0.75% of current body weight per week. They are offered as soon as a
-  current weight exists, including while the target itself is unavailable, so no rate is ever
-  fabricated. The selected value is stored unchanged as the user's intent: the guardrails in
-  the calculator still apply afterwards and any difference is explained. A stored rate that
-  matches no option keeps its value and leaves the options unselected.
+- **Deficit input:** three positions — slow, moderate and fast — equal to the low bound, the
+  midpoint and the high bound of the deficit range that the current body mass index and the
+  habitual activity imply (see `DeficitBand`). The user picks a position, never a percentage
+  and never a rate. Each position is labelled with the estimated weekly weight loss it
+  produces, which is derived from the deficit and is a reference value only. The label is
+  omitted while the profile cannot yet produce an energy expenditure, so no rate is ever
+  fabricated. Below a body mass index of 18.5 no position is offered and none is required:
+  the goal is maintenance with a localized explanation.
 - Do **not** store a second "current weight" preference. Current weight is the latest
   `WeightEntry`; changing it in Settings upserts today's entry using the injected clock
   and zone.
@@ -299,27 +302,41 @@ The user selects PAL from their habitual week; never infer it from one day. PAL 
 represents habitual activity. Do not add exercise calories separately or infer a protein
 target from PAL alone.
 
-For weight loss, use the requested pace as an intent, then apply conservative product
-guardrails:
+For weight loss, the deficit is a share of `TDEE` taken from the body-mass band, capped by
+that band's own hard limit. The user picks the position, not the percentage:
+
+| Body mass index | Band | Deficit range | Hard cap |
+|---|---|---:|---:|
+| `< 18.5` | none | 0% | 0 kcal |
+| `18.5 .. < 25.0` | `NORMAL_WEIGHT` | 10%..15% | 400 kcal |
+| `25.0 .. < 30.0` | `OVERWEIGHT` | 15%..20% | 600 kcal |
+| `>= 30.0` | `OBESE` | 20%..25% | 750 kcal |
+| any, when `ActivityLevel.HIGH` | `HIGH_ACTIVITY` | 15%..20% | 750 kcal |
+
+`ActivityLevel.HIGH` overrides the body-mass band regardless of the index, except below
+18.5, where maintenance still wins. The three offered positions are the low bound, the
+midpoint and the high bound of the range.
 
 ```text
-safeRateKgPerWeek = min(requestedRateKgPerWeek, 1.0, currentWeightKg × 0.01)
-requestedDeficit = safeRateKgPerWeek × 7700 / 7
-cappedDeficit = min(requestedDeficit, TDEE × 0.20, 750)
-minimumIntake = 1200 for FEMALE, 1500 for MALE
+bmi = currentWeightKg / (heightCm / 100)^2
+band = bandFor(bmi, activityLevel)              # null below bmi 18.5
+deficitFraction = band.fractionFor(position)     # low bound | midpoint | high bound
 
-if currentWeightKg <= targetWeightKg:
-    targetKcal = TDEE
+if band == null or currentWeightKg <= targetWeightKg:
+    deficit = 0
 else:
-    targetKcal = min(TDEE, max(TDEE - cappedDeficit, minimumIntake))
+    deficit = min(TDEE × deficitFraction, band.capKcal)
 
-effectiveRateKgPerWeek = max(0, TDEE - targetKcal) × 7 / 7700
+targetKcal = TDEE - deficit
+estimatedRateKgPerWeek = deficit × 7 / 7700      # reference value, never an input
 ```
 
-The `7700 kcal/kg` conversion is an initial approximation, not a promise. If a rate,
-deficit cap, or intake floor changes the requested pace, preserve the user's input but
-show the effective estimated pace and a localized explanation. Recalculate from the
-latest weight. Round only the final displayed/stored targets, not intermediate values.
+A missing position is an unavailable result wherever a band applies; below 18.5 no position
+is required. The `7700 kcal/kg` conversion is an initial approximation, not a promise, and
+the weekly loss it yields is shown as an estimate only. If the cap lowers the requested
+share, show the resulting deficit and a localized explanation. Recalculate from the latest
+weight, so the band follows the body. Round only the final displayed/stored targets, not
+intermediate values.
 
 Calculate macros from the calorie target using a weight-based protein target while
 keeping all percentages inside general adult reference ranges:
@@ -347,15 +364,15 @@ require explicit future approval.
 - Photos and temporary image identifiers never appear in Room or `MealEntry`.
 
 ### Invariants — enforce in `domain/usecase`, cover with tests
-- Persisted numeric values must be finite. Macros, `kcal`, grams, and loss rate are
-  non-negative; body measurements, target weight, and age are positive; confidence is in
-  `0f..1f`.
+- Persisted numeric values must be finite. Macros, `kcal`, grams, and the estimated weekly
+  loss are non-negative; body measurements, target weight, and age are positive; confidence
+  is in `0f..1f`.
 - Missing calculator inputs, age below 18, or non-positive/non-finite RMR or TDEE produce
   an unavailable result, never guessed defaults or partially calculated targets.
 - Calculated calories and macro grams must be finite and non-negative. Their energy sum
   must match the calorie target within the documented final-rounding tolerance.
-- Rate, deficit, and intake guardrails are never silent: return the requested and effective
-  rates plus a warning whenever they differ.
+- Deficit caps are never silent: return the applied deficit, the estimated weekly loss and a
+  warning whenever the cap or a missing band changed the result.
 - A parsed meal must contain at least one item. Missing fields, non-finite/negative values,
   invalid confidence, and empty items are hard-invalid LLM responses.
 - Sanity bounds are soft review warnings: per-item `kcal` ∈ `0..5000`, weight ∈
@@ -394,7 +411,7 @@ sealed interface UserInput {
 }
 
 sealed interface ParseResult {
-    data class Success(val items: List<FoodItem>, val note: String?) : ParseResult
+    data class Success(val items: List<FoodItem>, val note: String?, val summary: String?) : ParseResult
     data class NeedsClarification(val question: String) : ParseResult
     data class Failure(val reason: FailureReason, val cause: Throwable? = null) : ParseResult
 }
@@ -470,7 +487,7 @@ Free-form model text is never parsed. The backend obtains structured output thro
 Converse **tool use**. It declares both versioned tools and requires one tool call with
 `toolChoice = any`; it accepts exactly one known tool-use block:
 
-- `log_food` → `{ items: [{ name, grams, kcal, protein_g, fat_g, carbs_g, confidence }], note }`
+- `log_food` → `{ items: [{ name, grams, kcal, protein_g, fat_g, carbs_g, confidence }], summary, note }`
 - `ask_clarification` → `{ question }` (used instead of guessing wildly)
 
 The backend extracts the selected tool input and wraps it in the contract's required
@@ -570,7 +587,7 @@ Bottom navigation, 3 tabs + FAB:
 - **History** — days/weeks list, insight cards
 - **FAB** on Today → input screen (text or text + photo)
 - **Settings** — icon in the Today top bar; profile, formula variant selector, habitual
-  activity, target-loss rate, unit system, interface language, and System/White/Black
+  activity, deficit position, unit system, interface language, and System/White/Black
   theme mode
 
 Before required profile data exists, launch directly into the single profile form and do
@@ -666,8 +683,9 @@ Rules:
 - Time and zone are always injected (`Clock`, `ZoneId`). A test that depends on the real
   current date is a bug.
 - Locale and unit system are explicit test inputs; tests never depend on machine defaults.
-- Cover both Mifflin–St Jeor branches, all four PAL values, target reached, rate/deficit
-  caps, intake floors, and an under-18 unavailable result.
+- Cover both Mifflin–St Jeor branches, all four PAL values, every body-mass deficit band and
+  its cap, the `HIGH` activity override, maintenance below a body mass index of 18.5, target
+  reached, and an under-18 unavailable result.
 - Assert macro energy sums within rounding tolerance and protein/fat/carbohydrate shares
   remain in the specified ranges.
 - Cover decimal comma/dot input and metric ↔ imperial round trips within a stated tolerance.

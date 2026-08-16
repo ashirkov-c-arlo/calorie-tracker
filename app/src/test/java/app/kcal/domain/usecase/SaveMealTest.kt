@@ -63,6 +63,19 @@ class SaveMealTest {
     }
 
     @Test
+    fun `the one-line summary is trimmed on save and cleared when the user empties it`() = runTest {
+        val repository = FakeMealRepository()
+        val save = saveUseCase(repository)
+
+        save(null, listOf(foodItem()), summary = "  oatmeal with a banana ")
+        assertEquals("oatmeal with a banana", repository.meals.value.single().summary)
+
+        val id = repository.meals.value.single().id
+        save(id, listOf(foodItem()), summary = "   ")
+        assertNull(repository.meals.value.single().summary)
+    }
+
+    @Test
     fun `editing a missing meal reports not found`() = runTest {
         val repository = FakeMealRepository()
 

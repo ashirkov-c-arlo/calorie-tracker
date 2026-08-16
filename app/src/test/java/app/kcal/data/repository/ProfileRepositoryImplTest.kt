@@ -15,6 +15,7 @@ import app.kcal.data.prefs.ProfilePreferencesDataSource.Keys
 import app.kcal.domain.model.ActivityLevel
 import app.kcal.domain.model.AppLanguage
 import app.kcal.domain.model.EnergyEquationSex
+import app.kcal.domain.model.LossPace
 import app.kcal.domain.model.ThemeMode
 import app.kcal.domain.model.UnitSystem
 import app.kcal.domain.model.WeightEntry
@@ -107,7 +108,7 @@ class ProfileRepositoryImplTest {
     }
 
     @Test
-    fun `the weight series is chronological and one upsert replaces its own date`() = runTest {
+    fun `the weight series supports chronological upsert and deletion`() = runTest {
         val yesterday = today.minusDays(1)
         repository.logWeight(WeightEntry(localDate = today, kg = 81.0))
         repository.logWeight(WeightEntry(localDate = yesterday, kg = 83.0))
@@ -124,6 +125,11 @@ class ProfileRepositoryImplTest {
             repository.weights.first().map { it.localDate to it.kg },
         )
         assertEquals(80.4, repository.preferences.first().profile.currentWeightKg)
+
+        repository.deleteWeight(today)
+
+        assertEquals(listOf(WeightEntry(yesterday, 83.0)), repository.weights.first())
+        assertEquals(83.0, repository.preferences.first().profile.currentWeightKg)
     }
 
     @Test
@@ -134,7 +140,7 @@ class ProfileRepositoryImplTest {
             preferences[Keys.FORMULA_VARIANT] = EnergyEquationSex.MALE.name
             preferences[Keys.ACTIVITY_LEVEL] = ActivityLevel.LIGHT.name
             preferences[Keys.TARGET_WEIGHT_KG] = 78.0
-            preferences[Keys.REQUESTED_LOSS_RATE_KG_PER_WEEK] = 0.5
+            preferences[Keys.LOSS_PACE] = LossPace.MODERATE.name
         }
         assertFalse(repository.isProfileComplete.first())
 

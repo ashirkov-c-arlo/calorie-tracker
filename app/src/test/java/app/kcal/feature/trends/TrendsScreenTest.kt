@@ -52,6 +52,7 @@ class TrendsScreenTest {
                         clicked += date
                         uiState = uiState.copy(editedDate = date, isEditingToday = false)
                     },
+                    onDeleteEntry = {},
                     onLogTodayClick = {},
                     onRetry = {},
                 )
@@ -80,6 +81,7 @@ class TrendsScreenTest {
                     onWeightChange = {},
                     onSave = {},
                     onEntryClick = { clicks++ },
+                    onDeleteEntry = {},
                     onLogTodayClick = {},
                     onRetry = {},
                 )
@@ -116,6 +118,7 @@ class TrendsScreenTest {
                     onWeightChange = {},
                     onSave = {},
                     onEntryClick = {},
+                    onDeleteEntry = {},
                     onLogTodayClick = {},
                     onRetry = {},
                     snackbarHostState = snackbarHostState,

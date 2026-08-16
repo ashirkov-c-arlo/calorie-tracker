@@ -20,6 +20,7 @@
       "confidence": 0.73
     }
   ],
+  "summary": "chicken breast with boiled rice",
   "note": "Item names follow the interface language, not the input language.",
   "usage": {
     "input_tokens": 401,

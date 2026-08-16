@@ -44,6 +44,10 @@ class ManualEntryViewModel @Inject constructor(
         loadRequestedMeal()
     }
 
+    fun onSummaryChange(summary: String) {
+        _uiState.value = _uiState.value.copy(summary = summary, saveFailed = false)
+    }
+
     fun onItemChange(key: Long, field: MealItemField, value: String) {
         val state = _uiState.value
         _uiState.value = state.copy(items = state.items.changingItem(key, field, value), saveFailed = false)
@@ -78,7 +82,7 @@ class ManualEntryViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(isSaving = true)
         viewModelScope.launch {
             try {
-                when (saveMeal(state.mealId, foodItems)) {
+                when (saveMeal(state.mealId, foodItems, summary = state.summary)) {
                     is SaveMealResult.Saved -> eventChannel.send(ManualEntryEvent.Saved)
                     is SaveMealResult.Invalid -> _uiState.value = _uiState.value.copy(saveFailed = true)
                     SaveMealResult.NotFound -> _uiState.value = _uiState.value.copy(loadFailed = true)
@@ -110,7 +114,13 @@ class ManualEntryViewModel @Inject constructor(
                 }
                 val items = meal.items.toItemStates(localeProvider.current())
                 nextItemKey = items.size.toLong() + FIRST_ITEM_KEY
-                _uiState.value = ManualEntryUiState(isLoading = false, mealId = mealId, items = items)
+                _uiState.value =
+                    ManualEntryUiState(
+                        isLoading = false,
+                        mealId = mealId,
+                        items = items,
+                        summary = meal.summary.orEmpty(),
+                    )
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (storageFailure: Exception) {

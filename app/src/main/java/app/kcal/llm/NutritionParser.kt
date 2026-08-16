@@ -23,8 +23,11 @@ sealed interface UserInput {
 }
 
 sealed interface ParseResult {
-    /** Items still need explicit user confirmation before anything is persisted. */
-    data class Success(val items: List<FoodItem>, val note: String?) : ParseResult
+    /**
+     * Items still need explicit user confirmation before anything is persisted. [summary] is the
+     * one-line meal name the journal shows; it is display text only and may be absent.
+     */
+    data class Success(val items: List<FoodItem>, val note: String?, val summary: String? = null) : ParseResult
 
     data class NeedsClarification(val question: String) : ParseResult
 

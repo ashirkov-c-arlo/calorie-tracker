@@ -24,10 +24,10 @@ import kotlin.math.max
 data class TransientCapture(val uri: Uri, val path: String)
 
 /**
- * Meal photos exist only as cache files, only while one entry flow needs them. Nothing here
- * ever reaches Room or a meal record: the flow uploads the re-encoded JPEG and the file is
- * deleted after a final success, when the flow ends, and when a later flow starts on leftovers
- * from a crash.
+ * Meal photos exist only as cache files, only while one entry flow needs them. One flow can hold
+ * several of them, because each described item is parsed on its own. Nothing here ever reaches
+ * Room or a meal record: the flow uploads the re-encoded JPEG and the file is deleted after a
+ * final success, when the flow ends, and when a later flow starts on leftovers from a crash.
  *
  * Re-encoding is also what strips metadata: the output is written from decoded pixels, so no
  * EXIF block, orientation tag, or GPS tag from the original survives.
@@ -64,16 +64,15 @@ class TransientPhotoStore @Inject constructor(
         )
     }
 
-    /** Removes a capture target the camera app may or may not have written to. */
-    fun discard(capture: TransientCapture) {
-        File(capture.path).delete()
+    /** Removes one photo or capture target, whether or not anything was ever written to it. */
+    fun discard(path: String) {
+        File(path).delete()
     }
 
     /**
      * Path of a freshly encoded upload candidate, or null when the source cannot be decoded or
-     * the flow was closed while it was encoding. Only that one file survives the call, so a
-     * cancelled capture, a replaced photo, and stale leftovers are all gone by the time a
-     * request can use them.
+     * the flow was closed while it was encoding. Candidates of other items are left alone, so the
+     * caller [discard]s the one it replaces and [clear]s the rest when the flow ends.
      */
     suspend fun prepareForUpload(source: Uri): String? {
         val ownedGeneration = generation.get()
@@ -93,7 +92,6 @@ class TransientPhotoStore @Inject constructor(
                 output.delete()
                 return@withContext null
             }
-            keepOnly(output)
             output.path
         }
     }
@@ -101,7 +99,7 @@ class TransientPhotoStore @Inject constructor(
     /** Deletes every temporary photo, including one that is still being encoded. */
     fun clear() {
         generation.incrementAndGet()
-        keepOnly(null)
+        directory().listFiles()?.forEach { it.delete() }
     }
 
     private fun encode(source: Uri, output: File): Boolean {
@@ -168,10 +166,6 @@ class TransientPhotoStore @Inject constructor(
         var sampleSize = 1
         while (longEdge / (sampleSize * 2) >= MAX_EDGE_PX) sampleSize *= 2
         return sampleSize
-    }
-
-    private fun keepOnly(survivor: File?) {
-        directory().listFiles()?.forEach { file -> if (file != survivor) file.delete() }
     }
 
     private fun newFile(): File = File(directory(), "${UUID.randomUUID()}.jpg")

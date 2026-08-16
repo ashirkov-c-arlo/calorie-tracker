@@ -53,7 +53,7 @@ internal val historyContentPreviewState = HistoryUiState(
     weeks =
     persistentListOf(
         HistoryWeekUiState(
-            weekOfYear = 12,
+            weekOfYear = 2,
             start = LocalDate.of(2026, 3, 16),
             end = LocalDate.of(2026, 3, 22),
             consumed = totals(kcal = 3_910, protein = 214.0, fat = 122.0, carbs = 407.0),
@@ -72,7 +72,7 @@ internal val historyContentPreviewState = HistoryUiState(
             ),
         ),
         HistoryWeekUiState(
-            weekOfYear = 11,
+            weekOfYear = 1,
             start = LocalDate.of(2026, 3, 9),
             end = LocalDate.of(2026, 3, 15),
             consumed = totals(kcal = 815, protein = 54.0, fat = 31.0, carbs = 79.0),

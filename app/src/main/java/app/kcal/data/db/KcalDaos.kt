@@ -22,6 +22,9 @@ interface WeightEntryDao {
     @Query("SELECT * FROM weight_entries ORDER BY local_date_epoch_day")
     fun observeAll(): Flow<List<WeightEntryEntity>>
 
+    @Query("DELETE FROM weight_entries WHERE local_date_epoch_day = :epochDay")
+    suspend fun deleteByDate(epochDay: Int)
+
     @Query("SELECT * FROM weight_entries WHERE local_date_epoch_day = :epochDay")
     suspend fun findByDate(epochDay: Int): WeightEntryEntity?
 }
