@@ -4,7 +4,6 @@ import app.kcal.domain.model.UnitSystem
 import app.kcal.domain.model.WeightEntry
 import app.kcal.domain.usecase.BuildWeightTrend
 import app.kcal.domain.usecase.UnitConversions
-import app.kcal.feature.profile.ProfileFieldError
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
@@ -15,34 +14,22 @@ data class WeightPointUiState(val localDate: LocalDate, val value: Double, val t
 
 /**
  * Trends state. [points] are oldest first, so the newest entry is the last one. Values are in
- * the displayed unit system while storage stays in kilograms. [editedDate] is the date the
- * input field writes to: the current local date until the user selects a logged day.
+ * the displayed unit system while storage stays in kilograms. [editedDate] is the selected date
+ * for potential deletion.
  */
 data class TrendsUiState(
     val isLoading: Boolean = true,
     val hasError: Boolean = false,
     val unitSystem: UnitSystem = UnitSystem.METRIC,
     val editedDate: LocalDate? = null,
-    val isEditingToday: Boolean = true,
-    val weightInput: String = "",
-    val inputError: ProfileFieldError? = null,
-    val isSaving: Boolean = false,
-    val saveFailed: Boolean = false,
     val points: PersistentList<WeightPointUiState> = persistentListOf(),
 ) {
     val latest: WeightPointUiState? get() = points.lastOrNull()
 }
 
-internal val trendsEmptyPreviewState = TrendsUiState(isLoading = false, editedDate = LocalDate.of(2026, 3, 17))
+internal val trendsEmptyPreviewState = TrendsUiState(isLoading = false)
 
 internal val trendsErrorPreviewState = TrendsUiState(isLoading = false, hasError = true)
-
-internal val trendsInvalidInputPreviewState = TrendsUiState(
-    isLoading = false,
-    editedDate = LocalDate.of(2026, 3, 17),
-    weightInput = "8oo",
-    inputError = ProfileFieldError.INVALID_NUMBER,
-)
 
 /** Declared before the preview states below: top-level properties initialize in file order. */
 private val previewStart = LocalDate.of(2026, 2, 16)
@@ -65,19 +52,14 @@ internal val trendsManyPointsPreviewState = previewState(
 internal val trendsImperialPreviewState = trendsManyPointsPreviewState.let { state ->
     state.copy(
         unitSystem = UnitSystem.IMPERIAL,
-        weightInput = "177.5",
         points = state.points.map { it.inPounds() }.toPersistentList(),
     )
 }
 
-/** Correcting a wrong entry from an earlier day. */
+/** Selecting a past entry. */
 internal val trendsEditingPastPreviewState = trendsManyPointsPreviewState.let { state ->
     val corrected = state.points[state.points.size - 4]
-    state.copy(
-        editedDate = corrected.localDate,
-        isEditingToday = false,
-        weightInput = corrected.value.toString(),
-    )
+    state.copy(editedDate = corrected.localDate)
 }
 
 private fun WeightPointUiState.inPounds(): WeightPointUiState = copy(
@@ -97,8 +79,6 @@ private fun previewState(kilograms: List<Double>, skipEvery: Int = 0): TrendsUiS
         }
     return TrendsUiState(
         isLoading = false,
-        editedDate = points.last().localDate,
-        weightInput = points.last().value.toString(),
         points = points.toPersistentList(),
     )
 }

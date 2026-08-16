@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -54,6 +55,8 @@ import app.kcal.core.ui.MacroProgressUiState
 import app.kcal.core.ui.currentLocale
 import app.kcal.domain.model.MacroTotals
 import app.kcal.domain.model.ThemeMode
+import app.kcal.domain.model.UnitSystem
+import app.kcal.feature.profile.components.DecimalField
 import java.time.LocalDate
 
 @Composable
@@ -74,6 +77,8 @@ fun TodayRoute(
         onSelectDate = viewModel::onSelectDate,
         onPageChanged = viewModel::onSelectDate,
         onRetry = viewModel::onRetry,
+        onWeightInputChange = viewModel::onWeightInputChange,
+        onSaveWeight = viewModel::onSaveWeight,
     )
 }
 
@@ -88,6 +93,8 @@ fun TodayScreen(
     onSelectDate: (LocalDate) -> Unit,
     onPageChanged: (LocalDate) -> Unit,
     onRetry: () -> Unit,
+    onWeightInputChange: (String) -> Unit = {},
+    onSaveWeight: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -140,6 +147,8 @@ fun TodayScreen(
                     onEditMealClick = onEditMealClick,
                     onDeleteMealClick = onDeleteMealClick,
                     onPageChanged = onPageChanged,
+                    onWeightInputChange = onWeightInputChange,
+                    onSaveWeight = onSaveWeight,
                 )
             }
         }
@@ -199,6 +208,8 @@ private fun DayPager(
     onEditMealClick: (Long) -> Unit,
     onDeleteMealClick: (Long) -> Unit,
     onPageChanged: (LocalDate) -> Unit,
+    onWeightInputChange: (String) -> Unit,
+    onSaveWeight: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val pageCount = 31
@@ -238,6 +249,8 @@ private fun DayPager(
             uiState = uiState,
             onEditMealClick = onEditMealClick,
             onDeleteMealClick = onDeleteMealClick,
+            onWeightInputChange = onWeightInputChange,
+            onSaveWeight = onSaveWeight,
         )
     }
 }
@@ -247,6 +260,8 @@ private fun TodayContent(
     uiState: TodayUiState,
     onEditMealClick: (Long) -> Unit,
     onDeleteMealClick: (Long) -> Unit,
+    onWeightInputChange: (String) -> Unit,
+    onSaveWeight: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -259,6 +274,15 @@ private fun TodayContent(
         ),
         verticalArrangement = Arrangement.spacedBy(KcalSpacing.medium),
     ) {
+        if (uiState.showWeightInput) {
+            item {
+                WeightInputCard(
+                    uiState = uiState,
+                    onWeightChange = onWeightInputChange,
+                    onSave = onSaveWeight,
+                )
+            }
+        }
         item { DailyProgressCard(consumed = uiState.consumed, progress = uiState.progress) }
         if (uiState.meals.isEmpty()) {
             item {
@@ -364,6 +388,45 @@ private fun MealCard(
 }
 
 @Composable
+private fun WeightInputCard(
+    uiState: TodayUiState,
+    onWeightChange: (String) -> Unit,
+    onSave: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedCard(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(KcalSpacing.medium),
+            verticalArrangement = Arrangement.spacedBy(KcalSpacing.small),
+        ) {
+            Text(
+                text = stringResource(R.string.trends_log_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            DecimalField(
+                label = stringResource(R.string.field_current_weight),
+                value = uiState.weightInput,
+                unitLabel = stringResource(uiState.unitSystem.weightUnitRes()),
+                error = uiState.weightInputError,
+                onValueChange = onWeightChange,
+            )
+            Button(
+                onClick = onSave,
+                enabled = !uiState.isWeightSaving,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(text = stringResource(R.string.action_save))
+            }
+        }
+    }
+}
+
+private fun UnitSystem.weightUnitRes(): Int = when (this) {
+    UnitSystem.METRIC -> R.string.unit_kg
+    UnitSystem.IMPERIAL -> R.string.unit_lb
+}
+
+@Composable
 private fun TodayPreview(themeMode: ThemeMode, uiState: TodayUiState) {
     KcalTheme(themeMode = themeMode) {
         TodayScreen(
@@ -452,10 +515,36 @@ private fun TodayErrorWhitePreview() = TodayPreview(ThemeMode.WHITE, todayErrorP
 @Composable
 private fun TodayErrorBlackPreview() = TodayPreview(ThemeMode.BLACK, todayErrorPreviewState)
 
-@Preview(name = "Today content White")
+@Preview(name = "Today with weight input White")
 @Composable
-private fun TodayContentWhitePreview() = TodayPreview(ThemeMode.WHITE, todayContentPreviewState)
+private fun TodayWeightInputWhitePreview() = TodayPreview(ThemeMode.WHITE, todayWithWeightInputPreviewState)
 
-@Preview(name = "Today content Black")
+@Preview(name = "Today with weight input Black")
 @Composable
-private fun TodayContentBlackPreview() = TodayPreview(ThemeMode.BLACK, todayContentPreviewState)
+private fun TodayWeightInputBlackPreview() = TodayPreview(ThemeMode.BLACK, todayWithWeightInputPreviewState)
+
+@Preview(name = "Weight input card White")
+@Composable
+private fun WeightInputCardWhitePreview() {
+    KcalTheme(themeMode = ThemeMode.WHITE) {
+        WeightInputCard(
+            uiState = todayWithWeightInputPreviewState,
+            onWeightChange = {},
+            onSave = {},
+            modifier = Modifier.padding(KcalSpacing.medium),
+        )
+    }
+}
+
+@Preview(name = "Weight input card Black")
+@Composable
+private fun WeightInputCardBlackPreview() {
+    KcalTheme(themeMode = ThemeMode.BLACK) {
+        WeightInputCard(
+            uiState = todayWithWeightInputPreviewState,
+            onWeightChange = {},
+            onSave = {},
+            modifier = Modifier.padding(KcalSpacing.medium),
+        )
+    }
+}

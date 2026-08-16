@@ -4,6 +4,8 @@ import app.kcal.core.ui.MacroProgressUiState
 import app.kcal.core.ui.macroProgress
 import app.kcal.domain.model.MacroTotals
 import app.kcal.domain.model.Macros
+import app.kcal.domain.model.UnitSystem
+import app.kcal.feature.profile.ProfileFieldError
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import java.time.LocalDate
@@ -29,6 +31,12 @@ data class TodayUiState(
     val isToday: Boolean = true,
     /** Last 5 days ending with today for the day strip. */
     val dayStrip: PersistentList<DayStripItem> = persistentListOf(),
+    /** Weight input state - only shown at the start of the day when no weight logged yet. */
+    val unitSystem: UnitSystem = UnitSystem.METRIC,
+    val weightInput: String = "",
+    val weightInputError: ProfileFieldError? = null,
+    val isWeightSaving: Boolean = false,
+    val showWeightInput: Boolean = false,
 )
 
 data class DayStripItem(val date: LocalDate, val dayOfMonth: Int, val monthAbbr: String, val isSelected: Boolean)
@@ -79,6 +87,16 @@ internal val todayContentPreviewState = TodayUiState(
     ),
     selectedDate = previewDate,
     dayStrip = previewDayStrip,
+)
+
+internal val todayWithWeightInputPreviewState = TodayUiState(
+    isLoading = false,
+    progress = previewProgress(consumed = MacroTotals.ZERO),
+    selectedDate = previewDate,
+    dayStrip = previewDayStrip,
+    showWeightInput = true,
+    unitSystem = UnitSystem.METRIC,
+    weightInput = "82.5",
 )
 
 internal val todayErrorPreviewState = TodayUiState(

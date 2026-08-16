@@ -15,7 +15,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -23,13 +22,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -53,7 +48,6 @@ import app.kcal.core.ui.LoadingScreen
 import app.kcal.core.ui.currentLocale
 import app.kcal.domain.model.ThemeMode
 import app.kcal.domain.model.UnitSystem
-import app.kcal.feature.profile.components.DecimalField
 import app.kcal.feature.trends.components.WeightChart
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -64,27 +58,12 @@ import java.util.Locale
 @Composable
 fun TrendsRoute(viewModel: TrendsViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
-    val locale = currentLocale()
-    val saveFailedTemplate = stringResource(R.string.trends_save_failed_for_date)
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.onVisible() }
-    LaunchedEffect(viewModel, saveFailedTemplate, locale) {
-        viewModel.events.collect { event ->
-            when (event) {
-                is TrendsEvent.SaveFailed ->
-                    snackbarHostState.showSnackbar(saveFailedMessage(saveFailedTemplate, event.localDate, locale))
-            }
-        }
-    }
     TrendsScreen(
         uiState = uiState,
-        onWeightChange = viewModel::onWeightChange,
-        onSave = viewModel::onSave,
         onEntryClick = viewModel::onEntryClick,
         onDeleteEntry = viewModel::onDeleteEntry,
-        onLogTodayClick = viewModel::onLogTodayClick,
         onRetry = viewModel::onRetry,
-        snackbarHostState = snackbarHostState,
     )
 }
 
@@ -92,19 +71,14 @@ fun TrendsRoute(viewModel: TrendsViewModel = hiltViewModel()) {
 @Composable
 fun TrendsScreen(
     uiState: TrendsUiState,
-    onWeightChange: (String) -> Unit,
-    onSave: () -> Unit,
     onEntryClick: (LocalDate) -> Unit,
     onDeleteEntry: (LocalDate) -> Unit,
-    onLogTodayClick: () -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
-    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = { TopAppBar(title = { Text(text = stringResource(R.string.trends_title)) }) },
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
     ) { contentPadding ->
         when {
             uiState.isLoading -> LoadingScreen(modifier = Modifier.padding(contentPadding))
@@ -119,11 +93,8 @@ fun TrendsScreen(
             else ->
                 TrendsContent(
                     uiState = uiState,
-                    onWeightChange = onWeightChange,
-                    onSave = onSave,
                     onEntryClick = onEntryClick,
                     onDeleteEntry = onDeleteEntry,
-                    onLogTodayClick = onLogTodayClick,
                     modifier = Modifier.padding(contentPadding),
                 )
         }
@@ -133,11 +104,8 @@ fun TrendsScreen(
 @Composable
 private fun TrendsContent(
     uiState: TrendsUiState,
-    onWeightChange: (String) -> Unit,
-    onSave: () -> Unit,
     onEntryClick: (LocalDate) -> Unit,
     onDeleteEntry: (LocalDate) -> Unit,
-    onLogTodayClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scrollState = rememberScrollState()
@@ -149,12 +117,6 @@ private fun TrendsContent(
             .padding(PaddingValues(KcalSpacing.medium)),
         verticalArrangement = Arrangement.spacedBy(KcalSpacing.medium),
     ) {
-        WeightInputCard(
-            uiState = uiState,
-            onWeightChange = onWeightChange,
-            onSave = onSave,
-            onLogTodayClick = onLogTodayClick,
-        )
         if (uiState.points.isEmpty()) {
             Text(text = stringResource(R.string.trends_empty), style = MaterialTheme.typography.bodyLarge)
         } else {
@@ -167,48 +129,6 @@ private fun TrendsContent(
                 },
                 onDeleteEntry = onDeleteEntry,
             )
-        }
-    }
-}
-
-@Composable
-private fun WeightInputCard(
-    uiState: TrendsUiState,
-    onWeightChange: (String) -> Unit,
-    onSave: () -> Unit,
-    onLogTodayClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    OutlinedCard(modifier = modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(KcalSpacing.medium),
-            verticalArrangement = Arrangement.spacedBy(KcalSpacing.small),
-        ) {
-            uiState.editedDate?.let { editedDate ->
-                Text(text = fullDate(editedDate), style = MaterialTheme.typography.titleMedium)
-            }
-            DecimalField(
-                label = stringResource(R.string.trends_log_title),
-                value = uiState.weightInput,
-                unitLabel = stringResource(uiState.unitSystem.weightUnitRes()),
-                error = uiState.inputError,
-                onValueChange = onWeightChange,
-            )
-            if (uiState.saveFailed) {
-                Text(
-                    text = stringResource(R.string.error_save_failed),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            Button(onClick = onSave, enabled = !uiState.isSaving, modifier = Modifier.fillMaxWidth()) {
-                Text(text = stringResource(R.string.action_save))
-            }
-            if (!uiState.isEditingToday) {
-                TextButton(onClick = onLogTodayClick, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = stringResource(R.string.trends_log_today))
-                }
-            }
         }
     }
 }
@@ -306,13 +226,6 @@ private fun LoggedWeightsCard(
 }
 
 @Composable
-private fun fullDate(localDate: LocalDate): String {
-    val locale = currentLocale()
-    val formatter = remember(locale) { DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(locale) }
-    return formatter.format(localDate)
-}
-
-@Composable
 private fun mediumDate(localDate: LocalDate): String {
     val locale = currentLocale()
     val formatter = remember(locale) { mediumDateFormatter(locale) }
@@ -321,14 +234,6 @@ private fun mediumDate(localDate: LocalDate): String {
 
 private fun mediumDateFormatter(locale: Locale): DateTimeFormatter =
     DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)
-
-/**
- * Snackbar text for a save whose date the editor already left. The date is the last part of the
- * message, so the templates carry no punctuation that would double the one a locale's date format
- * already ends with.
- */
-internal fun saveFailedMessage(template: String, localDate: LocalDate, locale: Locale): String =
-    template.format(mediumDateFormatter(locale).format(localDate))
 
 private fun UnitSystem.weightUnitRes(): Int = when (this) {
     UnitSystem.METRIC -> R.string.unit_kg
@@ -340,11 +245,8 @@ private fun TrendsPreview(themeMode: ThemeMode, uiState: TrendsUiState) {
     KcalTheme(themeMode = themeMode) {
         TrendsScreen(
             uiState = uiState,
-            onWeightChange = {},
-            onSave = {},
             onEntryClick = {},
             onDeleteEntry = {},
-            onLogTodayClick = {},
             onRetry = {},
         )
     }
@@ -373,10 +275,6 @@ private fun TrendsErrorWhitePreview() = TrendsPreview(ThemeMode.WHITE, trendsErr
 @Preview(name = "Trends error Black")
 @Composable
 private fun TrendsErrorBlackPreview() = TrendsPreview(ThemeMode.BLACK, trendsErrorPreviewState)
-
-@Preview(name = "Trends invalid input White")
-@Composable
-private fun TrendsInvalidInputPreview() = TrendsPreview(ThemeMode.WHITE, trendsInvalidInputPreviewState)
 
 @Preview(name = "Trends one point White", heightDp = 1000)
 @Composable

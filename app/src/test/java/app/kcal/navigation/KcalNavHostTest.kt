@@ -143,11 +143,8 @@ class KcalNavHostTest {
                     trendsContent = {
                         TrendsScreen(
                             uiState = trendsManyPointsPreviewState,
-                            onWeightChange = {},
-                            onSave = {},
                             onEntryClick = {},
                             onDeleteEntry = {},
-                            onLogTodayClick = {},
                             onRetry = {},
                         )
                     },

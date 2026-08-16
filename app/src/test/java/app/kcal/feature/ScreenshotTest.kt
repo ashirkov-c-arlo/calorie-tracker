@@ -492,11 +492,8 @@ class ScreenshotTest {
     private fun TrendsFixture(uiState: TrendsUiState) {
         TrendsScreen(
             uiState = uiState,
-            onWeightChange = {},
-            onSave = {},
             onEntryClick = {},
             onDeleteEntry = {},
-            onLogTodayClick = {},
             onRetry = {},
         )
     }
