@@ -434,6 +434,8 @@ class ScreenshotTest {
             onAddMealClick = {},
             onEditMealClick = {},
             onDeleteMealClick = {},
+            onSelectDate = {},
+            onPageChanged = {},
             onRetry = {},
         )
     }
@@ -509,6 +511,8 @@ class ScreenshotTest {
                     onAddMealClick = onAddMealClick,
                     onEditMealClick = onEditMealClick,
                     onDeleteMealClick = {},
+                    onSelectDate = {},
+                    onPageChanged = {},
                     onRetry = {},
                 )
             },

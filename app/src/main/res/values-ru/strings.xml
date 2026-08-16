@@ -2,7 +2,6 @@
 <resources>
     <string name="nav_today">Сегодня</string>
     <string name="nav_trends">Динамика</string>
-    <string name="nav_history">История</string>
 
     <string name="today_title">Сегодня</string>
     <string name="trends_title">Динамика</string>

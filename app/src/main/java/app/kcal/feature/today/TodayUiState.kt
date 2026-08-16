@@ -6,6 +6,7 @@ import app.kcal.domain.model.MacroTotals
 import app.kcal.domain.model.Macros
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
+import java.time.LocalDate
 
 /**
  * One journal row. [summary] is the confirmed one-line meal name; when it is null the row falls
@@ -24,14 +25,36 @@ data class TodayUiState(
     val consumed: MacroTotals = MacroTotals.ZERO,
     val progress: MacroProgressUiState? = null,
     val meals: PersistentList<TodayMealUiState> = persistentListOf(),
+    val selectedDate: LocalDate = LocalDate.now(),
+    val isToday: Boolean = true,
+    /** Last 5 days ending with today for the day strip. */
+    val dayStrip: PersistentList<DayStripItem> = persistentListOf(),
+)
+
+data class DayStripItem(val date: LocalDate, val dayOfMonth: Int, val monthAbbr: String, val isSelected: Boolean)
+
+private val previewDate = LocalDate.of(2026, 3, 18)
+
+private val previewDayStrip = persistentListOf(
+    DayStripItem(previewDate.minusDays(4), previewDate.minusDays(4).dayOfMonth, "Mar", false),
+    DayStripItem(previewDate.minusDays(3), previewDate.minusDays(3).dayOfMonth, "Mar", false),
+    DayStripItem(previewDate.minusDays(2), previewDate.minusDays(2).dayOfMonth, "Mar", false),
+    DayStripItem(previewDate.minusDays(1), previewDate.minusDays(1).dayOfMonth, "Mar", false),
+    DayStripItem(previewDate, previewDate.dayOfMonth, "Mar", true),
 )
 
 internal val todayEmptyPreviewState = TodayUiState(
     isLoading = false,
     progress = previewProgress(consumed = MacroTotals.ZERO),
+    selectedDate = previewDate,
+    dayStrip = previewDayStrip,
 )
 
-internal val todayNoTargetPreviewState = TodayUiState(isLoading = false)
+internal val todayNoTargetPreviewState = TodayUiState(
+    isLoading = false,
+    selectedDate = previewDate,
+    dayStrip = previewDayStrip,
+)
 
 internal val todayContentPreviewState = TodayUiState(
     isLoading = false,
@@ -54,9 +77,16 @@ internal val todayContentPreviewState = TodayUiState(
             totals = MacroTotals.from(Macros(kcal = 395, proteinG = 39.0, fatG = 22.0, carbsG = 9.0)),
         ),
     ),
+    selectedDate = previewDate,
+    dayStrip = previewDayStrip,
 )
 
-internal val todayErrorPreviewState = TodayUiState(isLoading = false, hasError = true)
+internal val todayErrorPreviewState = TodayUiState(
+    isLoading = false,
+    hasError = true,
+    selectedDate = previewDate,
+    dayStrip = previewDayStrip,
+)
 
 private fun previewProgress(consumed: MacroTotals): MacroProgressUiState = macroProgress(
     consumed = consumed,

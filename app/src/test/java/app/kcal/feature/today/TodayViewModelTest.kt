@@ -186,6 +186,7 @@ class TodayViewModelTest {
             dailyTargetRepository = targets,
             aggregateMealMacros = AggregateMealMacros(),
             timeProvider = timeProvider,
+            localeProvider = { java.util.Locale.ENGLISH },
         )
 
     private fun targetSnapshot(localDate: LocalDate) = DailyTargetSnapshot(

@@ -2,9 +2,9 @@ package app.kcal.feature.today
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.kcal.core.common.AppLocaleProvider
 import app.kcal.core.common.TimeProvider
 import app.kcal.core.ui.macroProgress
-import app.kcal.domain.model.MacroTotals
 import app.kcal.domain.repository.DailyTargetRepository
 import app.kcal.domain.repository.MealRepository
 import app.kcal.domain.usecase.AggregateMealMacros
@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.format.TextStyle
 import javax.inject.Inject
 
 @HiltViewModel
@@ -26,26 +27,37 @@ class TodayViewModel @Inject constructor(
     private val dailyTargetRepository: DailyTargetRepository,
     private val aggregateMealMacros: AggregateMealMacros,
     private val timeProvider: TimeProvider,
+    private val localeProvider: AppLocaleProvider,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TodayUiState())
     val uiState: StateFlow<TodayUiState> = _uiState.asStateFlow()
 
     private var loadJob: Job? = null
-    private var observedDate = timeProvider.today()
+    private var today = timeProvider.today()
+    private var selectedDate = today
 
     init {
-        load(observedDate)
+        load(selectedDate)
     }
 
-    /** Observes the current local day after navigation or app resume. */
     fun onVisible() {
-        val today = timeProvider.today()
-        if (today != observedDate || _uiState.value.hasError) load(today)
+        val newToday = timeProvider.today()
+        if (newToday != today || _uiState.value.hasError) {
+            today = newToday
+            selectedDate = newToday
+            load(selectedDate)
+        }
     }
 
     fun onRetry() {
-        load(timeProvider.today())
+        load(selectedDate)
+    }
+
+    fun onSelectDate(date: LocalDate) {
+        if (date > today) return
+        selectedDate = date
+        load(selectedDate)
     }
 
     fun onDeleteMeal(mealId: Long) {
@@ -60,16 +72,35 @@ class TodayViewModel @Inject constructor(
         }
     }
 
-    private fun load(today: LocalDate) {
+    private fun buildDayStrip(selected: LocalDate): List<DayStripItem> {
+        val locale = localeProvider.current()
+        val stripEnd = today
+        val stripStart = stripEnd.minusDays(4)
+        return (0L..4L).map { offset ->
+            val date = stripStart.plusDays(offset)
+            DayStripItem(
+                date = date,
+                dayOfMonth = date.dayOfMonth,
+                monthAbbr = date.month.getDisplayName(TextStyle.SHORT, locale),
+                isSelected = date == selected,
+            )
+        }
+    }
+
+    private fun load(date: LocalDate) {
         loadJob?.cancel()
-        observedDate = today
-        _uiState.value = TodayUiState()
+        selectedDate = date
+        _uiState.value = TodayUiState(
+            selectedDate = date,
+            isToday = date == today,
+            dayStrip = buildDayStrip(date).toPersistentList(),
+        )
         loadJob =
             viewModelScope.launch {
                 try {
                     combine(
-                        mealRepository.observeByDate(today),
-                        dailyTargetRepository.observe(today),
+                        mealRepository.observeByDate(date),
+                        dailyTargetRepository.observe(date),
                     ) { meals, snapshot ->
                         val consumed = aggregateMealMacros(meals)
                         TodayUiState(
@@ -85,6 +116,9 @@ class TodayViewModel @Inject constructor(
                                     summary = meal.summary,
                                 )
                             }.toPersistentList(),
+                            selectedDate = date,
+                            isToday = date == today,
+                            dayStrip = buildDayStrip(date).toPersistentList(),
                         )
                     }.collect { _uiState.value = it }
                 } catch (cancellation: CancellationException) {

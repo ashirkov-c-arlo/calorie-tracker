@@ -13,9 +13,6 @@ data object TodayDestination
 data object TrendsDestination
 
 @Serializable
-data object HistoryDestination
-
-@Serializable
 data object SettingsDestination
 
 @Serializable

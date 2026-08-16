@@ -1,7 +1,10 @@
 package app.kcal.feature.today
 
 import android.content.res.Configuration
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -10,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -19,15 +24,18 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -46,6 +54,7 @@ import app.kcal.core.ui.MacroProgressUiState
 import app.kcal.core.ui.currentLocale
 import app.kcal.domain.model.MacroTotals
 import app.kcal.domain.model.ThemeMode
+import java.time.LocalDate
 
 @Composable
 fun TodayRoute(
@@ -62,6 +71,8 @@ fun TodayRoute(
         onAddMealClick = onAddMealClick,
         onEditMealClick = onEditMealClick,
         onDeleteMealClick = viewModel::onDeleteMeal,
+        onSelectDate = viewModel::onSelectDate,
+        onPageChanged = viewModel::onSelectDate,
         onRetry = viewModel::onRetry,
     )
 }
@@ -74,6 +85,8 @@ fun TodayScreen(
     onAddMealClick: () -> Unit,
     onEditMealClick: (Long) -> Unit,
     onDeleteMealClick: (Long) -> Unit,
+    onSelectDate: (LocalDate) -> Unit,
+    onPageChanged: (LocalDate) -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -93,7 +106,7 @@ fun TodayScreen(
             )
         },
         floatingActionButton = {
-            if (!uiState.isLoading && !uiState.hasError) {
+            if (!uiState.isLoading && !uiState.hasError && uiState.isToday) {
                 FloatingActionButton(onClick = onAddMealClick) {
                     Icon(
                         imageVector = Icons.Filled.Add,
@@ -103,24 +116,129 @@ fun TodayScreen(
             }
         },
     ) { contentPadding ->
-        when {
-            uiState.isLoading -> LoadingScreen(modifier = Modifier.padding(contentPadding))
+        Column(modifier = Modifier.padding(contentPadding)) {
+            if (uiState.dayStrip.isNotEmpty()) {
+                DayStrip(
+                    items = uiState.dayStrip,
+                    onDayClick = onSelectDate,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = KcalSpacing.medium, vertical = KcalSpacing.small),
+                )
+            }
 
-            uiState.hasError ->
-                ErrorScreen(
+            when {
+                uiState.isLoading -> LoadingScreen()
+
+                uiState.hasError -> ErrorScreen(
                     message = stringResource(R.string.today_load_failed),
                     onRetry = onRetry,
-                    modifier = Modifier.padding(contentPadding),
                 )
 
-            else ->
-                TodayContent(
+                else -> DayPager(
                     uiState = uiState,
                     onEditMealClick = onEditMealClick,
                     onDeleteMealClick = onDeleteMealClick,
-                    modifier = Modifier.padding(contentPadding),
+                    onPageChanged = onPageChanged,
                 )
+            }
         }
+    }
+}
+
+@Composable
+private fun DayStrip(items: List<DayStripItem>, onDayClick: (LocalDate) -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.SpaceEvenly,
+    ) {
+        items.forEach { item ->
+            DayChip(day = item, onClick = { onDayClick(item.date) })
+        }
+    }
+}
+
+@Composable
+private fun DayChip(day: DayStripItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val bgColor = if (day.isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val textColor = if (day.isSelected) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Box(
+        modifier = modifier
+            .clip(MaterialTheme.shapes.medium)
+            .background(bgColor)
+            .clickable(onClick = onClick)
+            .padding(horizontal = KcalSpacing.medium, vertical = KcalSpacing.small),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = day.dayOfMonth.toString(),
+                style = MaterialTheme.typography.labelLarge,
+                color = textColor,
+            )
+            Text(
+                text = day.monthAbbr,
+                style = MaterialTheme.typography.labelSmall,
+                color = textColor,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DayPager(
+    uiState: TodayUiState,
+    onEditMealClick: (Long) -> Unit,
+    onDeleteMealClick: (Long) -> Unit,
+    onPageChanged: (LocalDate) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val pageCount = 31
+    val todayIndex = pageCount - 1
+    val selectedIndex = uiState.dayStrip.indexOfFirst { it.isSelected }
+        .let { if (it < 0) todayIndex else todayIndex - (uiState.dayStrip.size - 1 - it) }
+
+    val pagerState = rememberPagerState(
+        initialPage = selectedIndex.coerceIn(0, pageCount - 1),
+        pageCount = { pageCount },
+    )
+
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage }.collect { page ->
+            val daysFromToday = todayIndex - page
+            val date = uiState.dayStrip.lastOrNull()?.date?.minusDays(daysFromToday.toLong())
+            if (date != null && date != uiState.selectedDate) {
+                onPageChanged(date)
+            }
+        }
+    }
+
+    LaunchedEffect(uiState.selectedDate) {
+        val todayDate = uiState.dayStrip.lastOrNull()?.date ?: return@LaunchedEffect
+        val daysFromToday = todayDate.toEpochDay() - uiState.selectedDate.toEpochDay()
+        val targetPage = (todayIndex - daysFromToday.toInt()).coerceIn(0, pageCount - 1)
+        if (pagerState.currentPage != targetPage) {
+            pagerState.animateScrollToPage(targetPage)
+        }
+    }
+
+    HorizontalPager(
+        state = pagerState,
+        modifier = modifier.fillMaxSize(),
+    ) { _ ->
+        TodayContent(
+            uiState = uiState,
+            onEditMealClick = onEditMealClick,
+            onDeleteMealClick = onDeleteMealClick,
+        )
     }
 }
 
@@ -155,6 +273,7 @@ private fun TodayContent(
                     meal = meal,
                     onEditClick = { onEditMealClick(meal.id) },
                     onDeleteClick = { onDeleteMealClick(meal.id) },
+                    showActions = uiState.isToday,
                 )
             }
         }
@@ -172,8 +291,7 @@ private fun DailyProgressCard(consumed: MacroTotals, progress: MacroProgressUiSt
             Text(text = stringResource(R.string.today_progress_title), style = MaterialTheme.typography.titleMedium)
             if (progress == null) {
                 Text(
-                    text =
-                    stringResource(
+                    text = stringResource(
                         R.string.consumed_summary,
                         DecimalText.formatLong(consumed.kcal, locale),
                         DecimalText.format(consumed.proteinG, locale),
@@ -199,6 +317,7 @@ private fun MealCard(
     meal: TodayMealUiState,
     onEditClick: () -> Unit,
     onDeleteClick: () -> Unit,
+    showActions: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val locale = currentLocale()
@@ -207,7 +326,6 @@ private fun MealCard(
             modifier = Modifier.padding(KcalSpacing.medium),
             verticalArrangement = Arrangement.spacedBy(KcalSpacing.extraSmall),
         ) {
-            // One line: the confirmed summary, or the item names for a meal logged without one.
             Text(
                 text = meal.summary ?: meal.itemNames.joinToString(stringResource(R.string.meal_items_separator)),
                 style = MaterialTheme.typography.titleSmall,
@@ -215,8 +333,7 @@ private fun MealCard(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text =
-                stringResource(
+                text = stringResource(
                     R.string.consumed_summary,
                     DecimalText.formatLong(meal.totals.kcal, locale),
                     DecimalText.format(meal.totals.proteinG, locale),
@@ -226,18 +343,20 @@ private fun MealCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                IconButton(onClick = onEditClick) {
-                    Icon(
-                        imageVector = Icons.Filled.Edit,
-                        contentDescription = stringResource(R.string.meal_edit_content_description),
-                    )
-                }
-                IconButton(onClick = onDeleteClick) {
-                    Icon(
-                        imageVector = Icons.Filled.Delete,
-                        contentDescription = stringResource(R.string.meal_delete_content_description),
-                    )
+            if (showActions) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    IconButton(onClick = onEditClick) {
+                        Icon(
+                            imageVector = Icons.Filled.Edit,
+                            contentDescription = stringResource(R.string.meal_edit_content_description),
+                        )
+                    }
+                    IconButton(onClick = onDeleteClick) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = stringResource(R.string.meal_delete_content_description),
+                        )
+                    }
                 }
             }
         }
@@ -253,7 +372,22 @@ private fun TodayPreview(themeMode: ThemeMode, uiState: TodayUiState) {
             onAddMealClick = {},
             onEditMealClick = {},
             onDeleteMealClick = {},
+            onSelectDate = {},
+            onPageChanged = {},
             onRetry = {},
+        )
+    }
+}
+
+@Preview(name = "Day strip White", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Day strip Black", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun DayStripPreview() {
+    KcalTheme(themeMode = ThemeMode.SYSTEM) {
+        DayStrip(
+            items = todayContentPreviewState.dayStrip,
+            onDayClick = {},
+            modifier = Modifier.padding(KcalSpacing.medium),
         )
     }
 }
@@ -280,6 +414,7 @@ private fun MealCardPreview() {
             meal = todayContentPreviewState.meals.first(),
             onEditClick = {},
             onDeleteClick = {},
+            showActions = true,
             modifier = Modifier.padding(KcalSpacing.medium),
         )
     }

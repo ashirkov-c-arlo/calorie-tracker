@@ -3,7 +3,6 @@ package app.kcal.navigation
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Icon
@@ -30,7 +29,6 @@ import app.kcal.core.designsystem.KcalTheme
 import app.kcal.domain.model.ThemeMode
 import app.kcal.feature.entry.EntryRoute
 import app.kcal.feature.entry.ManualEntryRoute
-import app.kcal.feature.history.HistoryRoute
 import app.kcal.feature.settings.SettingsRoute
 import app.kcal.feature.today.TodayRoute
 import app.kcal.feature.today.TodayScreen
@@ -52,7 +50,6 @@ enum class TopLevelDestination(
 ) {
     TODAY(TodayDestination, TodayDestination::class, R.string.nav_today, Icons.Filled.Home),
     TRENDS(TrendsDestination, TrendsDestination::class, R.string.nav_trends, Icons.Filled.DateRange),
-    HISTORY(HistoryDestination, HistoryDestination::class, R.string.nav_history, Icons.AutoMirrored.Filled.List),
 }
 
 @Composable
@@ -80,9 +77,6 @@ fun KcalNavHost(
         },
     settingsContent: @Composable (onBackClick: () -> Unit) -> Unit = { onBackClick ->
         SettingsRoute(onBackClick = onBackClick)
-    },
-    historyContent: @Composable (onEditMealClick: (Long) -> Unit) -> Unit = { onEditMealClick ->
-        HistoryRoute(onEditMealClick = onEditMealClick)
     },
     trendsContent: @Composable () -> Unit = { TrendsRoute() },
 ) {
@@ -119,9 +113,6 @@ fun KcalNavHost(
                 )
             }
             composable<TrendsDestination> { trendsContent() }
-            composable<HistoryDestination> {
-                historyContent { mealId -> navController.navigate(EditMealDestination(mealId)) }
-            }
             composable<SettingsDestination> {
                 settingsContent { navController.popBackStack() }
             }
@@ -182,6 +173,8 @@ private fun PreviewNavHost() {
                 onAddMealClick = onAddMealClick,
                 onEditMealClick = onEditMealClick,
                 onDeleteMealClick = {},
+                onSelectDate = {},
+                onPageChanged = {},
                 onRetry = {},
             )
         },
