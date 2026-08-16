@@ -299,7 +299,9 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(meta.model_id, "model-vision")
         self.assertIn("image", content[0])
         self.assertIn("text", content[1])
-        self.assertIn("PHOTO", bedrock.calls[0]["system"][0]["text"])
+        system = bedrock.calls[0]["system"][0]["text"]
+        for rule in ("PHOTO", "PRIMARY", "label"):  # photo and its labels outrank priors
+            self.assertIn(rule, system)
 
     def test_clarification(self):
         bedrock = FakeBedrock(tool_use("ask_clarification", {"question": "How large was it?"}))
