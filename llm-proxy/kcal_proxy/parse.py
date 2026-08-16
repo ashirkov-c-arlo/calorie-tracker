@@ -71,7 +71,30 @@ class Meta:
     repair_used: bool = False
     input_tokens: int = 0
     output_tokens: int = 0
+    est_micro_usd: int = 0
     flags: list[str] = field(default_factory=list)
+
+
+# --------------------------------------------------------------------------------------
+# Cost estimation
+# --------------------------------------------------------------------------------------
+
+
+def estimate_cost_micro_usd(meta: Meta, price_table: dict[str, tuple[float, float]]) -> int:
+    """USD microcents from token counts and the longest-prefix-matching price entry."""
+    if not meta.model_id or not (meta.input_tokens or meta.output_tokens):
+        return 0
+    price_in, price_out = 0.0, 0.0
+    best_len = 0
+    for prefix, (pi, po) in price_table.items():
+        if meta.model_id.startswith(prefix) and len(prefix) > best_len:
+            price_in, price_out = pi, po
+            best_len = len(prefix)
+    if not best_len:
+        # fallback: first entry
+        price_in, price_out = next(iter(price_table.values()), (0.0, 0.0))
+    # price is USD per 1M tokens -> micro USD = tokens * price / 1M * 1_000_000 = tokens * price
+    return int(meta.input_tokens * price_in + meta.output_tokens * price_out)
 
 
 # --------------------------------------------------------------------------------------

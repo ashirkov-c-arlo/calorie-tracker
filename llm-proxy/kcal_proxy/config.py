@@ -7,6 +7,7 @@ restart is the "hot swap", which is acceptable for a single-process service.
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, field
 
@@ -26,6 +27,23 @@ def _bool(name: str, default: bool) -> bool:
 
 def _str(name: str, default: str = "") -> str:
     return os.environ.get(name, "").strip() or default
+
+
+_DEFAULT_PRICES = {
+    "anthropic.claude-haiku-4-5": (1.0, 5.0),
+    "qwen.qwen3-vl-235b-a22b": (0.53, 2.66),
+}
+
+
+def _parse_price_table(raw: str) -> dict[str, tuple[float, float]]:
+    """Parse PRICE_TABLE env: JSON {"model_prefix": [input, output]} or use defaults."""
+    if not raw:
+        return dict(_DEFAULT_PRICES)
+    try:
+        parsed = json.loads(raw)
+        return {k: (float(v[0]), float(v[1])) for k, v in parsed.items()}
+    except (json.JSONDecodeError, TypeError, IndexError, ValueError):
+        return dict(_DEFAULT_PRICES)
 
 
 @dataclass(frozen=True)
@@ -75,6 +93,11 @@ class Config:
     temperature: float = 0.2
     bedrock_max_attempts: int = 3
 
+    # --- pricing (USD per 1M tokens) ------------------------------------------------
+    # JSON: {"model_id": [input_price, output_price], ...}
+    # Partial match: longest model_id prefix wins.
+    price_table: dict[str, tuple[float, float]] = field(default_factory=dict)
+
     log_level: str = "info"
     extra: dict = field(default_factory=dict)
 
@@ -100,6 +123,7 @@ class Config:
             rate_per_second=_float("RATE_PER_SECOND", 2.0),
             rate_burst=_int("RATE_BURST", 5),
             db_path=_str("DB_PATH", "/data/kcal_proxy.sqlite3"),
+            price_table=_parse_price_table(_str("PRICE_TABLE")),
             log_level=_str("LOG_LEVEL", "info"),
         )
         if not cfg.api_keys:
