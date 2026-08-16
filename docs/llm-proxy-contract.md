@@ -153,7 +153,7 @@ HTTP status: `200 OK`.
 | Field | Type | Required | Rules |
 |---|---|---:|---|
 | `type` | string | yes | Exactly `success` |
-| `items` | array | yes | At least one item |
+| `items` | array | yes | At least one item; exactly one when the request carried an image |
 | `items[].name` | string | yes | Non-blank; localized to `Accept-Language` |
 | `items[].grams` | number or null | yes | Null only when mass cannot be estimated |
 | `items[].kcal` | integer | yes | Non-negative |
@@ -249,20 +249,22 @@ unparseable error body to `UNKNOWN` without displaying its raw contents.
 The future proxy MUST:
 
 1. use the Bedrock Converse API, never raw model-specific `InvokeModel` payloads;
-2. declare the versioned `log_food` and `ask_clarification` tools;
+2. declare the versioned `log_food`, `ask_clarification` and `read_portion` tools;
 3. require exactly one tool call with `toolChoice = any`;
 4. accept exactly one known tool-use block;
 5. validate the tool input;
 6. make at most one repair attempt for malformed or hard-invalid tool input;
-7. wrap valid tool input in the `type`-discriminated app response from §4 or §5;
-8. map service errors to §6.
+7. multiply the reported per-100 g values by the portion mass itself, so no model performs
+   nutrition arithmetic;
+8. wrap the result in the `type`-discriminated app response from §4 or §5;
+9. map service errors to §6.
 
 Tool input shapes:
 
 ```text
 log_food:
 {
-  items: [{ name, grams, kcal, protein_g, fat_g, carbs_g, confidence }],
+  items: [{ name, grams, per_100g: { kcal, protein_g, fat_g, carbs_g }, confidence }],
   summary,
   note
 }
@@ -271,10 +273,36 @@ ask_clarification:
 {
   question
 }
+
+read_portion:
+{
+  grams          # null when the description states no quantity
+}
 ```
 
+`per_100g` is a density, never a portion. The proxy computes
+`absolute = per_100g / 100 * grams` and returns only the absolute values of §4, so a model
+that pre-scales its own numbers cannot double-count the portion. This is the one place where
+the tool schema and the response schema differ, and it is deliberate: identifying a food is a
+model's job, multiplying two numbers is not.
+
+### 7.1 Model routing
+
+A text-only request is answered by one model call. A request carrying an image is answered
+by two, because recognising a dish and reading a stated quantity are different skills:
+
+| Call | Model | Input | Contributes |
+|---|---|---|---|
+| portion | text model | text and clarification only, never the image | `grams` |
+| dish | vision model | image, text and clarification | `name`, `per_100g`, `confidence`, `summary`, `note` |
+
+The portion call runs first, gets one attempt with no retry, and is best effort: a failure, a
+refusal or a `grams: null` answer all mean the mass the vision model estimated from the photo
+is kept. A photo shows one meal, so the vision path keeps exactly one item.
+
 Model ID, region, prompt text, and prompt version are backend configuration and never
-appear in app requests or responses for nutrition parsing.
+appear in app requests or responses for nutrition parsing. Which model answers which
+modality is likewise backend configuration; the app sends the same request either way.
 
 ---
 

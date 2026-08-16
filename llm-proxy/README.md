@@ -2,7 +2,7 @@
 
 A standalone Python service that sits between the Kcal Android app and AWS Bedrock.
 It implements `docs/llm-proxy-contract.md` (nutrition parse v1) and nothing else:
-no accounts, no storage of user content, no nutrition arithmetic.
+no accounts, no storage of user content, no nutrition arithmetic in any model.
 
 ```text
 Android app --HTTPS/JSON--> your reverse proxy (TLS) --HTTP--> kcal-proxy --> Bedrock Converse
@@ -128,19 +128,41 @@ exists (all in `kcal_proxy/__main__.py`). Slow request *headers* are the reverse
 
 ## Pipeline
 
-`kcal_proxy/parse.py`, in order: validate the request (L0) → Converse with
+`kcal_proxy/parse.py`, in order: validate the request (L0) → read the stated portion with the
+text model when an image is attached (§Vision path) → Converse with
 `toolChoice = any` (retry only throttling and transient 5xx, at most 2 extra attempts, one
 optional fallback model; an attempt that could outlive `REQUEST_DEADLINE_S` never starts) →
-extract exactly one `toolUse` → normalize numbers → hard-validate → at most **one** repair
-turn → sanitize output (markdown, URLs, contacts, length, prompt-leak canary, per-string
-output-language check) → contract JSON.
+extract exactly one `toolUse` → normalize numbers → multiply the per-100 g values by the
+portion → hard-validate → at most **one** repair turn → sanitize output (markdown, URLs,
+contacts, length, prompt-leak canary, per-string output-language check) → contract JSON.
 
-A payload that does not match the tool schema — a missing `grams`/`note` key, a `grams` value
-that is neither a number nor `null`, a non-string or over-long `question`, a non-string name,
-a fractional `kcal`, more than 12 items — spends the one repair turn instead of being quietly
-normalized or truncated. A repair only starts if a whole attempt still fits in the deadline.
-After a clarification has been answered, a second `ask_clarification` is invalid too: one
-question per entry, so the app can never be looped.
+The models report a density (`per_100g`) and a mass (`grams`); the absolute macros the app
+receives are multiplied out here. A model that pre-scales its own numbers therefore cannot
+double-count the portion — the failure mode that made photo requests wrong before.
+
+A payload that does not match the tool schema — a missing `grams`/`per_100g`/`note` key, a
+non-numeric or negative mass, a non-string or over-long `question`, a fractional per-100 g
+`kcal`, a non-string name, more than 12 items — spends the one repair turn instead of being
+quietly normalized or truncated. A repair only starts if a whole attempt still fits in the
+deadline. After a clarification has been answered, a second `ask_clarification` is invalid
+too: one question per entry, so the app can never be looped.
+
+### Vision path
+
+A request with an image costs two model calls, because recognising a dish and reading a
+quantity out of a sentence are different skills:
+
+| Call | Model | Sees | Contributes |
+|---|---|---|---|
+| portion | `MODEL_TEXT` | text and clarification only | `grams` |
+| dish | `MODEL_VISION` | image, text and clarification | `name`, `per_100g`, `confidence`, `summary`, `note` |
+
+The portion call goes first (it is the cheap one, so it cannot be squeezed out of the
+deadline), gets a single attempt with no retry, and is best effort: a failure, a refusal or a
+`grams: null` answer all keep the mass the vision model estimated from the photo. The log line
+says which one won via the `portion_from_text` / `portion_from_photo` flag. One photo is one
+meal, so the vision path keeps exactly one item; a plate of several foods is one composite
+dish.
 
 The language check runs per string: every item name, the note and the question must each be
 written in the requested language, so a long localized name cannot mask a foreign one. A

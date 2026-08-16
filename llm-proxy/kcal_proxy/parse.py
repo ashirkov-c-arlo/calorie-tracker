@@ -1,14 +1,15 @@
 """Request validation, the Bedrock Converse call, and the contract response.
 
 Order (plan §9): validate -> converse -> extract toolUse -> normalize -> validate ->
-at most one repair -> sanitize -> contract JSON. No nutrition arithmetic happens here;
-the app owns every calculation.
+at most one repair -> sanitize -> contract JSON. No model ever multiplies: the models
+report per-100 g densities and a portion mass, and this file does the arithmetic.
 """
 
 from __future__ import annotations
 
 import base64
 import binascii
+import dataclasses
 import math
 import random
 import re
@@ -239,8 +240,14 @@ def as_number(value: Any) -> float | None:
     return None
 
 
-def normalize_log_food(payload: Any) -> tuple[list[dict], str | None, list[str]]:
-    """Returns (items, note, problems). A non-empty problems list is hard-invalid."""
+def normalize_log_food(payload: Any, grams_override: float | None = None) -> tuple[list[dict], str | None, list[str]]:
+    """Returns (items, note, problems). A non-empty problems list is hard-invalid.
+
+    The model reports a `per_100g` density plus the portion mass; the absolute macros the
+    contract returns are multiplied out here, so no model ever does nutrition arithmetic.
+    `grams_override` replaces that mass and is only used on the vision path, where the
+    portion comes from the user's words and the payload holds exactly one item.
+    """
     problems: list[str] = []
     if not isinstance(payload, dict):
         return [], None, ["tool input is not an object"]
@@ -258,34 +265,41 @@ def normalize_log_food(payload: Any) -> tuple[list[dict], str | None, list[str]]
             problems.append(f"items[{index}].name must be a non-blank string")
             name = ""
         name = name.strip()
-        kcal = as_number(raw.get("kcal"))
-        if kcal is None or kcal < 0:
-            problems.append(f"items[{index}].kcal must be a non-negative number")
-            kcal = 0.0
-        elif kcal != round(kcal):
-            problems.append(f"items[{index}].kcal must be a whole number")
+        # The mass is required: nothing can be multiplied out without it, and a model that
+        # genuinely cannot estimate it is expected to ask instead of inventing one.
+        grams = as_number(raw.get("grams"))
+        if grams is None or grams < 0:
+            problems.append(f"items[{index}].grams must be a non-negative number")
+            grams = 0.0
+        if grams_override is not None:
+            grams = grams_override
+        portion = grams / 100.0
+
+        density = raw.get("per_100g")
+        if not isinstance(density, dict):
+            problems.append(f"items[{index}].per_100g must be an object")
+            density = {}
+        kcal_per_100g = as_number(density.get("kcal"))
+        if kcal_per_100g is None or kcal_per_100g < 0:
+            problems.append(f"items[{index}].per_100g.kcal must be a non-negative number")
+            kcal_per_100g = 0.0
+        elif kcal_per_100g != round(kcal_per_100g):
+            problems.append(f"items[{index}].per_100g.kcal must be a whole number")
         macros: dict[str, float] = {}
         for key in ("protein_g", "fat_g", "carbs_g"):
-            number = as_number(raw.get(key))
+            number = as_number(density.get(key))
             if number is None or number < 0:
-                problems.append(f"items[{index}].{key} must be a non-negative number")
+                problems.append(f"items[{index}].per_100g.{key} must be a non-negative number")
                 number = 0.0
-            macros[key] = round(number, 1)
+            macros[key] = round(number * portion, 1)
         confidence = as_number(raw.get("confidence"))
         if confidence is None or not 0.0 <= confidence <= 1.0:
             problems.append(f"items[{index}].confidence must be between 0 and 1")
             confidence = min(1.0, max(0.0, confidence or 0.0))
-        # A missing key and a value the schema forbids are both invalid; only an explicit
-        # null means "mass cannot be estimated".
-        raw_grams = raw.get("grams")
-        grams = None if raw_grams is None else as_number(raw_grams)
-        if "grams" not in raw or (raw_grams is not None and (grams is None or grams < 0)):
-            problems.append(f"items[{index}].grams must be a non-negative number or null")
-            grams = None
         items.append({
             "name": name,
-            "grams": None if grams is None else round(grams, 1),
-            "kcal": round(kcal),
+            "grams": round(grams, 1),
+            "kcal": round(kcal_per_100g * portion),
             **macros,
             "confidence": round(confidence, 2),
         })
@@ -296,12 +310,11 @@ def normalize_log_food(payload: Any) -> tuple[list[dict], str | None, list[str]]
         if key in merged:
             target = merged[key]
             target["kcal"] += item["kcal"]
+            target["grams"] = round(target["grams"] + item["grams"], 1)
             for macro in ("protein_g", "fat_g", "carbs_g"):
                 target[macro] = round(target[macro] + item[macro], 1)
-            # A merged mass is only meaningful when every part is known, and the merged
-            # confidence is the weakest one, otherwise the order of the items decides.
-            known = target["grams"] is not None and item["grams"] is not None
-            target["grams"] = round(target["grams"] + item["grams"], 1) if known else None
+            # The merged confidence is the weakest one, otherwise the order of the items
+            # would decide it.
             target["confidence"] = min(target["confidence"], item["confidence"])
         else:
             merged[key] = dict(item)
@@ -313,6 +326,18 @@ def normalize_log_food(payload: Any) -> tuple[list[dict], str | None, list[str]]
     if len(merged) > MAX_ITEMS:
         problems.append(f"return at most {MAX_ITEMS} items, merging duplicates")
     return list(merged.values()), note, problems
+
+
+def normalize_read_portion(payload: Any) -> tuple[float | None, list[str]]:
+    """Returns (grams, problems). A null mass is this tool's valid "the text states none"."""
+    if not isinstance(payload, dict) or "grams" not in payload:
+        return None, ["grams must be a non-negative number or null"]
+    if payload["grams"] is None:
+        return None, []
+    grams = as_number(payload["grams"])
+    if grams is None or grams < 0:
+        return None, ["grams must be a non-negative number or null"]
+    return round(grams, 1), []
 
 
 def normalize_ask_clarification(payload: Any, already_answered: bool) -> tuple[str, list[str]]:
@@ -445,6 +470,44 @@ def _soft_flags(items: list[dict]) -> list[str]:
     return sorted(set(flags))
 
 
+def _single_dish(payload: Any) -> Any:
+    """One photo is one meal: further items would need masses nobody measured."""
+    if isinstance(payload, dict) and isinstance(payload.get("items"), list):
+        return {**payload, "items": payload["items"][:1]}
+    return payload
+
+
+def _portion_from_text(client, cfg: Config, req: ParseRequest, lang: str, meta: Meta, deadline: float) -> float | None:
+    """The portion mass the user stated in words, read by the text model on the vision path.
+
+    Best effort by design: the photo measures a portion better than a guess from words, so a
+    refusal, a failure or a text that states no quantity all mean "keep the mass the vision
+    model saw" instead of failing the request. One attempt only, because a retry here would
+    eat the budget of the call that actually identifies the food.
+    """
+    try:
+        response = _converse(
+            client,
+            dataclasses.replace(cfg, bedrock_max_attempts=1),
+            cfg.model_text,
+            build_system(lang, portion_only=True),
+            build_messages(req.text, req.question, req.answer),
+            tool_config(portion_only=True),
+            deadline,
+            meta,
+        )
+    except ProxyError:
+        return None
+    usage = response.get("usage") or {}
+    meta.input_tokens += int(usage.get("inputTokens") or 0)
+    meta.output_tokens += int(usage.get("outputTokens") or 0)
+    uses = _tool_uses(response)
+    if len(uses) != 1 or uses[0].get("name") != "read_portion":
+        return None
+    grams, problems = normalize_read_portion(uses[0].get("input"))
+    return None if problems else grams
+
+
 def run_parse(
     client,
     cfg: Config,
@@ -465,6 +528,14 @@ def run_parse(
     model_id = cfg.model_vision if req.image_bytes else cfg.model_text
     # A repair only makes sense if a whole attempt still fits in the budget.
     repair_floor = max(cfg.repair_min_remaining_s, _attempt_budget(cfg))
+
+    grams_override: float | None = None
+    if req.image_bytes:
+        # The vision model recognises the dish; the text model reads the mass the user
+        # stated. The cheap call goes first so it cannot be squeezed out of the budget by
+        # the slower one, and its result is multiplied into the vision item below.
+        grams_override = _portion_from_text(client, cfg, req, lang, meta, deadline)
+        meta.flags.append("portion_from_text" if grams_override is not None else "portion_from_photo")
 
     while True:
         response = _converse(client, cfg, model_id, system, messages, tools, deadline, meta)
@@ -492,7 +563,9 @@ def run_parse(
         elif stop_reason == "max_tokens":
             problems.append("the tool call was truncated, answer with fewer items")
         elif tool == "log_food":
-            items, note, problems = normalize_log_food(payload)
+            items, note, problems = normalize_log_food(
+                _single_dish(payload) if req.image_bytes else payload, grams_override
+            )
             summary = sanitize_summary(payload)
         else:
             question, problems = normalize_ask_clarification(payload, bool(req.question))
@@ -502,7 +575,7 @@ def run_parse(
             problems += check_output_text(output_pieces(items, note, question, summary), lang)
 
         if not problems:
-            meta.flags = _soft_flags(items) if tool == "log_food" else []
+            meta.flags = sorted(set(meta.flags + (_soft_flags(items) if tool == "log_food" else [])))
             body: dict[str, Any] = (
                 {"type": "success", "items": items, "summary": summary, "note": note}
                 if tool == "log_food"
