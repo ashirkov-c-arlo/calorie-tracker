@@ -3,6 +3,7 @@ package app.kcal.feature.today
 import android.content.res.Configuration
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -132,7 +133,12 @@ private fun TodayContent(
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(KcalSpacing.medium),
+        contentPadding = PaddingValues(
+            start = KcalSpacing.medium,
+            top = KcalSpacing.medium,
+            end = KcalSpacing.medium,
+            bottom = KcalSpacing.medium + KcalSpacing.extraLarge + KcalSpacing.extraLarge,
+        ),
         verticalArrangement = Arrangement.spacedBy(KcalSpacing.medium),
     ) {
         item { DailyProgressCard(consumed = uiState.consumed, progress = uiState.progress) }
