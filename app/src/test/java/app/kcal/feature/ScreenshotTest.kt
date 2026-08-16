@@ -39,6 +39,7 @@ import app.kcal.feature.profile.emptyProfileFormUiState
 import app.kcal.feature.profile.filledProfileFormUiState
 import app.kcal.feature.profile.guardedProfileFormUiState
 import app.kcal.feature.profile.invalidProfileFormUiState
+import app.kcal.feature.profile.noDeficitProfileFormUiState
 import app.kcal.feature.profile.russianProfileFormUiState
 import app.kcal.feature.settings.SettingsScreen
 import app.kcal.feature.today.TodayScreen
@@ -373,6 +374,10 @@ class ScreenshotTest {
     @Test
     @Config(qualifiers = "+h2000dp")
     fun profileSetupGuardrailBlack() = capture(ThemeMode.BLACK) { ProfileSetupFixture(guardedProfileFormUiState) }
+
+    @Test
+    @Config(qualifiers = "+h2000dp")
+    fun profileSetupNoDeficitWhite() = capture(ThemeMode.WHITE) { ProfileSetupFixture(noDeficitProfileFormUiState) }
 
     @Test
     @Config(qualifiers = "+ru-h2000dp")

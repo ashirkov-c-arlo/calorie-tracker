@@ -1,11 +1,14 @@
 package app.kcal.domain.usecase
 
 import app.kcal.domain.model.ActivityLevel
+import app.kcal.domain.model.DeficitBand
 import app.kcal.domain.model.EnergyEquationSex
+import app.kcal.domain.model.LossPace
 import app.kcal.domain.model.ProfileInputs
 import app.kcal.domain.model.StoredProfile
 import org.junit.Test
-import kotlin.math.abs
+import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -15,56 +18,158 @@ class CalculateDailyTargetsTest {
 
     @Test
     fun `male branch matches the documented arithmetic`() {
-        // RMR = 10*82.4 + 6.25*176 - 5*34 + 5 = 1759; TDEE = 1759 * 1.375 = 2418.625
-        // requested deficit 330 is below both caps, so the pace is honoured exactly.
-        val result = available(inputs(rate = 0.3))
+        // RMR = 10*82.4 + 6.25*176 - 5*34 + 5 = 1759; TDEE = 1759 * 1.375 = 2418.625.
+        // 82.4 kg at 176 cm is a body mass index of 26.6, so the middle position asks 17.5%.
+        val result = available(inputs(pace = LossPace.MODERATE))
 
-        assertEquals(2089, result.targets.kcal)
+        assertEquals(1995, result.targets.kcal)
         assertEquals(93.6, result.targets.proteinG)
-        assertEquals(58.0, result.targets.fatG)
-        assertEquals(298.2, result.targets.carbsG)
-        assertEquals(0.3, result.effectiveLossRateKgPerWeek, TOLERANCE)
+        assertEquals(55.4, result.targets.fatG)
+        assertEquals(280.5, result.targets.carbsG)
+        assertEquals(423, result.deficitKcal)
+        assertEquals(423.259375 * 7 / 7700, result.effectiveLossRateKgPerWeek, TOLERANCE)
         assertEquals(emptySet(), result.warnings)
     }
 
     @Test
     fun `female branch matches the documented arithmetic`() {
-        // RMR = 10*70 + 6.25*165 - 5*30 - 161 = 1420.25; TDEE = 1704.3
+        // RMR = 10*70 + 6.25*165 - 5*30 - 161 = 1420.25; TDEE = 1704.3; body mass index 25.7.
         val result =
             available(
-                ProfileInputs(
-                    currentWeightKg = 70.0,
-                    heightCm = 165.0,
-                    ageYears = 30,
-                    energyEquationSex = EnergyEquationSex.FEMALE,
+                inputs(
+                    weight = 70.0,
+                    height = 165.0,
+                    age = 30,
+                    sex = EnergyEquationSex.FEMALE,
                     activityLevel = ActivityLevel.SEDENTARY,
-                    targetWeightKg = 65.0,
-                    requestedLossRateKgPerWeek = 0.5,
+                    targetWeight = 65.0,
+                    pace = LossPace.MODERATE,
                 ),
             )
 
-        assertEquals(1363, result.targets.kcal)
+        assertEquals(1406, result.targets.kcal)
         assertEquals(78.0, result.targets.proteinG)
-        assertEquals(37.9, result.targets.fatG)
-        assertEquals(0.3098, result.effectiveLossRateKgPerWeek, 0.001)
-        assertTrue(DailyTargetWarning.DEFICIT_CAPPED in result.warnings)
+        assertEquals(39.1, result.targets.fatG)
+        assertEquals(298, result.deficitKcal)
+        assertEquals(emptySet(), result.warnings)
     }
 
     @Test
     fun `the two branches never share constants`() {
-        val female = available(inputs(sex = EnergyEquationSex.FEMALE, rate = 0.0))
-        val male = available(inputs(sex = EnergyEquationSex.MALE, rate = 0.0))
+        val female = available(inputs(sex = EnergyEquationSex.FEMALE))
+        val male = available(inputs(sex = EnergyEquationSex.MALE))
 
-        // 166 kcal of resting metabolic rate difference, scaled by the activity multiplier.
-        assertEquals(166.0 * ActivityLevel.LIGHT.pal, (male.targets.kcal - female.targets.kcal).toDouble(), 1.0)
+        // 166 kcal of resting metabolic rate, scaled by the activity multiplier and by the
+        // share of energy that is left after the deficit.
+        val expected = 166.0 * ActivityLevel.LIGHT.pal * (1 - 0.175)
+        assertEquals(expected, (male.targets.kcal - female.targets.kcal).toDouble(), 1.0)
+    }
+
+    @Test
+    fun `each position takes its share of the band and the weekly loss follows the deficit`() {
+        val cases =
+            listOf(
+                // Body mass index 21.2: normal weight, 10% to 15%.
+                Triple(65.0, 175.0, DeficitBand.NORMAL_WEIGHT),
+                // Body mass index 26.1: overweight, 15% to 20%.
+                Triple(80.0, 175.0, DeficitBand.OVERWEIGHT),
+                // Body mass index 32.7: obese, 20% to 25%.
+                Triple(100.0, 175.0, DeficitBand.OBESE),
+            )
+
+        cases.forEach { (weight, height, band) ->
+            val energy = totalDailyEnergyExpenditure(weight, height, AGE, EnergyEquationSex.MALE, ActivityLevel.LIGHT)
+            LossPace.entries.forEach { pace ->
+                val result = available(inputs(weight = weight, height = height, targetWeight = 55.0, pace = pace))
+                val expectedDeficit = min(energy * band.fractionFor(pace), band.capKcal)
+
+                assertEquals(expectedDeficit.roundToInt(), result.deficitKcal, "$band at $pace")
+                assertEquals(
+                    expectedDeficit * 7 / 7700,
+                    result.effectiveLossRateKgPerWeek,
+                    TOLERANCE,
+                    "weekly loss of $band at $pace",
+                )
+                assertEquals((energy - expectedDeficit).roundToInt(), result.targets.kcal, "$band at $pace")
+            }
+        }
+    }
+
+    @Test
+    fun `every band stops at its own hard cap`() {
+        val cases =
+            listOf(
+                // Normal weight, 400 kcal: 15% of 2894.625 is 434.
+                Triple(
+                    inputs(weight = 80.0, height = 190.0, age = 25, activityLevel = ActivityLevel.MODERATE),
+                    400,
+                    2495,
+                ),
+                // Overweight, 600 kcal: 20% of 3041.875 is 608.
+                Triple(
+                    inputs(weight = 97.0, height = 182.0, age = 30, activityLevel = ActivityLevel.MODERATE),
+                    600,
+                    2442,
+                ),
+                // Obese, 750 kcal: 25% of 3023.28 is 756.
+                Triple(inputs(weight = 130.0, height = 175.0, age = 40), 750, 2273),
+                // Hard habitual activity, 750 kcal: 20% of 3792.84 is 759.
+                Triple(inputs(weight = 130.0, height = 175.0, age = 40, activityLevel = ActivityLevel.HIGH), 750, 3043),
+            )
+
+        cases.forEach { (input, expectedDeficit, expectedKcal) ->
+            val result = available(input.copy(lossPace = LossPace.FAST))
+
+            assertEquals(expectedDeficit, result.deficitKcal, "cap for $input")
+            assertEquals(expectedKcal, result.targets.kcal, "target for $input")
+            assertEquals(setOf(DailyTargetWarning.DEFICIT_CAPPED), result.warnings, "warning for $input")
+        }
+    }
+
+    @Test
+    fun `hard habitual activity replaces the body mass band`() {
+        val obese = inputs(weight = 100.0, height = 175.0, age = 40, targetWeight = 80.0, pace = LossPace.FAST)
+
+        val moderate = available(obese.copy(activityLevel = ActivityLevel.MODERATE))
+        val high = available(obese.copy(activityLevel = ActivityLevel.HIGH))
+
+        // 25% of 2943.0625 against 20% of 3275.34375: the override lowers the share, not the cap.
+        assertEquals(736, moderate.deficitKcal)
+        assertEquals(655, high.deficitKcal)
+        assertEquals(emptySet(), high.warnings)
+    }
+
+    @Test
+    fun `below the reference body mass index the goal is maintenance`() {
+        // 50 kg at 175 cm is a body mass index of 16.3; RMR = 1448.75, TDEE = 1992.03.
+        val underweight = inputs(weight = 50.0, height = 175.0, age = 30, targetWeight = 48.0, pace = null)
+
+        listOf(underweight, underweight.copy(lossPace = LossPace.FAST)).forEach { input ->
+            val result = available(input)
+
+            assertEquals(1992, result.targets.kcal, "maintenance for $input")
+            assertEquals(0, result.deficitKcal)
+            assertEquals(0.0, result.effectiveLossRateKgPerWeek, TOLERANCE)
+            assertEquals(setOf(DailyTargetWarning.NO_DEFICIT_BELOW_REFERENCE_BMI), result.warnings)
+        }
+
+        // Hard habitual activity does not override the lower bound.
+        val active = available(underweight.copy(activityLevel = ActivityLevel.HIGH))
+        assertEquals(0, active.deficitKcal)
+        assertTrue(DailyTargetWarning.NO_DEFICIT_BELOW_REFERENCE_BMI in active.warnings)
+    }
+
+    @Test
+    fun `a missing position has no target wherever a deficit applies`() {
+        assertEquals(
+            DailyTargetResult.Unavailable(DailyTargetUnavailableReason.MISSING_PROFILE_INPUTS),
+            calculate(inputs(pace = null)),
+        )
     }
 
     @Test
     fun `every activity level raises the target monotonically`() {
-        val targets =
-            ActivityLevel.entries.map { level ->
-                available(inputs(activityLevel = level, rate = 0.0)).targets.kcal
-            }
+        val targets = ActivityLevel.entries.map { available(inputs(activityLevel = it)).targets.kcal }
 
         assertEquals(targets.sorted(), targets)
         assertEquals(ActivityLevel.entries.size, targets.distinct().size)
@@ -72,8 +177,8 @@ class CalculateDailyTargetsTest {
 
     @Test
     fun `higher activity moves the extra energy to carbohydrates and keeps protein weight based`() {
-        val sedentary = available(inputs(activityLevel = ActivityLevel.SEDENTARY, rate = 0.0))
-        val high = available(inputs(activityLevel = ActivityLevel.HIGH, rate = 0.0))
+        val sedentary = available(inputs(activityLevel = ActivityLevel.SEDENTARY))
+        val high = available(inputs(activityLevel = ActivityLevel.HIGH))
 
         assertEquals(sedentary.targets.proteinG, high.targets.proteinG)
         assertTrue(high.targets.carbsG > sedentary.targets.carbsG)
@@ -103,7 +208,7 @@ class CalculateDailyTargetsTest {
                     energyEquationSex = EnergyEquationSex.MALE,
                     activityLevel = null,
                     targetWeightKg = 78.0,
-                    requestedLossRateKgPerWeek = 0.5,
+                    lossPace = LossPace.MODERATE,
                 ),
             ),
         )
@@ -117,7 +222,6 @@ class CalculateDailyTargetsTest {
             inputs(height = Double.POSITIVE_INFINITY),
             inputs(height = -1.0),
             inputs(targetWeight = 0.0),
-            inputs(rate = -0.5),
             inputs(age = 0),
         ).forEach { invalid ->
             assertEquals(
@@ -130,128 +234,51 @@ class CalculateDailyTargetsTest {
 
     @Test
     fun `reaching the target weight switches to maintenance`() {
-        val result = available(inputs(weight = 78.0, targetWeight = 78.0, rate = 0.5))
+        val result = available(inputs(weight = 78.0, targetWeight = 78.0, pace = LossPace.FAST))
 
+        assertEquals(0, result.deficitKcal)
         assertEquals(0.0, result.effectiveLossRateKgPerWeek, TOLERANCE)
-        assertTrue(DailyTargetWarning.TARGET_WEIGHT_REACHED in result.warnings)
-        // RMR = 780 + 1100 - 170 + 5 = 1715; TDEE = 1715 * 1.375 = 2358.125
+        assertEquals(setOf(DailyTargetWarning.TARGET_WEIGHT_REACHED), result.warnings)
+        // RMR = 780 + 1100 - 170 + 5 = 1715; TDEE = 1715 * 1.375 = 2358.125.
         assertEquals(2358, result.targets.kcal)
-    }
-
-    @Test
-    fun `a zero requested rate produces maintenance without warnings`() {
-        val result = available(inputs(rate = 0.0))
-
-        assertEquals(0.0, result.effectiveLossRateKgPerWeek, TOLERANCE)
-        assertEquals(emptySet(), result.warnings)
-    }
-
-    @Test
-    fun `the weekly rate is limited to one kilogram and one percent of body weight`() {
-        val onePercentBound = available(inputs(weight = 60.0, targetWeight = 55.0, rate = 2.0))
-        assertTrue(DailyTargetWarning.RATE_LIMITED in onePercentBound.warnings)
-        assertTrue(onePercentBound.effectiveLossRateKgPerWeek <= 0.6 + TOLERANCE)
-
-        val absoluteBound = available(inputs(weight = 140.0, targetWeight = 100.0, rate = 3.0))
-        assertTrue(DailyTargetWarning.RATE_LIMITED in absoluteBound.warnings)
-        assertTrue(absoluteBound.effectiveLossRateKgPerWeek <= 1.0 + TOLERANCE)
-    }
-
-    @Test
-    fun `the deficit never exceeds twenty percent of energy expenditure`() {
-        val result = available(inputs(rate = 1.0))
-
-        // TDEE 2418.625, so the deficit stops at 483.725 kcal.
-        assertEquals(1935, result.targets.kcal)
-        assertTrue(DailyTargetWarning.DEFICIT_CAPPED in result.warnings)
-    }
-
-    @Test
-    fun `the deficit never exceeds seven hundred fifty kilocalories`() {
-        // RMR = 1200 + 1187.5 - 150 + 5 = 2242.5; TDEE = 3868.3125, so 20% is above 750.
-        val result =
-            available(
-                ProfileInputs(
-                    currentWeightKg = 120.0,
-                    heightCm = 190.0,
-                    ageYears = 30,
-                    energyEquationSex = EnergyEquationSex.MALE,
-                    activityLevel = ActivityLevel.HIGH,
-                    targetWeightKg = 100.0,
-                    requestedLossRateKgPerWeek = 1.0,
-                ),
-            )
-
-        assertEquals(3118, result.targets.kcal)
-        assertTrue(DailyTargetWarning.DEFICIT_CAPPED in result.warnings)
-        assertEquals(750.0 * 7 / 7700, result.effectiveLossRateKgPerWeek, 0.001)
-    }
-
-    @Test
-    fun `low energy estimates use the percentage deficit cap`() {
-        val cases =
-            listOf(
-                ProfileInputs(
-                    currentWeightKg = 69.0,
-                    heightCm = 165.0,
-                    ageYears = 35,
-                    energyEquationSex = EnergyEquationSex.MALE,
-                    activityLevel = ActivityLevel.SEDENTARY,
-                    targetWeightKg = 60.0,
-                    requestedLossRateKgPerWeek = 0.34,
-                ) to 1489,
-                ProfileInputs(
-                    currentWeightKg = 50.0,
-                    heightCm = 150.0,
-                    ageYears = 60,
-                    energyEquationSex = EnergyEquationSex.FEMALE,
-                    activityLevel = ActivityLevel.SEDENTARY,
-                    targetWeightKg = 45.0,
-                    requestedLossRateKgPerWeek = 0.5,
-                ) to 937,
-            )
-
-        cases.forEach { (input, expectedKcal) ->
-            val result = available(input)
-            assertEquals(expectedKcal, result.targets.kcal)
-            assertEquals(setOf(DailyTargetWarning.DEFICIT_CAPPED), result.warnings)
-        }
     }
 
     @Test
     fun `protein is raised to the ten percent floor when weight based protein is too low`() {
         val result =
             available(
-                ProfileInputs(
-                    currentWeightKg = 40.0,
-                    heightCm = 180.0,
-                    ageYears = 18,
-                    energyEquationSex = EnergyEquationSex.MALE,
+                inputs(
+                    weight = 40.0,
+                    height = 180.0,
+                    age = 18,
                     activityLevel = ActivityLevel.HIGH,
-                    targetWeightKg = 40.0,
-                    requestedLossRateKgPerWeek = 0.0,
+                    targetWeight = 40.0,
+                    pace = null,
                 ),
             )
 
-        val weightBasedProtein = 1.2 * 40.0
-        assertTrue(result.targets.proteinG > weightBasedProtein)
+        assertTrue(result.targets.proteinG > 1.2 * 40.0)
         assertEquals(0.10, result.targets.proteinG * 4 / result.targets.kcal, 0.01)
     }
 
     @Test
-    fun `guardrails are never silent`() {
+    fun `a capped deficit is never silent`() {
         listOf(
-            inputs(rate = 2.0),
-            inputs(rate = 1.0),
-            inputs(weight = 55.0, height = 165.0, targetWeight = 50.0, rate = 1.0),
+            inputs(weight = 130.0, height = 175.0, age = 40, pace = LossPace.FAST),
+            inputs(
+                weight = 80.0,
+                height = 190.0,
+                age = 25,
+                activityLevel = ActivityLevel.MODERATE,
+                pace = LossPace.FAST,
+            ),
         ).forEach { input ->
             val result = available(input)
-            val paceDiffers =
-                abs(result.requestedLossRateKgPerWeek - result.effectiveLossRateKgPerWeek) > TOLERANCE
-            assertTrue(
-                !paceDiffers || result.warnings.isNotEmpty(),
-                "a changed pace must carry a warning for $input",
-            )
+            val band =
+                requireNotNull(DeficitBand.forBody(input.currentWeightKg, input.heightCm, input.activityLevel))
+
+            assertEquals(band.capKcal.roundToInt(), result.deficitKcal, "the cap applies for $input")
+            assertTrue(DailyTargetWarning.DEFICIT_CAPPED in result.warnings, "a capped deficit must be explained")
         }
     }
 
@@ -263,16 +290,16 @@ class CalculateDailyTargetsTest {
                     for (activity in ActivityLevel.entries) {
                         for (weight in listOf(45.0, 60.0, 82.4, 120.0, 180.0)) {
                             for (age in listOf(18, 34, 55, 80)) {
-                                for (rate in listOf(0.0, 0.25, 0.5, 1.0, 2.5)) {
+                                for (pace in LossPace.entries) {
                                     add(
-                                        ProfileInputs(
-                                            currentWeightKg = weight,
-                                            heightCm = 170.0,
-                                            ageYears = age,
-                                            energyEquationSex = sex,
+                                        inputs(
+                                            weight = weight,
+                                            height = 170.0,
+                                            age = age,
+                                            sex = sex,
                                             activityLevel = activity,
-                                            targetWeightKg = weight - 5.0,
-                                            requestedLossRateKgPerWeek = rate,
+                                            targetWeight = weight - 5.0,
+                                            pace = pace,
                                         ),
                                     )
                                 }
@@ -301,6 +328,12 @@ class CalculateDailyTargetsTest {
             assertTrue(proteinShare in 0.099..0.301, "protein share $proteinShare for $input")
             assertEquals(0.25, fatShare, 0.005, "fat share for $input")
             assertTrue(carbsShare in 0.449..0.651, "carbs share $carbsShare for $input")
+            assertEquals(
+                result.deficitKcal * 7 / 7700.0,
+                result.effectiveLossRateKgPerWeek,
+                0.001,
+                "the weekly loss follows the deficit for $input",
+            )
         }
     }
 
@@ -310,14 +343,26 @@ class CalculateDailyTargetsTest {
         return result
     }
 
+    /** Independent arithmetic, so the expected energy expenditure is not read from production code. */
+    private fun totalDailyEnergyExpenditure(
+        weightKg: Double,
+        heightCm: Double,
+        ageYears: Int,
+        sex: EnergyEquationSex,
+        activityLevel: ActivityLevel,
+    ): Double {
+        val offset = if (sex == EnergyEquationSex.MALE) 5.0 else -161.0
+        return (10.0 * weightKg + 6.25 * heightCm - 5.0 * ageYears + offset) * activityLevel.pal
+    }
+
     private fun inputs(
         weight: Double = 82.4,
         height: Double = 176.0,
-        age: Int = 34,
+        age: Int = AGE,
         sex: EnergyEquationSex = EnergyEquationSex.MALE,
         activityLevel: ActivityLevel = ActivityLevel.LIGHT,
         targetWeight: Double = 78.0,
-        rate: Double = 0.5,
+        pace: LossPace? = LossPace.MODERATE,
     ) = ProfileInputs(
         currentWeightKg = weight,
         heightCm = height,
@@ -325,10 +370,11 @@ class CalculateDailyTargetsTest {
         energyEquationSex = sex,
         activityLevel = activityLevel,
         targetWeightKg = targetWeight,
-        requestedLossRateKgPerWeek = rate,
+        lossPace = pace,
     )
 
     private companion object {
         const val TOLERANCE = 0.0001
+        const val AGE = 34
     }
 }

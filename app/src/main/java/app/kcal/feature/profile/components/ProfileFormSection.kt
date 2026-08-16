@@ -50,6 +50,7 @@ fun ProfileFormSection(
     onUnitSystemSelect: (UnitSystem) -> Unit,
     targetWeightRangeKg: ClosedFloatingPointRange<Double>?,
     lossPaceOptions: LossPaceOptions?,
+    noDeficitApplies: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val metric = unitSystem == UnitSystem.METRIC
@@ -147,21 +148,24 @@ fun ProfileFormSection(
         LossPaceField(
             selected = fields.lossPace,
             options = lossPaceOptions,
+            noDeficitApplies = noDeficitApplies,
             unitSystem = unitSystem,
-            error = errors.lossRate,
+            error = errors.lossPace,
             onSelect = onLossPaceSelect,
         )
     }
 }
 
 /**
- * The three paces are derived from the entered profile, so each of them lands inside the
- * guardrails and visibly changes the calorie target.
+ * The three positions of the deficit range that follows from the body mass index and the
+ * habitual activity. Only the estimated weekly loss is shown, because that is the number the
+ * user cares about; the percentage stays internal.
  */
 @Composable
 private fun LossPaceField(
     selected: LossPace?,
     options: LossPaceOptions?,
+    noDeficitApplies: Boolean,
     unitSystem: UnitSystem,
     error: ProfileFieldError?,
     onSelect: (LossPace) -> Unit,
@@ -170,7 +174,10 @@ private fun LossPaceField(
         Column {
             Text(text = stringResource(R.string.field_loss_pace), style = MaterialTheme.typography.titleSmall)
             Text(
-                text = stringResource(R.string.loss_pace_unavailable),
+                text =
+                stringResource(
+                    if (noDeficitApplies) R.string.loss_pace_no_deficit else R.string.loss_pace_unavailable,
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -193,13 +200,19 @@ private fun LossPaceField(
         selected = selected,
         optionLabel = { pace ->
             val kilograms = options.rateFor(pace)
-            val shown = if (metric) kilograms else UnitConversions.kilogramsPerWeekToPoundsPerWeek(kilograms)
-            stringResource(
-                R.string.loss_pace_option,
-                stringResource(pace.labelRes()),
-                DecimalText.format(shown, locale, decimals = 2),
-                rateUnit,
-            )
+            val shown =
+                kilograms?.let { if (metric) it else UnitConversions.kilogramsPerWeekToPoundsPerWeek(it) }
+            // Without an energy estimate the position is still selectable, but no rate is invented.
+            if (shown == null) {
+                stringResource(pace.labelRes())
+            } else {
+                stringResource(
+                    R.string.loss_pace_option,
+                    stringResource(pace.labelRes()),
+                    DecimalText.format(shown, locale, decimals = 2),
+                    rateUnit,
+                )
+            }
         },
         error = error,
         onSelect = onSelect,
@@ -252,12 +265,12 @@ fun TargetPreviewCard(target: TargetPreview, unitSystem: UnitSystem, modifier: M
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    if (target.paceDiffersFromRequest) {
+                    if (target.deficitKcal > 0) {
                         Text(
                             text =
                             stringResource(
-                                R.string.target_rate_requested,
-                                formatRate(target.requestedLossRateKgPerWeek, unitSystem, locale),
+                                R.string.target_deficit,
+                                DecimalText.formatInt(target.deficitKcal, locale),
                             ),
                             style = MaterialTheme.typography.bodySmall,
                         )
@@ -302,9 +315,9 @@ internal fun ActivityLevel.labelRes(): Int = when (this) {
 }
 
 internal fun DailyTargetWarning.messageRes(): Int = when (this) {
-    DailyTargetWarning.RATE_LIMITED -> R.string.warning_rate_limited
     DailyTargetWarning.DEFICIT_CAPPED -> R.string.warning_deficit_capped
     DailyTargetWarning.TARGET_WEIGHT_REACHED -> R.string.warning_target_reached
+    DailyTargetWarning.NO_DEFICIT_BELOW_REFERENCE_BMI -> R.string.warning_no_deficit_below_reference_bmi
 }
 
 internal fun DailyTargetUnavailableReason.messageRes(): Int = when (this) {

@@ -18,7 +18,11 @@ object DecimalText {
         return normalized.toDoubleOrNull()?.takeIf { it.isFinite() }
     }
 
-    fun parseInt(text: String): Int? = text.filterNot { it.isWhitespace() }.takeIf { it.isNotEmpty() }?.toIntOrNull()
+    fun parseInt(text: String): Int? {
+        val compact = text.filterNot { it.isWhitespace() }.takeIf { it.isNotEmpty() } ?: return null
+        compact.toIntOrNull()?.let { return it }
+        return parse(text)?.let { kotlin.math.round(it).toInt() }
+    }
 
     fun format(value: Double, locale: Locale, decimals: Int = 1): String =
         String.format(locale, "%.${decimals}f", value)

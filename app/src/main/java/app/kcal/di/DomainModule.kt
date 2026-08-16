@@ -31,7 +31,8 @@ object DomainModule {
     fun provideCalculateDailyTargets(): CalculateDailyTargets = CalculateDailyTargets()
 
     @Provides
-    fun provideSuggestLossPaces(): SuggestLossPaces = SuggestLossPaces()
+    fun provideSuggestLossPaces(calculateDailyTargets: CalculateDailyTargets): SuggestLossPaces =
+        SuggestLossPaces(calculateDailyTargets)
 
     @Provides
     fun provideApplyTodayTarget(

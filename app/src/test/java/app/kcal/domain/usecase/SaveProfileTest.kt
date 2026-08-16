@@ -1,6 +1,7 @@
 package app.kcal.domain.usecase
 
 import app.kcal.core.common.TimeProvider
+import app.kcal.domain.model.LossPace
 import app.kcal.testing.FakeDailyTargetRepository
 import app.kcal.testing.FakeProfileRepository
 import app.kcal.testing.completeProfile
@@ -65,7 +66,6 @@ class SaveProfileTest {
             completeProfile(currentWeightKg = Double.NaN),
             completeProfile(heightCm = Double.POSITIVE_INFINITY),
             completeProfile(targetWeightKg = -1.0),
-            completeProfile(requestedLossRateKgPerWeek = -0.5),
             completeProfile(ageYears = 0),
         ).forEach { invalid ->
             val result = saveProfile(invalid)
@@ -81,14 +81,15 @@ class SaveProfileTest {
     }
 
     @Test
-    fun `the requested rate is stored exactly as chosen even when a guardrail lowers it`() = runTest {
-        val result = saveProfile(completeProfile(requestedLossRateKgPerWeek = 2.0))
+    fun `the chosen position is stored and a capped deficit is explained`() = runTest {
+        // 130 kg at 175 cm is obese, so the fast position asks for 25% and hits the 750 kcal cap.
+        val profile = completeProfile(currentWeightKg = 130.0, heightCm = 175.0, lossPace = LossPace.FAST)
+        val result = saveProfile(profile)
 
-        assertEquals(2.0, profileRepository.savedProfiles.single().requestedLossRateKgPerWeek)
+        assertEquals(LossPace.FAST, profileRepository.savedProfiles.single().lossPace)
         assertTrue(result is DailyTargetResult.Available)
-        assertEquals(2.0, result.requestedLossRateKgPerWeek)
-        assertTrue(result.effectiveLossRateKgPerWeek < result.requestedLossRateKgPerWeek)
-        assertTrue(result.warnings.isNotEmpty())
+        assertEquals(750, result.deficitKcal)
+        assertEquals(setOf(DailyTargetWarning.DEFICIT_CAPPED), result.warnings)
     }
 
     @Test

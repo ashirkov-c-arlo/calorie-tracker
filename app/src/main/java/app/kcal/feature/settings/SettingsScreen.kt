@@ -132,6 +132,7 @@ fun SettingsScreen(
                     onUnitSystemSelect = onUnitSystemSelect,
                     targetWeightRangeKg = uiState.targetWeightRangeKg,
                     lossPaceOptions = uiState.lossPaceOptions,
+                    noDeficitApplies = uiState.noDeficitApplies,
                 )
                 TargetPreviewCard(target = uiState.target, unitSystem = uiState.unitSystem)
                 Text(

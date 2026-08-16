@@ -106,8 +106,9 @@
     <string name="loss_pace_slow">Slow</string>
     <string name="loss_pace_moderate">Moderate</string>
     <string name="loss_pace_fast">Fast</string>
-    <string name="loss_pace_option">%1$s · %2$s %3$s</string>
-    <string name="loss_pace_unavailable">Enter your current weight to see the available paces.</string>
+    <string name="loss_pace_option">%1$s · ~%2$s %3$s</string>
+    <string name="loss_pace_unavailable">Enter your current weight and height to see the available paces.</string>
+    <string name="loss_pace_no_deficit">Your body mass index is below the reference range, so the goal is maintenance and no deficit is applied.</string>
     <string name="target_weight_unset">Not selected</string>
     <string name="target_weight_needs_height">Enter your height to choose a target weight.</string>
     <string name="target_weight_range_hint">Body mass index %1$s–%2$s at your height means %3$s–%4$s %5$s.</string>
@@ -151,11 +152,11 @@
     <string name="target_kcal">%1$s kcal</string>
     <string name="target_macros">Protein %1$s g · Fat %2$s g · Carbs %3$s g</string>
     <string name="target_rate_effective">Estimated pace: %1$s per week</string>
-    <string name="target_rate_requested">You asked for %1$s per week</string>
+    <string name="target_deficit">Daily deficit: %1$s kcal</string>
 
-    <string name="warning_rate_limited">The pace is limited to at most 1 kg per week and 1 percent of your body weight.</string>
-    <string name="warning_deficit_capped">The deficit is capped at 20 percent of your daily energy use and at 750 kcal.</string>
+    <string name="warning_deficit_capped">The deficit reached the cap for your body mass index, so the estimated pace is lower.</string>
     <string name="warning_target_reached">Your current weight already reached the target, so the goal is maintenance.</string>
+    <string name="warning_no_deficit_below_reference_bmi">Your body mass index is below the reference range, so the goal is maintenance.</string>
 
     <string name="unavailable_missing_inputs">Fill in every field to see an estimate.</string>
     <string name="unavailable_age_below_minimum">The estimate is available from age 18 only.</string>

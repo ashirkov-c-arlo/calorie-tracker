@@ -28,7 +28,7 @@ class StoredProfileTest {
             "formula variant" to complete().copy(energyEquationSex = null),
             "activity level" to complete().copy(activityLevel = null),
             "target weight" to complete().copy(targetWeightKg = null),
-            "loss rate" to complete().copy(requestedLossRateKgPerWeek = null),
+            "loss pace" to complete().copy(lossPace = null),
         ).forEach { (name, profile) ->
             assertFalse(profile.isComplete, "missing $name must stay incomplete")
             assertNull(profile.toInputs(), "missing $name must not produce inputs")
@@ -42,7 +42,16 @@ class StoredProfileTest {
         assertFalse(empty.isComplete)
         assertNull(empty.energyEquationSex)
         assertNull(empty.activityLevel)
-        assertNull(empty.requestedLossRateKgPerWeek)
+        assertNull(empty.lossPace)
+    }
+
+    @Test
+    fun `below the reference body mass index a profile is complete without a pace`() {
+        // 50 kg at 175 cm gives a body mass index of 16.3, so there is no deficit to choose.
+        val underweight = complete().copy(currentWeightKg = 50.0, heightCm = 175.0, lossPace = null)
+
+        assertTrue(underweight.isComplete)
+        assertNull(assertNotNull(underweight.toInputs()).lossPace)
     }
 
     @Test
@@ -62,6 +71,6 @@ class StoredProfileTest {
         energyEquationSex = EnergyEquationSex.MALE,
         activityLevel = ActivityLevel.LIGHT,
         targetWeightKg = 78.0,
-        requestedLossRateKgPerWeek = 0.5,
+        lossPace = LossPace.MODERATE,
     )
 }

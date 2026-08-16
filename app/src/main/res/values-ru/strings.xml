@@ -104,8 +104,9 @@
     <string name="loss_pace_slow">Медленный</string>
     <string name="loss_pace_moderate">Средний</string>
     <string name="loss_pace_fast">Быстрый</string>
-    <string name="loss_pace_option">%1$s · %2$s %3$s</string>
-    <string name="loss_pace_unavailable">Укажите текущий вес, чтобы увидеть доступные темпы.</string>
+    <string name="loss_pace_option">%1$s · ~%2$s %3$s</string>
+    <string name="loss_pace_unavailable">Укажите текущий вес и рост, чтобы увидеть доступные темпы.</string>
+    <string name="loss_pace_no_deficit">Индекс массы тела ниже справочного диапазона, поэтому цель — поддержание веса без дефицита.</string>
     <string name="target_weight_unset">Не выбрано</string>
     <string name="target_weight_needs_height">Укажите рост, чтобы выбрать целевой вес.</string>
     <string name="target_weight_range_hint">Индекс массы тела %1$s–%2$s при вашем росте — это %3$s–%4$s %5$s.</string>
@@ -149,11 +150,11 @@
     <string name="target_kcal">%1$s ккал</string>
     <string name="target_macros">Белки %1$s г · Жиры %2$s г · Углеводы %3$s г</string>
     <string name="target_rate_effective">Расчетный темп: %1$s в неделю</string>
-    <string name="target_rate_requested">Вы запросили %1$s в неделю</string>
+    <string name="target_deficit">Суточный дефицит: %1$s ккал</string>
 
-    <string name="warning_rate_limited">Темп ограничен до 1 кг в неделю и 1 процента массы тела.</string>
-    <string name="warning_deficit_capped">Дефицит ограничен 20 процентами суточного расхода энергии и 750 ккал.</string>
+    <string name="warning_deficit_capped">Дефицит достиг предела для вашего индекса массы тела, поэтому расчетный темп ниже.</string>
     <string name="warning_target_reached">Текущий вес уже достиг целевого, поэтому цель — поддержание веса.</string>
+    <string name="warning_no_deficit_below_reference_bmi">Индекс массы тела ниже справочного диапазона, поэтому цель — поддержание веса.</string>
 
     <string name="unavailable_missing_inputs">Заполните все поля, чтобы увидеть оценку.</string>
     <string name="unavailable_age_below_minimum">Оценка доступна только с 18 лет.</string>

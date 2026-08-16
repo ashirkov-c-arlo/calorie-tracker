@@ -8,7 +8,8 @@ data class ProfileInputs(
     val energyEquationSex: EnergyEquationSex,
     val activityLevel: ActivityLevel,
     val targetWeightKg: Double,
-    val requestedLossRateKgPerWeek: Double,
+    /** Null only when no deficit band applies, that is when the goal is maintenance. */
+    val lossPace: LossPace?,
 )
 
 /**
@@ -22,29 +23,40 @@ data class StoredProfile(
     val energyEquationSex: EnergyEquationSex? = null,
     val activityLevel: ActivityLevel? = null,
     val targetWeightKg: Double? = null,
-    val requestedLossRateKgPerWeek: Double? = null,
+    val lossPace: LossPace? = null,
 ) {
-    /** Null while any required input is still missing. */
-    fun toInputs(): ProfileInputs? = ProfileInputs(
-        currentWeightKg = currentWeightKg ?: return null,
-        heightCm = heightCm ?: return null,
-        ageYears = ageYears ?: return null,
-        energyEquationSex = energyEquationSex ?: return null,
-        activityLevel = activityLevel ?: return null,
-        targetWeightKg = targetWeightKg ?: return null,
-        requestedLossRateKgPerWeek = requestedLossRateKgPerWeek ?: return null,
-    )
+    /**
+     * Null while any required input is still missing. A pace is required exactly when a
+     * [DeficitBand] applies: below the reference body mass index there is no deficit to pick.
+     */
+    fun toInputs(): ProfileInputs? {
+        val weightKg = currentWeightKg ?: return null
+        val height = heightCm ?: return null
+        val age = ageYears ?: return null
+        val sex = energyEquationSex ?: return null
+        val activity = activityLevel ?: return null
+        val targetKg = targetWeightKg ?: return null
+        if (lossPace == null && DeficitBand.forBody(weightKg, height, activity) != null) return null
+        return ProfileInputs(
+            currentWeightKg = weightKg,
+            heightCm = height,
+            ageYears = age,
+            energyEquationSex = sex,
+            activityLevel = activity,
+            targetWeightKg = targetKg,
+            lossPace = lossPace,
+        )
+    }
 
     val isComplete: Boolean get() = toInputs() != null
 
     /**
-     * Whether the present values may be persisted at all. Stored numbers must be finite,
-     * body measurements and age positive, and the requested rate non-negative. Missing
-     * values are allowed here: completeness is a separate question.
+     * Whether the present values may be persisted at all. Stored numbers must be finite and
+     * body measurements and age positive. Missing values are allowed here: completeness is a
+     * separate question.
      */
     val hasValidValues: Boolean
         get() = listOfNotNull(currentWeightKg, heightCm, targetWeightKg).all { it.isFinite() && it > 0.0 } &&
-            requestedLossRateKgPerWeek?.let { it.isFinite() && it >= 0.0 } != false &&
             ageYears?.let { it > 0 } != false
 }
 

@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import app.kcal.domain.model.ActivityLevel
 import app.kcal.domain.model.AppLanguage
 import app.kcal.domain.model.EnergyEquationSex
+import app.kcal.domain.model.LossPace
 import app.kcal.domain.model.StoredProfile
 import app.kcal.domain.model.ThemeMode
 import app.kcal.domain.model.UnitSystem
@@ -36,7 +37,7 @@ class ProfilePreferencesDataSource @Inject constructor(private val dataStore: Da
                     energyEquationSex = stored[Keys.FORMULA_VARIANT].toEnumOrNull(),
                     activityLevel = stored[Keys.ACTIVITY_LEVEL].toEnumOrNull(),
                     targetWeightKg = stored[Keys.TARGET_WEIGHT_KG],
-                    requestedLossRateKgPerWeek = stored[Keys.REQUESTED_LOSS_RATE_KG_PER_WEEK],
+                    lossPace = stored[Keys.LOSS_PACE].toEnumOrNull<LossPace>(),
                 ),
                 unitSystem = stored[Keys.UNIT_SYSTEM].toEnumOrNull() ?: UnitSystem.METRIC,
                 appLanguage = stored[Keys.APP_LANGUAGE].toEnumOrNull() ?: AppLanguage.SYSTEM,
@@ -56,9 +57,7 @@ class ProfilePreferencesDataSource @Inject constructor(private val dataStore: Da
             profile.energyEquationSex?.let { preferences[Keys.FORMULA_VARIANT] = it.name }
             profile.activityLevel?.let { preferences[Keys.ACTIVITY_LEVEL] = it.name }
             profile.targetWeightKg?.let { preferences[Keys.TARGET_WEIGHT_KG] = it }
-            profile.requestedLossRateKgPerWeek?.let {
-                preferences[Keys.REQUESTED_LOSS_RATE_KG_PER_WEEK] = it
-            }
+            profile.lossPace?.let { preferences[Keys.LOSS_PACE] = it.name }
         }
     }
 
@@ -80,7 +79,9 @@ class ProfilePreferencesDataSource @Inject constructor(private val dataStore: Da
         val FORMULA_VARIANT = stringPreferencesKey("formula_variant")
         val ACTIVITY_LEVEL = stringPreferencesKey("activity_level")
         val TARGET_WEIGHT_KG = doublePreferencesKey("target_weight_kg")
-        val REQUESTED_LOSS_RATE_KG_PER_WEEK = doublePreferencesKey("requested_loss_rate_kg_per_week")
+
+        /** Which position of the deficit range was chosen; the percentage is derived. */
+        val LOSS_PACE = stringPreferencesKey("loss_pace")
         val UNIT_SYSTEM = stringPreferencesKey("unit_system")
         val APP_LANGUAGE = stringPreferencesKey("app_language")
         val THEME_MODE = stringPreferencesKey("theme_mode")

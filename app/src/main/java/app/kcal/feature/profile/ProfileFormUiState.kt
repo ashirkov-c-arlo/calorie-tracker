@@ -31,7 +31,7 @@ data class ProfileFormErrors(
     val formulaVariant: ProfileFieldError? = null,
     val activityLevel: ProfileFieldError? = null,
     val targetWeight: ProfileFieldError? = null,
-    val lossRate: ProfileFieldError? = null,
+    val lossPace: ProfileFieldError? = null,
 ) {
     val hasAny: Boolean
         get() = currentWeight != null ||
@@ -42,7 +42,7 @@ data class ProfileFormErrors(
             formulaVariant != null ||
             activityLevel != null ||
             targetWeight != null ||
-            lossRate != null
+            lossPace != null
 }
 
 /**
@@ -59,9 +59,7 @@ data class ProfileFormFields(
     val activityLevel: ActivityLevel? = null,
     /** Canonical kilograms picked with the slider; null until the user chooses a value. */
     val targetWeightKg: Double? = null,
-    /** The stored or selected intent, in kilograms per week; never rewritten to fit a pace. */
-    val requestedLossRateKgPerWeek: Double? = null,
-    /** Which offered pace produces exactly the requested rate, if any. */
+    /** Which position of the offered deficit range is selected. */
     val lossPace: LossPace? = null,
 )
 
@@ -70,14 +68,11 @@ sealed interface TargetPreview {
 
     data class Available(
         val targets: Macros,
-        val requestedLossRateKgPerWeek: Double,
+        val deficitKcal: Int,
         val effectiveLossRateKgPerWeek: Double,
-        /** Every guardrail that changed the requested pace, in decreasing severity. */
+        /** Every guardrail that changed the deficit, in decreasing severity. */
         val warnings: PersistentList<DailyTargetWarning>,
-    ) : TargetPreview {
-        val paceDiffersFromRequest: Boolean
-            get() = warnings.isNotEmpty()
-    }
+    ) : TargetPreview
 
     data class Unavailable(val reason: DailyTargetUnavailableReason) : TargetPreview
 }
@@ -89,8 +84,10 @@ data class ProfileFormUiState(
     val unitSystem: UnitSystem = UnitSystem.METRIC,
     /** Target weights within the reference body mass index range for the entered height. */
     val targetWeightRangeKg: ClosedFloatingPointRange<Double>? = null,
-    /** The three paces derived from the entered profile, or null when none applies. */
+    /** The three offered positions with their estimated weekly loss, or null when none applies. */
     val lossPaceOptions: LossPaceOptions? = null,
+    /** The body mass index is below the reference range: no deficit, so no position to pick. */
+    val noDeficitApplies: Boolean = false,
     val appLanguage: AppLanguage = AppLanguage.SYSTEM,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val target: TargetPreview = TargetPreview.Unavailable(DailyTargetUnavailableReason.MISSING_PROFILE_INPUTS),
@@ -103,16 +100,16 @@ data class ProfileFormUiState(
 /** Guardrails are rendered from the strictest to the mildest, and none of them is dropped. */
 private val WARNING_ORDER =
     persistentListOf(
+        DailyTargetWarning.NO_DEFICIT_BELOW_REFERENCE_BMI,
         DailyTargetWarning.TARGET_WEIGHT_REACHED,
         DailyTargetWarning.DEFICIT_CAPPED,
-        DailyTargetWarning.RATE_LIMITED,
     )
 
 internal fun DailyTargetResult.toTargetPreview(): TargetPreview = when (this) {
     is DailyTargetResult.Available ->
         TargetPreview.Available(
             targets = targets,
-            requestedLossRateKgPerWeek = requestedLossRateKgPerWeek,
+            deficitKcal = deficitKcal,
             effectiveLossRateKgPerWeek = effectiveLossRateKgPerWeek,
             warnings = WARNING_ORDER.filter { it in warnings }.toPersistentList(),
         )
