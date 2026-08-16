@@ -132,6 +132,40 @@ class ManualEntryViewModelTest {
     }
 
     @Test
+    fun `fractional kcal values are rounded and saved`() = runTest {
+        val repository = FakeMealRepository()
+        val viewModel = viewModel(repository)
+        viewModel.load(null)
+        val key = viewModel.uiState.value.items.single().key
+        fillItem(viewModel, key, kcal = "299.7")
+        val event = async { viewModel.events.first() }
+
+        viewModel.onSave()
+        runCurrent()
+
+        assertEquals(ManualEntryEvent.Saved, event.await())
+        val item = repository.meals.value.single().items.single()
+        assertEquals(300, item.macros.kcal)
+    }
+
+    @Test
+    fun `fractional kcal with comma separator is rounded`() = runTest {
+        val repository = FakeMealRepository()
+        val viewModel = viewModel(repository, Locale.forLanguageTag("ru"))
+        viewModel.load(null)
+        val key = viewModel.uiState.value.items.single().key
+        fillItem(viewModel, key, kcal = "150,6", protein = "10,0")
+        val event = async { viewModel.events.first() }
+
+        viewModel.onSave()
+        runCurrent()
+
+        assertEquals(ManualEntryEvent.Saved, event.await())
+        val item = repository.meals.value.single().items.single()
+        assertEquals(151, item.macros.kcal)
+    }
+
+    @Test
     fun `editing loads locale formatted values and replaces the same meal`() = runTest {
         val original =
             mealEntry(

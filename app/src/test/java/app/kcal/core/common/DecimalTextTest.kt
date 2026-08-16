@@ -37,9 +37,20 @@ class DecimalTextTest {
     @Test
     fun `integers are parsed strictly`() {
         assertEquals(34, DecimalText.parseInt("34"))
-        assertNull(DecimalText.parseInt("34.5"))
         assertNull(DecimalText.parseInt(""))
         assertNull(DecimalText.parseInt("x"))
+    }
+
+    @Test
+    fun `decimals are rounded when parsing integers`() {
+        assertEquals(35, DecimalText.parseInt("34.5"))
+        assertEquals(34, DecimalText.parseInt("34.4"))
+        assertEquals(35, DecimalText.parseInt("34,5"))
+        assertEquals(300, DecimalText.parseInt("299.7"))
+        assertEquals(0, DecimalText.parseInt("0.3"))
+        assertEquals(1, DecimalText.parseInt("0.5"))
+        assertEquals(1, DecimalText.parseInt("0.7"))
+        assertNull(DecimalText.parseInt("1.2.3"))
     }
 
     @Test
