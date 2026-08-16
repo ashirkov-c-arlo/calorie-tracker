@@ -23,13 +23,14 @@ import boto3
 from botocore.config import Config as BotoConfig
 
 from .config import Config
-from .parse import Meta, ProxyError, run_parse, validate_request
+from .parse import Meta, ProxyError, estimate_cost_micro_usd, run_parse, validate_request
 from .prompt import PROMPT_VERSION, TOOLS_VERSION
 from .quota import Quota, QuotaExceeded, RateLimiter, key_hash
 
 PARSE_PATH = "/v1/nutrition/parse"
 INSIGHTS_PATH = "/v1/insights/generate"
 HEALTH_PATH = "/healthz"
+STATS_PATH = "/stats"
 
 # A stalled client must not hold a worker thread open: SOCKET_TIMEOUT_S bounds one idle
 # read, BODY_DEADLINE_S bounds the upload inside the request deadline (a drip-feeder resets
@@ -148,8 +149,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         self.request_id = uuid.uuid4().hex
-        if self.path.split("?")[0] == HEALTH_PATH:
+        path = self.path.split("?")[0]
+        if path == HEALTH_PATH:
             self._send(200, {"status": "ok" if self.cfg.enabled else "disabled"})
+        elif path == STATS_PATH:
+            self._send(200, self.server.quota.avg_cost())  # type: ignore[attr-defined]
         else:
             self._error(ProxyError(400, "INVALID_REQUEST", detail="unknown path"))
 
@@ -182,8 +186,13 @@ class Handler(BaseHTTPRequestHandler):
                 raise ProxyError(429, "QUOTA", exhausted.retry_after, detail=exhausted.scope) from exhausted
 
             body, meta = run_parse(self.server.bedrock, self.cfg, request, lang, meta, deadline)  # type: ignore[attr-defined]
+            meta.est_micro_usd = estimate_cost_micro_usd(meta, self.cfg.price_table)
             result, code = body["type"], ""
             self._send(200, body)
+            self.server.quota.record_usage(  # type: ignore[attr-defined]
+                meta.image_bytes > 0, meta.input_tokens, meta.output_tokens,
+                meta.est_micro_usd, meta.model_id,
+            )
         except ProxyError as error:
             code, detail = error.code, error.detail
             # Once the model has answered, the call is paid for: keep the unit spent even
@@ -221,6 +230,7 @@ class Handler(BaseHTTPRequestHandler):
                 repair_used=meta.repair_used,
                 input_tokens=meta.input_tokens,
                 output_tokens=meta.output_tokens,
+                est_micro_usd=meta.est_micro_usd,
                 flags=meta.flags,
                 latency_ms=int((time.monotonic() - started) * 1000),
             )

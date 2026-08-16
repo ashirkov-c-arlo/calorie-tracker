@@ -78,6 +78,17 @@ class Quota:
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS counters (bucket TEXT PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0)"
         )
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS usage_log ("
+            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),"
+            "  has_image INTEGER NOT NULL DEFAULT 0,"
+            "  input_tokens INTEGER NOT NULL DEFAULT 0,"
+            "  output_tokens INTEGER NOT NULL DEFAULT 0,"
+            "  est_micro_usd INTEGER NOT NULL DEFAULT 0,"
+            "  model_id TEXT NOT NULL DEFAULT ''"
+            ")"
+        )
         self._conn.commit()
         self._lock = threading.Lock()
         self._daily = daily_cap
@@ -128,6 +139,30 @@ class Quota:
         cur = self._conn.execute("SELECT n FROM counters WHERE bucket = ?", (bucket,))
         row = cur.fetchone()
         return row[0] if row else 0
+
+    def record_usage(self, has_image: bool, input_tokens: int, output_tokens: int,
+                     est_micro_usd: int, model_id: str) -> None:
+        """Persist token usage for historical stats. Best effort."""
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO usage_log (has_image, input_tokens, output_tokens, est_micro_usd, model_id) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (int(has_image), input_tokens, output_tokens, est_micro_usd, model_id),
+            )
+            self._conn.commit()
+
+    def avg_cost(self) -> dict:
+        """Average cost per request, split by text vs photo."""
+        cur = self._conn.execute(
+            "SELECT has_image, COUNT(*), SUM(est_micro_usd) FROM usage_log GROUP BY has_image"
+        )
+        result = {"text": {"requests": 0, "avg_usd": "0.00000"},
+                  "photo": {"requests": 0, "avg_usd": "0.00000"}}
+        for has_image, count, total in cur.fetchall():
+            key = "photo" if has_image else "text"
+            avg = total / count / 1_000_000 if count else 0.0
+            result[key] = {"requests": count, "avg_usd": f"{avg:.5f}"}
+        return result
 
     def close(self) -> None:
         self._conn.close()
